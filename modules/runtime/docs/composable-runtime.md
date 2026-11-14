@@ -467,11 +467,13 @@ Steps 1 to 3 are sequential. After step 3, steps 4, 5 and 6 can run as parallel 
 
 ## Progress
 
-**Step 0.** `tools/capability_graph.py` writes [capability-graph.md](capability-graph.md) from the
-sources: who owns each built-in, native function and Silk module, bytes per service, and the 240
-requires and native calls that cross a service line. `--build` adds linked sizes from a build. CI
-(`.github/workflows/capability-graph.yml`) fails on a new crossing. Service boundaries are a first
-cut by name and are not fixed yet.
+**Step 0.** `silk task graph` in `tools/capabilities` writes [capability-graph.md](capability-graph.md)
+and [capability-crossings.txt](capability-crossings.txt) from the sources. They give the service of
+each built-in, native function and Silk module, bytes per service, and the 240 requires and native
+calls that cross a service line. `--sizes` adds linked sizes from a `tools/build.py` build. The
+rules are data in `tools/capabilities.toml`, which `tools/embed.py` also reads to tag each built-in.
+CI (`.github/workflows/capability-graph.yml`) runs `--check`, which fails on a new crossing. Service
+boundaries are a first cut by name and are not fixed yet.
 
 **Step 1, the spike.** Neither route in "The one dependency of this shape" works on the pinned
 toolchain (0.1.0-dev.74) as written:

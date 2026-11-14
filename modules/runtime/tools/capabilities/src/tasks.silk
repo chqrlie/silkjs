@@ -1,0 +1,54 @@
+//! The capability graph's task, run from this directory:
+//!
+//!   silk task graph                      # writes ../../docs/capability-graph.md
+//!   silk task graph --check              # fails on a new edge across services, or a stale report
+//!   silk task graph --sizes ../../build  # first records that build's linked sizes
+import silk.cli.command { Command, CommandLine, Opt }
+import silk.cli.task { Task, TaskError, TaskSet }
+import silk.collections.bytes { Bytes }
+import silk.core.option { Option }
+import silk.io.writer { WriterError }
+import silk.mem.allocator { Allocator, OutOfMemoryError }
+import silk.system.child_process { ChildProcess, ProcessError }
+import silk.system.filesystem { FileError, FileSystem }
+import silk.system.host_input { HostInput, HostInputError }
+import graph
+
+union Tasks {
+  Graph { pub check: bool, pub sizes: Option<Bytes>, pub profile: Option<Bytes> },
+}
+
+impl CommandLine for Tasks {
+  static fn command() -> Command<Tasks> {
+    return Command<Tasks>.make("tasks", "The composable runtime's capability graph")
+      |> Command.variant("Graph", "Write the runtime's capability graph, docs/capability-graph.md")
+      |> Command.option(
+        "check",
+        Opt.about(
+          "Write nothing; fail on a new edge across services or a report that is out of date",
+        ),
+      )
+      |> Command.option(
+        "sizes",
+        Opt.about(
+          "A tools/build.py build directory, relative to the runtime: record its linked sizes first",
+        ),
+      )
+      |> Command.option("profile", Opt.about("How that build was made, for the report"))
+  }
+}
+
+impl TaskSet for Tasks {
+  effect fn perform(self: Tasks) -> ()
+    ! TaskError | ProcessError | FileError | HostInputError | OutOfMemoryError | WriterError
+    ? &mut HostInput | &mut Allocator | &mut ChildProcess | &mut FileSystem {
+    match move self {
+      Tasks.Graph { check, sizes, profile } => run graph.perform(check, move sizes, move profile)
+    }
+  }
+}
+
+pub effect fn main() -> i32
+  ? &mut HostInput {
+  return run Task.main<Tasks>()
+}

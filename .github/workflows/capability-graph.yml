@@ -1,7 +1,7 @@
 name: Capability graph
 # The composable runtime's guard (modules/runtime/docs/composable-runtime.md): a built-in that
 # requires, or calls a native of, another service without a declared need fails here, and the
-# checked-in report must match the sources. Reads the sources only; nothing is built.
+# checked-in report must match the sources. The task reads sources only; the runtime is not built.
 on:
   push:
     branches: [main]
@@ -11,7 +11,8 @@ on:
       - 'modules/runtime/libs/**'
       - 'modules/runtime/runtime/**'
       - 'modules/runtime/src/**'
-      - 'modules/runtime/tools/capability_graph*'
+      - 'modules/runtime/tools/capabilities*/**'
+      - 'modules/runtime/tools/capabilities.toml'
       - 'modules/runtime/docs/capability-*'
   workflow_dispatch:
 permissions:
@@ -19,9 +20,21 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-26.04
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+      - name: Install Clang 22
+        run: |
+          test -x /usr/bin/clang-22 || (sudo apt-get update && sudo apt-get install -y clang-22 lld-22)
+          echo "SILK_CLANG=/usr/bin/clang-22" >> "$GITHUB_ENV"
+      - name: Install the pinned Silk
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          export SILK_RELEASE="v$(sed -n 's/^silk-version = "\(.*\)"/\1/p' silk.toml)"
+          curl --fail --location https://raw.githubusercontent.com/silk-lang/silk/8214c402307b/install.sh --output "$RUNNER_TEMP/install-silk.sh"
+          sh "$RUNNER_TEMP/install-silk.sh"
+          echo "$HOME/.silk/bin" >> "$GITHUB_PATH"
       - name: Check the capability graph
-        working-directory: modules/runtime
-        run: python3 tools/capability_graph.py --check
+        working-directory: modules/runtime/tools/capabilities
+        run: silk task graph --check
