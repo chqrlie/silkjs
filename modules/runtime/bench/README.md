@@ -71,7 +71,9 @@ Express, the WebSocket chat, Postgres, SQLite and `cat` are Bun's own programs, 
 folder of [oven-sh/bun](https://github.com/oven-sh/bun) at its current head; `bench-setup` prints
 the commit. `scripts/q.mjs` runs Bun's SQLite queries from Bun's `bench/sqlite` folder.
 
-Cold start runs each runtime through `/usr/bin/env`, as every recorded table did. `res.json` names
+Cold start runs each runtime through `/usr/bin/env`, as every recorded table did. Tables recorded
+before 2026-11-15 came from a Python harness that started each process with `fork`: they count
+about 180 more page faults per start, for every runtime alike. `res.json` names
 the SQLite queries by the ids of `results.csv` (`sqlite_order`, ...).
 
 ## A network that blocks the build's downloads

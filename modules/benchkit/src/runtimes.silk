@@ -150,7 +150,8 @@ effect fn runtimeJob(at: &Places, column: &[u8], script: &[u8], prefix: &[&[u8]]
     if Kit.same(column, b"bun_nojit_smol") { run Job.set(&mut job, b"BUN_OPTIONS", b"--smol") }
   }
   let own = run Kit.cat3(Bytes.asSlice(&at.root), b"/bench/scripts/", script)
-  let size = run Kit.fileSize(Bytes.asSlice(&own))
+  let absolute = script.length > 0 && script[0] == 47
+  let size: i64 = if absolute { 0 - 1 } else { run Kit.fileSize(Bytes.asSlice(&own)) }
   if size >= 0 { run Job.word(&mut job, Bytes.asSlice(&own)) } else { run Job.word(&mut job, script) }
   run database(&mut job)
   return move job
