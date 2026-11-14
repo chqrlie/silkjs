@@ -78,7 +78,19 @@ Three lessons carry into the proposal.
 
 The runtime becomes a core plus a closed list of capability services. `embed.start` requires every one of them, and the embedder provides each with `Effect.provideMut`. Silk specializes a provided service into monomorphic code and has no interface objects, so the compiler knows the implementation at every call. The choice costs nothing at run time, and a constant in the implementation can remove code.
 
-&#91;embedded content: runtime layers · embedder, core, capability services\]
+```
+embedder ── embed.start(options, host)
+              │  provides every service with Effect.provideMut
+              ▼
+core (always linked): engine, loop and immediates, bootstrap, loader, id registry,
+                      every service contract and every empty implementation
+              │
+              ▼
+capability services: Files · Network · Processes · SystemInfo · Workers · Crypto · Tls ·
+                     Compression · Http · Http2 · Wasm · Database · TypeStripping ·
+                     Inspector · NativeAddons · HostApi   (plus Platform, ModuleResolver: always real)
+              each one: a shipped real implementation │ the embedder's own │ Service.empty
+```
 
 Read top down: the embedder provides every service, the core is the only part that is always linked, and each service is given as a real implementation, the embedder's own, or the empty one.
 
