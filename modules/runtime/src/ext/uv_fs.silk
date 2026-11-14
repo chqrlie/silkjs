@@ -3,6 +3,8 @@
 //! Nullable callbacks run only during the registering thread's uv_run call.
 import silk.mem.allocator { OutOfMemoryError }
 import silk.mem.pointer { Pointer }
+// The errno translation is Silk (uv_os), published here under libuv's name.
+pub import ext.uv_os { uv_translate_sys_error }
 pub const UV_FS: i32 = 6
 pub type FsCallback = ?extern "C" fn(*mut u8) -> ()
 pub extern "C" struct UvTimespec { pub tv_sec: isize, pub tv_nsec: isize }
@@ -48,7 +50,6 @@ pub unsafe extern "C" fn uv_fs_get_statbuf(req: *mut u8) -> *mut UvStat
 pub unsafe extern "C" fn uv_fs_req_cleanup(req: *mut u8) -> ()
 @foreign(noCapture: .("req", "entry"))
 pub unsafe extern "C" fn uv_fs_scandir_next(req: *mut u8, entry: *mut UvDirent) -> i32
-pub unsafe extern "C" fn uv_translate_sys_error(code: i32) -> i32
 unsafe extern "C" fn calloc(count: usize, size: usize) -> ?*mut u8
 unsafe extern "C" fn free(data: ?*mut u8) -> ()
 pub effect fn allocateRequest() -> *mut u8 ! OutOfMemoryError {

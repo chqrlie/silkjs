@@ -49,6 +49,7 @@ import silk.concurrency.thread_native { SpawnError }
 import silk.platform.native.clock { NativeClock }
 import silk.system.system_clock { SystemClock }
 import ext.uv_net as net
+import ext.uv_os { uv_hrtime }
 
 unsafe extern "C" fn calloc(count: usize, size: usize) -> ?*mut u8
 // ext.trace_native's writer of Node's threadpoolwork events: phase is b, B, E or e.
@@ -71,7 +72,6 @@ unsafe extern "C" fn uv_backend_fd(loop: *const u8) -> i32
 unsafe extern "C" fn uv_backend_timeout(loop: *const u8) -> i32
 @foreign(noCapture: .("loop"))
 unsafe extern "C" fn uv_now(loop: *const u8) -> u64
-unsafe extern "C" fn uv_hrtime() -> u64
 // The token of libuv's backend descriptor in the runtime reactor.
 const LIBUV_TOKEN: u64 = 1
 @deferredCallbacks("callback")
