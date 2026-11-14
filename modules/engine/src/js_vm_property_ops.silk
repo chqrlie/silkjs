@@ -2155,7 +2155,7 @@ unsafe effect fn putFieldAddAs<H: HeapHooks>(hooks: &mut H, runtime: *mut HeapHe
   object: ValueBits, atom: u32, value: ValueBits, knownMissing: bool, keyed: bool) -> bool ? &mut Allocator {
   let node = match object { ValueBits.Object { reference } => reference _ => { return false } }
   let anchor = () let data = unsafe HeapCell.payload<ObjectData, ()>(&anchor, node)
-  if data.classId() != classes.JS_CLASS_OBJECT || data.isExotic() || !data.extensible() || data.isStandardArrayPrototype() { return false }
+  if !unsafe addsInPlace(&data) { return false }
   if !knownMissing { match unsafe shapes.lookup(data.shape, atom) { Option<usize>.Some { .. } => { return false } Option<usize>.None => () } }
   let base = data.shape
   let own = unsafe HeapCell.payload<ShapeData, ()>(&anchor, base)
@@ -2213,10 +2213,14 @@ unsafe fn writeFieldKey(ip: *const u8, key: u64) -> () {
   let at = unsafe Intrinsic.pointerReinterpret<*mut u8, *mut align(1) u64>(unsafe Intrinsic.pointerRequalify<*const u8, *mut u8>(unsafe Pointer.at<u8>(unsafe Pointer.assumeMany<u8>(ip), 4)))
   unsafe Pointer.writeUnaligned<u64>(at, key)
 }
-/// An ordinary extensible object, the only kind put_field adds to in place.
+/// An ordinary extensible object or promise, the kinds put_field adds to in
+/// place. A promise's state lives in its payload, so its named properties are
+/// ordinary: promise subclasses (postgres.js's Query) add theirs in the
+/// constructor.
 @inlineAlways
 unsafe fn addsInPlace(data: &ObjectData) -> bool {
-  return data.classId() == classes.JS_CLASS_OBJECT && !data.isExotic() && data.extensible() && !data.isStandardArrayPrototype()
+  let classId = data.classId()
+  return (classId == classes.JS_CLASS_OBJECT || classId == classes.JS_CLASS_PROMISE) && !data.isExotic() && data.extensible() && !data.isStandardArrayPrototype()
 }
 /// quickAdd through the memo index in the store instruction's inline add key
 /// (ip at its atom): the add the instruction made last time, when the object's
