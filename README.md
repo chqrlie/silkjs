@@ -18,16 +18,18 @@ Each module is its own Silk package with its own `silk.toml` and tasks. Run task
 module's directory:
 
 ```sh
-silk use              # install the pinned Silk release
+silk use              # install the pinned Silk release (without silk: modules/engine/scripts/bootstrap_toolchain.py)
 silk check --workspace
 
 cd modules/engine
 silk task             # list the engine's tasks
 silk task check       # the correctness gate (needs `silk build --release`)
+silk task bench-octane   # Octane against other engines (modules/engine/bench/README.md)
 
 cd ../runtime
 silk task build       # the runtime executable, modules/runtime/build/silkjsruntime
 silk task compat      # the differential cases against Node 24
+silk task bench-all   # the benchmarks against Bun (modules/runtime/bench/README.md)
 ```
 
 The runtime history was merged from

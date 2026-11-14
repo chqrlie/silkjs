@@ -6,8 +6,11 @@ usage: coldstart.py RUNS OUT.json name=command... [--only case,case] [--cases DI
 Each command is split on spaces and gets the script path appended. Runs are interleaved across
 runtimes so host noise hits all of them alike; the reported time is the median, with the minimum
 beside it. One warm-up run per pair is discarded (it pulls the binary into the page cache).
+The cases are copied to a local temporary directory first (see main).
 """
 import json
+import shutil
+import tempfile
 import os
 import statistics
 import sys
@@ -27,7 +30,7 @@ def run(argv, cwd):
             os.dup2(devnull_in, 0)
             os.dup2(devnull_out, 1)
             os.dup2(devnull_out, 2)
-            environment = {key: value for key, value in os.environ.items() if key != 'NODE_OPTIONS'}
+            environment = {key: value for key, value in os.environ.items() if key not in ('NODE_OPTIONS', 'BUN_OPTIONS')}  # container exports BUN_OPTIONS=--smol; pass it explicitly via env if wanted
             os.execve(argv[0], argv, environment)
         finally:
             os._exit(127)
@@ -61,6 +64,11 @@ def main():
             name, command = argument.split('=', 1)
             runtimes.append((name, command.split(' ')))
         index += 1
+    # The cases run from a copy on local disk: this folder is a network mount, where each
+    # file system call costs 30 to 80 us and swamps what the runtimes do.
+    local = tempfile.mkdtemp(prefix='coldstart-cases-')
+    shutil.copytree(cases_dir, local, dirs_exist_ok=True)
+    cases_dir = local
     cases = sorted(entry for entry in os.listdir(cases_dir) if entry.endswith(('.js', '.mjs', '.cjs')))
     if only:
         cases = [case for case in cases if case.rsplit('.', 1)[0] in only]
