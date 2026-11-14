@@ -261,7 +261,9 @@ effect fn resolveInstruction(fd: &mut FunctionDef, table: &mut AtomTable, bytes:
   } else if code == op.OP_dup {
     // A `switch` case on a string: the prefix, then the four instructions as
     // they would be without it. The branch may still come out long; the
-    // prefix then does nothing.
+    // prefix then does nothing. The prefix grows the code, so
+    // js_compiler_label_support.forwardDistance counts it for the short
+    // forward branches over it.
     if matchCode(&mut cc, bytes, next, &[opcode(op.OP_push_atom_value), opcode(op.OP_strict_eq), M2(op.OP_if_false, op.OP_if_true), -1])
       && cc.atom != atoms.JS_ATOM_empty_string && !AtomTable.isInteger(cc.atom) {
       run out.append(op.OP_fuse_prefix) run out.writeU32(cc.atom)
