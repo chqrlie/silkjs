@@ -10,7 +10,7 @@ import byte_buffer { ByteBuffer, readU32 }
 import js_atoms { AtomTable }
 import js_compiler_types { FunctionDef, RelocEntry, JumpSlot }
 import js_compiler_emit { updateLabel }
-import js_compiler_code { CodeContext, matchCode, opcode, signedWord, unsignedWord, skipDeadCode }
+import js_compiler_code { CodeContext, matchCode, opcode, signedWord, unsignedWord, skipDeadCode, M2 }
 import js_debug_positions { PcSourcePosition }
 import js_compiler_state { captureVar }
 import js_core_types { JS_MODE_STRICT, SCOPE_OPERAND }
@@ -177,10 +177,13 @@ fn keepLoopPrefix(fd: &mut FunctionDef, out: &mut ByteBuffer, code: u8, label: i
   out.truncate(end - 5)
 }
 /// The most the final code from the branch at position to its label at target
-/// (both in the pre-label code) can span: the pre-label distance, which no
-/// rewrite but one outgrows, plus the inline field-cache key each get_field
-/// and put_field between them gains, fused or not. A distance of 128 or more
-/// is returned as it is: no short branch is in question and nothing is walked.
+/// (both in the pre-label code) can span: the pre-label distance, plus what
+/// the growing rewrites add: the inline field-cache key each get_field and
+/// put_field between them gains, fused or not, and the five-byte prefix a
+/// string `switch` case (dup, push_atom_value, strict_eq, branch) gains
+/// (js_compiler_labels, OP_dup), counted for any atom. A distance of 128 or
+/// more is returned as it is: no short branch is in question and nothing is
+/// walked.
 fn forwardDistance(bytes: &[u8], position: i32, target: i32) -> i32 {
   let mut distance = target - position - 1
   if distance >= 128 { return distance }
@@ -190,6 +193,10 @@ fn forwardDistance(bytes: &[u8], position: i32, target: i32) -> i32 {
     if op.fieldKeyed(code) { distance = distance + u8.toI32(op.FIELD_KEY_BYTES) }
     // Final code writes these behind OP_extended: one byte more.
     if op.movedToExtended(code) { distance = distance + 1 }
+    if code == op.OP_dup {
+      let mut cc = CodeContext.make()
+      if matchCode(&mut cc, bytes, pos + 1, &[opcode(op.OP_push_atom_value), opcode(op.OP_strict_eq), M2(op.OP_if_false, op.OP_if_true), -1]) { distance = distance + 5 }
+    }
     pos = pos + u8.toI32(op.opcodeInfo(code, false).size)
   }
   return distance
