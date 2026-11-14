@@ -27,7 +27,7 @@ silk task build
 
 A plain `silk build` builds the executable too, and is how a program that embeds the runtime builds (see [Embed](#embed)). `silk task build` adds what only an executable that can run on the build machine gets: the built-ins' bytecode, compiled by the executable itself and linked into it, and a startup heap image, so a start does not run the bootstrap.
 
-Use `SILK_CLANG` to select a particular Clang executable. `silk task build --release` builds with speed optimization; `--output PATH` selects the output executable. `silk task` lists the other tasks (`embed`, `compat`, `sea`, and the benchmark tasks of [`bench/`](bench/README.md)); they run the Python tools in [`tools/`](tools/), which can still be run directly. The first build compiles about 1,300 C files once (Silk compiles them one at a time), a few minutes; later builds reuse the objects.
+Use `SILK_CLANG` to select a particular Clang executable. `silk task build --release` builds with speed optimization; `--output PATH` selects the output executable. `silk task` lists the other tasks: `embed`, `compat` and `sea` run the Python tools in [`tools/`](tools/), which can still be run directly, and the benchmark tasks of [`bench/`](bench/README.md) are written in Silk. The first build compiles about 1,300 C files once (Silk compiles them one at a time), a few minutes; later builds reuse the objects.
 
 The engine is this repository's [`modules/engine`](../engine), a path dependency in `silk.toml`, so engine and runtime changes land together. An installed Node executable is not required to build or run it.
 
@@ -118,7 +118,7 @@ This is a Node compatibility implementation, not an official Node distribution o
 | [`ext/web/`](ext/web/) | Web-platform JavaScript APIs and vendored standards data |
 | [`tools/`](tools/) | Dependency preparation, native builds, embedding, executable tooling |
 | [`tests/`](tests/) | Differential and real-runtime consumers |
-| [`bench/`](bench/) | The benchmarks against Bun and their harness |
+| [`bench/`](bench/) | The benchmarks against Bun: the programs measured, and how to run them |
 
 The engine lives beside the runtime in [`modules/engine`](../engine); the runtime does not maintain a second engine implementation.
 

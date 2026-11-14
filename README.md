@@ -7,6 +7,7 @@ runtime built on it.
 | --- | --- | --- |
 | [`modules/engine`](modules/engine) | `silkjs` | The JavaScript engine, its embedding API and the `silkjs` command line |
 | [`modules/runtime`](modules/runtime) | `silkjsruntime` | The Node-compatible runtime; depends on the engine by path |
+| [`modules/benchkit`](modules/benchkit) | `benchkit` | The benchmark harness the `bench` tasks of the engine and the runtime are written with |
 | [`modules/pm`](modules/pm) | `pm` | The package manager, in Silk on the Silk standard library; it will run as the runtime's `install`, `add` and related commands |
 
 The two are released together. The root [`silk.toml`](silk.toml) is a Silk workspace whose
@@ -18,7 +19,7 @@ Each module is its own Silk package with its own `silk.toml` and tasks. Run task
 module's directory:
 
 ```sh
-silk use              # install the pinned Silk release (without silk: modules/engine/scripts/bootstrap_toolchain.py)
+silk use              # install the pinned Silk release
 silk check --workspace
 
 cd modules/engine

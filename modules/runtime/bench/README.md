@@ -17,16 +17,17 @@ silk task bench-all              # the three above into one results directory, a
 
 | Option | Meaning | Default |
 | --- | --- | --- |
-| `--rounds N` | Interleaved rounds (runs per case for `bench-cold`). `bench-all` also takes `--mem-rounds` and `--cold-runs` | 6, 3, 30 |
+| `--rounds N` | Interleaved rounds; runs per case for `bench-cold` | 6, 3, 30 |
 | `--runtime PATH` | The runtime executable | `$SILKJS_RUNTIME`, else `build/silkjsruntime` |
-| `--runtimes a,b` | Columns: `silkjs`, `bun_nojit`, `bun_nojit_smol`; `bench-cold` also takes `bun` (JIT on) | `$RUNTIMES`, else the first three |
-| `--out DIR` | Where results go. `bench` appends rounds to a `res.json` already there | `<work>/results/<UTC time>` |
+| `--runtimes a,b` | Columns: `silkjs`, `bun_nojit`, `bun_nojit_smol`; `bench-cold` also takes `bun` (JIT on) | `$RUNTIMES`, else the three |
+| `--out DIR` | Where results go | `<work>/results/<UTC time>` |
 | `--work DIR` | The work directory `bench-setup` fills | `$SILKJS_BENCH_WORK`, else `build/bench` |
 | `--force` | Measure although a build is running or the host is busy | off |
 
 `silk task bench http sqlite` runs only those groups (`http ws pg sqlite spawn cat imm`, or a
 benchmark name such as `node_http`); `silk task bench-cold hello esm` only those cases;
-`silk task bench-setup cert bigfile` only those steps. `$BUN` selects the Bun executable.
+`silk task bench-setup cert bigfile` only those steps. `$BUN` selects the Bun executable; `bench-all`
+also takes `--mem-rounds` and `--cold-runs`.
 
 Results: `res.json` holds every sample, `results.csv` the medians with the server's peak RSS and
 user and system microseconds per request, `mem.json` the peak RSS samples, `cold.json` and
@@ -34,7 +35,9 @@ user and system microseconds per request, `mem.json` the peak RSS samples, `cold
 
 ## What the tasks hold fixed
 
-`tools/bench.py` is the entry point of all of them and refuses to measure otherwise:
+The tasks are Silk all the way: `src/tasks.silk` calls the `runtimes` module of
+[`../../benchkit`](../../benchkit), which starts and measures every process itself. It refuses to
+measure otherwise:
 
 - `BUN_OPTIONS` and `NODE_OPTIONS` are dropped. The cloud container exports `BUN_OPTIONS=--smol`,
   which makes Bun about 25% slower (and `cat` 7.9 s instead of 1.4 s); every Bun number before
@@ -59,15 +62,17 @@ user and system microseconds per request, `mem.json` the peak RSS samples, `cold
 
 | Path | What it is |
 | --- | --- |
-| `bench.py`, `report.py` | The benchmark run and its medians |
-| `mem.py` | Peak RSS of the non-server benchmarks |
-| `coldstart/` | The cold start benchmark and its cases |
-| `scripts/` | The small programs the runtimes run; `q.mjs` runs Bun's SQLite queries from Bun's `bench/sqlite` folder |
-| `../tools/bench.py` | Setup, checks and the entry point of the tasks |
+| `../../benchkit/src/runtimes.silk` | The harness: setup, the round loop, the report, peak memory, cold start |
+| `../../benchkit/src/kit.silk` | Measured child processes, the cleaned environment, the checks before a measurement |
+| `scripts/` | The JavaScript programs the runtimes run: what is measured, not harness |
+| `coldstart/cases/` | The cold start cases |
 
 Express, the WebSocket chat, Postgres, SQLite and `cat` are Bun's own programs, from the `bench/`
 folder of [oven-sh/bun](https://github.com/oven-sh/bun) at its current head; `bench-setup` prints
-the commit.
+the commit. `scripts/q.mjs` runs Bun's SQLite queries from Bun's `bench/sqlite` folder.
+
+Cold start runs each runtime through `/usr/bin/env`, as every recorded table did. `res.json` names
+the SQLite queries by the ids of `results.csv` (`sqlite_order`, ...).
 
 ## A network that blocks the build's downloads
 
@@ -75,13 +80,28 @@ the commit.
 dist.libuv.org are blocked, prepared copies stand in:
 
 ```sh
-python3 ../engine/scripts/bootstrap_toolchain.py --silk-archive silk.tgz --llvm-archive silk-llvm.tar.gz
 silk task offline-deps --from DIR     # or SILKJS_OFFLINE_DEPS=DIR
 ```
 
-`bootstrap_toolchain.py` installs the pinned Silk release and Silk's Clang; without archives it
-uses the installer of silk-lang/silk and a Clang already on the machine. `offline-deps` unpacks
-`runtime-native-prefix.tgz`, `runtime-sqlite-amalgamation.tgz`, `runtime-zstd-nghttp2-system.tgz`
-(into `/usr`, as root) and `runtime-build-deps.tgz` from `DIR`, fetches Brotli and libuv with git,
-writes `~/.silk/native-overrides.toml` and prints the build command. If a pinned revision or URL
-changes, compare `[native.archive.*]` in `silk.toml` and `../native/*/silk.toml`.
+It unpacks `runtime-native-prefix.tgz`, `runtime-sqlite-amalgamation.tgz`,
+`runtime-zstd-nghttp2-system.tgz` (into `/usr`, as root) and `runtime-build-deps.tgz` from `DIR`,
+fetches Brotli and libuv with git at the revisions `../native/*/silk.toml` pin, writes
+`~/.silk/native-overrides.toml` and prints the build command. The tasks themselves are built with
+the runtime's C libraries, so on such a network the first `silk task offline-deps` needs the
+overrides already: write `native-overrides.toml` by hand once, or run the task from a checkout
+where it is built.
+
+Where the GitHub release API is blocked too, the Silk installer cannot list releases. The release
+assets themselves download:
+
+```sh
+V=$(sed -n 's/^silk-version = "\(.*\)"/\1/p' ../../silk.toml); E=$(printf %s "$V" | sed 's/+/%2B/')
+curl -fsSLo silk.tgz "https://github.com/silk-lang/silk/releases/download/v$E/silk-$E-x86_64-unknown-linux-gnu.tar.gz"
+mkdir -p ~/.silk/toolchains/$V ~/.silk/bin && tar xzf silk.tgz -C ~/.silk/toolchains/$V --strip-components 1
+cp ~/.silk/toolchains/$V/bin/silk ~/.silk/bin/ && echo "default = \"$V\"" > ~/.silk/settings.toml
+# Silk's Clang and lld, one multicall binary
+curl -fsSLo llvm.tgz https://github.com/silk-lang/silk/releases/download/llvm-23.1.5-silk.1/silk-llvm-23.1.5-silk.1-x86_64-unknown-linux-gnu.tar.gz
+mkdir -p ~/.silk/llvm && tar xzf llvm.tgz -C ~/.silk/llvm --strip-components 1
+(cd ~/.silk/llvm/bin && for n in clang clang++ ld.lld lld llvm-ar llvm-nm llvm-objcopy llvm-strip llvm-ranlib; do ln -sf llvm $n; done)
+export PATH=~/.silk/bin:~/.silk/llvm/bin:$PATH SILK_CLANG=~/.silk/llvm/bin/clang
+```

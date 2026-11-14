@@ -57,11 +57,12 @@ cycles.
 
 ## Comparison with other engines
 
-`engines/` holds the harness for the tables that set silkjs beside V8 jitless (Node 24), JSC
-without its JIT, QuickJS and the two WebAssembly builds. From `modules/engine`:
+The tables that set silkjs beside V8 jitless (Node 24), JSC without its JIT, QuickJS and the two
+WebAssembly builds come from tasks written in Silk: `src/tasks.silk` calls the `engines` module of
+[`../../benchkit`](../../benchkit). From `modules/engine`:
 
 ```sh
-silk build --release                       # about 5 minutes
+silk build --release                       # about 6 minutes
 silk task bench-setup                      # once: jsc, Octane, QuickJS e585640, wasmtime 45, wasi-sdk 33, the wasm builds
 silk task bench-octane                     # Octane 2, 3 interleaved rounds, best score per engine
 silk task bench-octane richards splay      # selected benchmarks
@@ -73,20 +74,23 @@ silk task bench-fixed --only richards,deltablue old/silkjs new/silkjs    # A/B o
 `--rounds N`, `--engine PATH` (the silkjs executable; default `$SILKJS_ENGINE`, else this host's
 release build), `--engines a,b` (columns; default every installed one of `silkjs`, `v8-jitless`,
 `jsc-nojit`, `qjs`, `silkjs-wasm`, `qjs-wasm`), `--jit` (add `v8-jit` and `jsc-jit`, for context
-only), `--out DIR` (default `<work>/results`) and `--work DIR` (default `$SILKJS_BENCH_WORK`, else
-`build/bench`). `$NODE_REFERENCE` selects the Node executable and `$JSC` the JavaScriptCore shell.
-The `wasm` setup step needs `SILK_CLANG` set to a Clang 22 or newer with `wasm-ld` beside it; run
-it again after a new commit to rebuild `silkjs.wasm`.
+only), `--out DIR` (default `<work>/results`), `--work DIR` (default `$SILKJS_BENCH_WORK`, else
+`build/bench`) and `--force`. `$NODE_REFERENCE` selects the Node executable and `$JSC` the
+JavaScriptCore shell. `silk task bench-setup wasm` runs one step; that step needs `SILK_CLANG` set
+to a Clang 22 or newer with `wasm-ld` beside it, and is run again after a new commit to rebuild
+`silkjs.wasm`.
 
-`scripts/bench_engines.py` is the entry point and keeps what is easy to get wrong:
+The harness keeps what is easy to get wrong:
 
 - silkjs runs with `SILKJS_PREPARSE_THREADS=0`; `NODE_OPTIONS` and `BUN_OPTIONS` are dropped.
 - Engines are interleaved over the rounds, and nothing is measured while a compiler runs or the
   host is busy (`--force` overrides). Never build while benchmarking.
-- Octane runs V8 through `engines/noderun.js`, because code-load needs a global eval. The micros
-  run `node` directly: through that loader `microbench.js` reads its own path as a test name.
+- Octane runs V8 through a loader that evaluates the script as a global script, because code-load
+  needs a global eval. The micros run `node` directly: through the loader `microbench.js` reads its
+  own path as a test name.
 - jsc has no usable `performance` (missing, or a stub that returns 0), so its micros run a copy
-  of `microbench.js` with a `preciseTime` clock in front. Without it JSC looks about 4% better than it is.
+  of `microbench.js` with a `preciseTime` clock in front. Without it JSC looks about 4% better
+  than it is.
 - wasmtime gets `-W max-wasm-stack=8388608`, an absolute script path and `--dir /`.
 
 Octane's score mode is too noisy to compare two builds. `bench-fixed` runs the same number of

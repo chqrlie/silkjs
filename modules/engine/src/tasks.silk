@@ -3,10 +3,10 @@
 //! Each task runs one of the Python scripts in `scripts/` with typed options, so `silk task`
 //! lists what there is to run and `silk task <name> --help` says how. The scripts still hold
 //! the work; this program is their entry point.
-//!
-//! The `bench-` tasks run `scripts/bench_engines.py`, the comparison with other engines
-//! (`bench/README.md`).
 
+import benchkit.kit as Kit
+import benchkit.engines as Engines
+import benchkit.engines { Asked }
 import silk.cli.command { Command, CommandLine, Opt }
 import silk.cli.task { Task, TaskError, TaskSet }
 import silk.collections.bytes { Bytes }
@@ -15,7 +15,7 @@ import silk.core.option { Option }
 import silk.io.writer { WriterError }
 import silk.mem.allocator { Allocator, OutOfMemoryError }
 import silk.system.child_process { ChildProcess, ProcessError }
-import silk.system.filesystem { FileError, FileSystem }
+import silk.system.filesystem { FileError, FileSystem, Path }
 import silk.system.host_input { HostInput, HostInputError }
 
 union Tasks {
@@ -31,36 +31,35 @@ union Tasks {
   },
   Pgo { pub pgoOutput: Option<Bytes>, pub keep: bool },
   FunctionOrder { pub binary: Option<Bytes> },
-  BenchSetup { pub setupWork: Option<Bytes>, pub steps: List<Bytes> },
-  BenchOctane {
-    pub octaneRounds: Option<Bytes>,
-    pub octaneEngine: Option<Bytes>,
-    pub octaneEngines: Option<Bytes>,
-    pub octaneJit: bool,
-    pub octaneOut: Option<Bytes>,
-    pub octaneWork: Option<Bytes>,
-    pub octaneForce: bool,
-    pub benchmarks: List<Bytes>,
-  },
-  BenchMicro {
-    pub microRounds: Option<Bytes>,
-    pub microEngine: Option<Bytes>,
-    pub microEngines: Option<Bytes>,
-    pub microJit: bool,
-    pub microOut: Option<Bytes>,
-    pub microWork: Option<Bytes>,
-    pub microForce: bool,
-    pub tests: List<Bytes>,
-  },
-  BenchFixed {
-    pub fixedRounds: Option<Bytes>,
-    pub fixedOnly: Option<Bytes>,
-    pub iterations: Option<Bytes>,
-    pub fixedWork: Option<Bytes>,
-    pub fixedForce: bool,
-    pub binaries: List<Bytes>,
-  },
-  BenchReport { pub nativeOnly: bool, pub jitResults: Option<Bytes>, pub reportOut: Option<Bytes>, pub reportWork: Option<Bytes> },
+  BenchSetup { pub work: Option<Bytes>, pub steps: List<Bytes> },
+  BenchOctane { pub measure: Measure, pub benchmarks: List<Bytes> },
+  BenchMicro { pub measure: Measure, pub tests: List<Bytes> },
+  BenchFixed { pub measure: Measure, pub fixedOnly: Option<Bytes>, pub iterations: Option<u32>, pub binaries: List<Bytes> },
+  BenchReport { pub measure: Measure, pub native: bool },
+}
+
+/// The options the measuring tasks share.
+struct Measure {
+  pub rounds: Option<u32>,
+  pub engine: Option<Bytes>,
+  pub engines: Option<Bytes>,
+  pub jit: bool,
+  pub out: Option<Bytes>,
+  pub work: Option<Bytes>,
+  pub force: bool,
+}
+
+impl CommandLine for Measure {
+  static fn command() -> Command<Measure> {
+    return Command<Measure>.make("measure", "")
+      |> Command.option("rounds", Opt.about("Interleaved rounds (default 3; 7 for bench-fixed)"))
+      |> Command.option("engine", Opt.about("The silkjs executable (default: this host's release build)") |> Opt.env("SILKJS_ENGINE"))
+      |> Command.option("engines", Opt.about("Columns, comma-separated (default: every installed one of silkjs,v8-jitless,jsc-nojit,qjs,silkjs-wasm,qjs-wasm)"))
+      |> Command.option("jit", Opt.about("Add the v8-jit and jsc-jit columns, for context only"))
+      |> Command.option("out", Opt.about("The results directory (default: <work>/results)"))
+      |> Command.option("work", Opt.about("The work directory of bench-setup (default: build/bench)") |> Opt.env("SILKJS_BENCH_WORK"))
+      |> Command.option("force", Opt.about("Measure even while a build runs or the host is busy"))
+  }
 }
 
 impl CommandLine for Tasks {
@@ -89,38 +88,19 @@ impl CommandLine for Tasks {
         "BenchSetup",
         "Install the reference engines of the comparison: Node check, jsc, Octane, QuickJS, wasmtime, wasi-sdk, the wasm builds",
       )
-      |> Command.option("setupWork", Opt.about("The work directory (default: SILKJS_BENCH_WORK, else build/bench)") |> Opt.long("work"))
+      |> Command.option("work", Opt.about("The work directory (default: build/bench)") |> Opt.env("SILKJS_BENCH_WORK"))
       |> Command.arg("steps", Opt.about("Steps to run (default all): node jsc octane quickjs wasmtime wasi-sdk wasm"))
       |> Command.variant("BenchOctane", "Run Octane under silkjs, V8 jitless, JSC without its JIT, QuickJS and the wasm builds")
-      |> Command.option("octaneRounds", Opt.about("Interleaved rounds (default 3)") |> Opt.long("rounds"))
-      |> Command.option("octaneEngine", Opt.about("The silkjs executable (default: SILKJS_ENGINE, else this host's release build)") |> Opt.long("engine"))
-      |> Command.option("octaneEngines", Opt.about("Columns, comma-separated (default: every installed one of silkjs,v8-jitless,jsc-nojit,qjs,silkjs-wasm,qjs-wasm)") |> Opt.long("engines"))
-      |> Command.option("octaneJit", Opt.about("Add the v8-jit and jsc-jit columns, for context only") |> Opt.long("jit"))
-      |> Command.option("octaneOut", Opt.about("Where to write results (default: <work>/results)") |> Opt.long("out"))
-      |> Command.option("octaneWork", Opt.about("The work directory of bench-setup (default: SILKJS_BENCH_WORK, else build/bench)") |> Opt.long("work"))
-      |> Command.option("octaneForce", Opt.about("Measure even while a build runs or the host is busy") |> Opt.long("force"))
+      |> Command.flatten("measure")
       |> Command.arg("benchmarks", Opt.about("Octane benchmarks to run, such as richards splay"))
       |> Command.variant("BenchMicro", "Run bench/microbench.js under the same engines")
-      |> Command.option("microRounds", Opt.about("Interleaved rounds (default 3)") |> Opt.long("rounds"))
-      |> Command.option("microEngine", Opt.about("The silkjs executable (default: SILKJS_ENGINE, else this host's release build)") |> Opt.long("engine"))
-      |> Command.option("microEngines", Opt.about("Columns, comma-separated (default: every installed one of silkjs,v8-jitless,jsc-nojit,qjs,silkjs-wasm,qjs-wasm)") |> Opt.long("engines"))
-      |> Command.option("microJit", Opt.about("Add the v8-jit and jsc-jit columns, for context only") |> Opt.long("jit"))
-      |> Command.option("microOut", Opt.about("Where to write results (default: <work>/results)") |> Opt.long("out"))
-      |> Command.option("microWork", Opt.about("The work directory of bench-setup (default: SILKJS_BENCH_WORK, else build/bench)") |> Opt.long("work"))
-      |> Command.option("microForce", Opt.about("Measure even while a build runs or the host is busy") |> Opt.long("force"))
       |> Command.arg("tests", Opt.about("microbench.js test names to run"))
       |> Command.variant("BenchFixed", "Compare builds on fixed Octane work: minimum user time, under 2% is noise")
-      |> Command.option("fixedRounds", Opt.about("Interleaved rounds (default 7)") |> Opt.long("rounds"))
       |> Command.option("fixedOnly", Opt.about("Octane benchmarks, comma-separated, such as richards,deltablue") |> Opt.long("only"))
       |> Command.option("iterations", Opt.about("Iterations of each benchmark (default: as scripts/v8bench.py)"))
-      |> Command.option("fixedWork", Opt.about("The work directory of bench-setup") |> Opt.long("work"))
-      |> Command.option("fixedForce", Opt.about("Measure even while a build runs or the host is busy") |> Opt.long("force"))
       |> Command.arg("binaries", Opt.about("The executables to compare: OLD NEW"))
       |> Command.variant("BenchReport", "Print the tables from the results of bench-octane and bench-micro")
-      |> Command.option("nativeOnly", Opt.about("The native-only table instead of the one with the wasm columns") |> Opt.long("native"))
-      |> Command.option("jitResults", Opt.about("An octane.json with v8-jit and jsc-jit columns, for the native table"))
-      |> Command.option("reportOut", Opt.about("The results directory (default: <work>/results)") |> Opt.long("out"))
-      |> Command.option("reportWork", Opt.about("The work directory of bench-setup") |> Opt.long("work"))
+      |> Command.option("native", Opt.about("The native-only table instead of the one with the wasm columns"))
   }
 }
 
@@ -130,6 +110,37 @@ impl TaskSet for Tasks {
     ? &mut HostInput | &mut Allocator | &mut ChildProcess | &mut FileSystem {
     let mut argv = List<Bytes>.make()
     match move self {
+      Tasks.BenchSetup { work, steps } => {
+        let measure = Measure { rounds: Option<u32>.none(), engine: Option<Bytes>.none(), engines: Option<Bytes>.none(), jit: false, out: Option<Bytes>.none(), work: move work, force: false }
+        let asked = run asked(move measure, move steps)
+        run Engines.setup(&asked)
+        return
+      }
+      Tasks.BenchOctane { measure, benchmarks } => {
+        let asked = run asked(move measure, move benchmarks)
+        run Engines.octane(&asked)
+        return
+      }
+      Tasks.BenchMicro { measure, tests } => {
+        let asked = run asked(move measure, move tests)
+        run Engines.micro(&asked)
+        return
+      }
+      Tasks.BenchFixed { measure, fixedOnly, iterations, binaries } => {
+        let asked = run asked(move measure, move binaries)
+        let only = Kit.orEmpty(move fixedOnly)
+        let count = match move iterations {
+          Option<u32>.Some { value } => value
+          Option<u32>.None => 0
+        }
+        run Engines.fixed(&asked, Bytes.asSlice(&only), count)
+        return
+      }
+      Tasks.BenchReport { measure, native } => {
+        let asked = run asked(move measure, List<Bytes>.make())
+        run Engines.report(&asked, native)
+        return
+      }
       Tasks.Check { skipNative, skipBench } => {
         run word(&mut argv, b"scripts/check.py")
         if skipNative { run word(&mut argv, b"--skip-native") }
@@ -160,37 +171,6 @@ impl TaskSet for Tasks {
           Option<Bytes>.None => {}
         }
       }
-      Tasks.BenchSetup { setupWork, steps } => {
-        run enginesTool(&mut argv, b"setup")
-        run valued(&mut argv, b"--work", move setupWork)
-        run words(&mut argv, &steps)
-      }
-      Tasks.BenchOctane { octaneRounds, octaneEngine, octaneEngines, octaneJit, octaneOut, octaneWork, octaneForce, benchmarks } => {
-        run enginesTool(&mut argv, b"octane")
-        run measured(&mut argv, move octaneRounds, move octaneEngine, move octaneEngines, octaneJit, move octaneOut, move octaneWork, octaneForce)
-        run words(&mut argv, &benchmarks)
-      }
-      Tasks.BenchMicro { microRounds, microEngine, microEngines, microJit, microOut, microWork, microForce, tests } => {
-        run enginesTool(&mut argv, b"micro")
-        run measured(&mut argv, move microRounds, move microEngine, move microEngines, microJit, move microOut, move microWork, microForce)
-        run words(&mut argv, &tests)
-      }
-      Tasks.BenchFixed { fixedRounds, fixedOnly, iterations, fixedWork, fixedForce, binaries } => {
-        run enginesTool(&mut argv, b"fixed")
-        run valued(&mut argv, b"--rounds", move fixedRounds)
-        run valued(&mut argv, b"--only", move fixedOnly)
-        run valued(&mut argv, b"--iterations", move iterations)
-        run valued(&mut argv, b"--work", move fixedWork)
-        if fixedForce { run word(&mut argv, b"--force") }
-        run words(&mut argv, &binaries)
-      }
-      Tasks.BenchReport { nativeOnly, jitResults, reportOut, reportWork } => {
-        run enginesTool(&mut argv, b"report")
-        if nativeOnly { run word(&mut argv, b"--native") }
-        run valued(&mut argv, b"--jit-results", move jitResults)
-        run valued(&mut argv, b"--out", move reportOut)
-        run valued(&mut argv, b"--work", move reportWork)
-      }
     }
     run Task.execBytes(b"python3", List<Bytes>.asSlice(&argv))
   }
@@ -198,6 +178,27 @@ impl TaskSet for Tasks {
 
 pub effect fn main() -> i32 ? &mut HostInput {
   return run Task.main<Tasks>()
+}
+
+// What a comparison task was asked, from its options and names.
+effect fn asked(measure: Measure, names: List<Bytes>) -> Asked
+  ! TaskError | HostInputError | OutOfMemoryError ? &mut HostInput | &mut Allocator {
+  let root = run Task.root()
+  let Measure { rounds, engine, engines, jit, out, work, force } = move measure
+  return Asked {
+    root: run Bytes.copy(Path.rawBytes(&root)),
+    work: Kit.orEmpty(move work),
+    out: Kit.orEmpty(move out),
+    engine: Kit.orEmpty(move engine),
+    engines: Kit.orEmpty(move engines),
+    rounds: match move rounds {
+      Option<u32>.Some { value } => value
+      Option<u32>.None => 0
+    },
+    jit: jit,
+    force: force,
+    names: move names,
+  }
 }
 
 // Appends one argument.
@@ -213,32 +214,6 @@ effect fn words(argv: &mut List<Bytes>, values: &List<Bytes>) -> () ! OutOfMemor
     run word(&mut argv.*, Bytes.asSlice(&listed[at]))
     at = at + 1
   }
-}
-
-// Starts a `scripts/bench_engines.py` command.
-effect fn enginesTool(argv: &mut List<Bytes>, command: &[u8]) -> () ! OutOfMemoryError ? &mut Allocator {
-  run word(&mut argv.*, b"scripts/bench_engines.py")
-  run word(&mut argv.*, command)
-}
-
-// Appends the options the measuring commands of `scripts/bench_engines.py` share.
-effect fn measured(
-  argv: &mut List<Bytes>,
-  rounds: Option<Bytes>,
-  executable: Option<Bytes>,
-  columns: Option<Bytes>,
-  jit: bool,
-  output: Option<Bytes>,
-  workDir: Option<Bytes>,
-  forced: bool,
-) -> () ! OutOfMemoryError ? &mut Allocator {
-  run valued(&mut argv.*, b"--rounds", move rounds)
-  run valued(&mut argv.*, b"--engine", move executable)
-  run valued(&mut argv.*, b"--engines", move columns)
-  if jit { run word(&mut argv.*, b"--jit") }
-  run valued(&mut argv.*, b"--out", move output)
-  run valued(&mut argv.*, b"--work", move workDir)
-  if forced { run word(&mut argv.*, b"--force") }
 }
 
 // Appends `flag` and its value when the option was given.

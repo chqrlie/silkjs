@@ -5,9 +5,12 @@
 //! which only an executable that runs on the build machine can make. The work stays in the
 //! Python tools; this program is their entry point.
 //!
-//! The `bench` tasks run `tools/bench.py`, which sets up and runs the comparison with Bun
-//! (`bench/README.md`).
+//! The `bench` tasks compare the runtime with Bun (`bench/README.md`). They are Silk all the way:
+//! the harness is the `runtimes` module of `../benchkit`.
 
+import benchkit.kit as Kit
+import benchkit.runtimes as Runtimes
+import benchkit.runtimes { Asked }
 import silk.cli.command { Command, CommandLine, Opt }
 import silk.cli.task { Task, TaskError, TaskSet }
 import silk.collections.bytes { Bytes }
@@ -16,7 +19,7 @@ import silk.core.option { Option }
 import silk.io.writer { WriterError }
 import silk.mem.allocator { Allocator, OutOfMemoryError }
 import silk.system.child_process { ChildProcess, ProcessError }
-import silk.system.filesystem { FileError, FileSystem }
+import silk.system.filesystem { FileError, FileSystem, Path }
 import silk.system.host_input { HostInput, HostInputError }
 
 union Tasks {
@@ -24,44 +27,34 @@ union Tasks {
   Embed,
   Compat { pub pattern: Option<Bytes> },
   Sea { pub runtime: Bytes, pub blob: Bytes, pub executable: Bytes, pub sign: Option<Bytes> },
-  BenchSetup { pub setupWork: Option<Bytes>, pub steps: List<Bytes> },
-  Bench {
-    pub benchRounds: Option<Bytes>,
-    pub benchRuntime: Option<Bytes>,
-    pub benchRuntimes: Option<Bytes>,
-    pub benchOut: Option<Bytes>,
-    pub benchWork: Option<Bytes>,
-    pub benchForce: bool,
-    pub groups: List<Bytes>,
-  },
-  BenchMem {
-    pub memRounds: Option<Bytes>,
-    pub memRuntime: Option<Bytes>,
-    pub memRuntimes: Option<Bytes>,
-    pub memOut: Option<Bytes>,
-    pub memWork: Option<Bytes>,
-    pub memForce: bool,
-  },
-  BenchCold {
-    pub coldRounds: Option<Bytes>,
-    pub coldRuntime: Option<Bytes>,
-    pub coldRuntimes: Option<Bytes>,
-    pub coldOut: Option<Bytes>,
-    pub coldWork: Option<Bytes>,
-    pub coldForce: bool,
-    pub cases: List<Bytes>,
-  },
-  BenchAll {
-    pub allRounds: Option<Bytes>,
-    pub allMemRounds: Option<Bytes>,
-    pub allColdRuns: Option<Bytes>,
-    pub allRuntime: Option<Bytes>,
-    pub allRuntimes: Option<Bytes>,
-    pub allOut: Option<Bytes>,
-    pub allWork: Option<Bytes>,
-    pub allForce: bool,
-  },
-  OfflineDeps { pub archives: Option<Bytes>, pub depsWork: Option<Bytes> },
+  BenchSetup { pub work: Option<Bytes>, pub steps: List<Bytes> },
+  Bench { pub measure: Measure, pub groups: List<Bytes> },
+  BenchMem { pub measure: Measure },
+  BenchCold { pub measure: Measure, pub cases: List<Bytes> },
+  BenchAll { pub measure: Measure, pub memRounds: Option<u32>, pub coldRuns: Option<u32> },
+  OfflineDeps { pub work: Option<Bytes>, pub archives: Option<Bytes> },
+}
+
+/// The options the measuring tasks share.
+struct Measure {
+  pub rounds: Option<u32>,
+  pub executable: Option<Bytes>,
+  pub runtimes: Option<Bytes>,
+  pub out: Option<Bytes>,
+  pub work: Option<Bytes>,
+  pub force: bool,
+}
+
+impl CommandLine for Measure {
+  static fn command() -> Command<Measure> {
+    return Command<Measure>.make("measure", "")
+      |> Command.option("rounds", Opt.about("Interleaved rounds (default: 6 for bench, 3 for bench-mem; runs per case for bench-cold, 30)"))
+      |> Command.option("executable", Opt.about("The runtime executable (default: build/silkjsruntime)") |> Opt.long("runtime") |> Opt.env("SILKJS_RUNTIME"))
+      |> Command.option("runtimes", Opt.about("Columns, comma-separated: silkjs,bun_nojit,bun_nojit_smol (the default); bench-cold also takes bun") |> Opt.env("RUNTIMES"))
+      |> Command.option("out", Opt.about("The results directory (default: <work>/results/<UTC time>)"))
+      |> Command.option("work", Opt.about("The work directory of bench-setup (default: build/bench)") |> Opt.env("SILKJS_BENCH_WORK"))
+      |> Command.option("force", Opt.about("Measure even while a build runs or the host is busy"))
+  }
 }
 
 impl CommandLine for Tasks {
@@ -85,49 +78,19 @@ impl CommandLine for Tasks {
         "BenchSetup",
         "Prepare the Bun comparison: wrk, Postgres, Bun's bench folders, Northwind, the TLS certificate, the 1 GB file",
       )
-      |> Command.option("setupWork", Opt.about("The work directory (default: SILKJS_BENCH_WORK, else build/bench)") |> Opt.long("work"))
+      |> Command.option("work", Opt.about("The work directory (default: build/bench)") |> Opt.env("SILKJS_BENCH_WORK"))
       |> Command.arg("steps", Opt.about("Steps to run (default all): wrk postgres bunrepo install northwind cert bigfile"))
-      |> Command.variant(
-        "Bench",
-        "Run the benchmarks against Bun with its JIT off (needs bench-setup and a release build); writes results.csv",
-      )
-      |> Command.option("benchRounds", Opt.about("Interleaved rounds (default 6)") |> Opt.long("rounds"))
-      |> Command.option("benchRuntime", Opt.about("The runtime executable (default: SILKJS_RUNTIME, else build/silkjsruntime)") |> Opt.long("runtime"))
-      |> Command.option("benchRuntimes", Opt.about("Columns, comma-separated (default: silkjs,bun_nojit,bun_nojit_smol)") |> Opt.long("runtimes"))
-      |> Command.option("benchOut", Opt.about("Where to write results (default: <work>/results/<UTC time>)") |> Opt.long("out"))
-      |> Command.option("benchWork", Opt.about("The work directory of bench-setup (default: SILKJS_BENCH_WORK, else build/bench)") |> Opt.long("work"))
-      |> Command.option("benchForce", Opt.about("Measure even while a build runs or the host is busy") |> Opt.long("force"))
+      |> Command.variant("Bench", "Run the benchmarks against Bun with its JIT off (needs bench-setup and a release build)")
+      |> Command.flatten("measure")
       |> Command.arg("groups", Opt.about("Groups or benchmarks to run: http ws pg sqlite spawn cat imm"))
       |> Command.variant("BenchMem", "Measure the peak RSS of the non-server benchmarks")
-      |> Command.option("memRounds", Opt.about("Interleaved rounds (default 3)") |> Opt.long("rounds"))
-      |> Command.option("memRuntime", Opt.about("The runtime executable (default: SILKJS_RUNTIME, else build/silkjsruntime)") |> Opt.long("runtime"))
-      |> Command.option("memRuntimes", Opt.about("Columns, comma-separated (default: silkjs,bun_nojit,bun_nojit_smol)") |> Opt.long("runtimes"))
-      |> Command.option("memOut", Opt.about("Where to write results (default: <work>/results/<UTC time>)") |> Opt.long("out"))
-      |> Command.option("memWork", Opt.about("The work directory of bench-setup (default: SILKJS_BENCH_WORK, else build/bench)") |> Opt.long("work"))
-      |> Command.option("memForce", Opt.about("Measure even while a build runs or the host is busy") |> Opt.long("force"))
       |> Command.variant("BenchCold", "Measure cold start: wall time, CPU time, peak RSS and page faults per process start")
-      |> Command.option("coldRounds", Opt.about("Runs per case (default 30)") |> Opt.long("rounds"))
-      |> Command.option("coldRuntime", Opt.about("The runtime executable (default: SILKJS_RUNTIME, else build/silkjsruntime)") |> Opt.long("runtime"))
-      |> Command.option("coldRuntimes", Opt.about("Columns, comma-separated (default: silkjs,bun_nojit,bun_nojit_smol)") |> Opt.long("runtimes"))
-      |> Command.option("coldOut", Opt.about("Where to write results (default: <work>/results/<UTC time>)") |> Opt.long("out"))
-      |> Command.option("coldWork", Opt.about("The work directory of bench-setup (default: SILKJS_BENCH_WORK, else build/bench)") |> Opt.long("work"))
-      |> Command.option("coldForce", Opt.about("Measure even while a build runs or the host is busy") |> Opt.long("force"))
       |> Command.arg("cases", Opt.about("Cases to run: empty hello cjs esm local fsread net timer"))
       |> Command.variant("BenchAll", "Run bench, bench-mem and bench-cold into one results directory")
-      |> Command.option("allRounds", Opt.about("Rounds of bench (default 6)") |> Opt.long("rounds"))
-      |> Command.option("allRuntime", Opt.about("The runtime executable (default: SILKJS_RUNTIME, else build/silkjsruntime)") |> Opt.long("runtime"))
-      |> Command.option("allRuntimes", Opt.about("Columns, comma-separated (default: silkjs,bun_nojit,bun_nojit_smol)") |> Opt.long("runtimes"))
-      |> Command.option("allOut", Opt.about("Where to write results (default: <work>/results/<UTC time>)") |> Opt.long("out"))
-      |> Command.option("allWork", Opt.about("The work directory of bench-setup (default: SILKJS_BENCH_WORK, else build/bench)") |> Opt.long("work"))
-      |> Command.option("allForce", Opt.about("Measure even while a build runs or the host is busy") |> Opt.long("force"))
-      |> Command.option("allMemRounds", Opt.about("Rounds of bench-mem (default 3)") |> Opt.long("mem-rounds"))
-      |> Command.option("allColdRuns", Opt.about("Runs per case of bench-cold (default 30)") |> Opt.long("cold-runs"))
-      |> Command.variant(
-        "OfflineDeps",
-        "Point the build at prepared copies of its downloads, for a network that blocks them",
-      )
-      |> Command.option("archives", Opt.about("The folder with the prepared archives (default: SILKJS_OFFLINE_DEPS)") |> Opt.long("from"))
-      |> Command.option("depsWork", Opt.about("The work directory (default: SILKJS_BENCH_WORK, else build/bench)") |> Opt.long("work"))
+      |> Command.option("memRounds", Opt.about("Rounds of bench-mem (default 3)"))
+      |> Command.option("coldRuns", Opt.about("Runs per case of bench-cold (default 30)"))
+      |> Command.variant("OfflineDeps", "Point the build at prepared copies of its downloads, for a network that blocks them")
+      |> Command.option("archives", Opt.about("The folder with the prepared archives") |> Opt.long("from") |> Opt.env("SILKJS_OFFLINE_DEPS"))
   }
 }
 
@@ -137,6 +100,37 @@ impl TaskSet for Tasks {
     ? &mut HostInput | &mut Allocator | &mut ChildProcess | &mut FileSystem {
     let mut argv = List<Bytes>.make()
     match move self {
+      Tasks.BenchSetup { work, steps } => {
+        let asked = run asked(onlyWork(move work), move steps)
+        run Runtimes.setup(&asked)
+        return
+      }
+      Tasks.Bench { measure, groups } => {
+        let asked = run asked(move measure, move groups)
+        run Runtimes.bench(&asked)
+        return
+      }
+      Tasks.BenchMem { measure } => {
+        let asked = run asked(move measure, List<Bytes>.make())
+        run Runtimes.mem(&asked)
+        return
+      }
+      Tasks.BenchCold { measure, cases } => {
+        let asked = run asked(move measure, move cases)
+        run Runtimes.cold(&asked)
+        return
+      }
+      Tasks.BenchAll { measure, memRounds, coldRuns } => {
+        let asked = run asked(move measure, List<Bytes>.make())
+        run Runtimes.all(&asked, count(memRounds), count(coldRuns))
+        return
+      }
+      Tasks.OfflineDeps { work, archives } => {
+        let asked = run asked(onlyWork(move work), List<Bytes>.make())
+        let from = Kit.orEmpty(move archives)
+        run Runtimes.offlineDeps(&asked, Bytes.asSlice(&from))
+        return
+      }
       Tasks.Build { release, output } => {
         run word(&mut argv, b"tools/build.py")
         if release { run word(&mut argv, b"--release") }
@@ -162,36 +156,6 @@ impl TaskSet for Tasks {
         run List<Bytes>.append(&mut argv, move executable)
         run valued(&mut argv, b"--sign", move sign)
       }
-      Tasks.BenchSetup { setupWork, steps } => {
-        run benchTool(&mut argv, b"setup")
-        run valued(&mut argv, b"--work", move setupWork)
-        run words(&mut argv, &steps)
-      }
-      Tasks.Bench { benchRounds, benchRuntime, benchRuntimes, benchOut, benchWork, benchForce, groups } => {
-        run benchTool(&mut argv, b"run")
-        run measured(&mut argv, move benchRounds, move benchRuntime, move benchRuntimes, move benchOut, move benchWork, benchForce)
-        run words(&mut argv, &groups)
-      }
-      Tasks.BenchMem { memRounds, memRuntime, memRuntimes, memOut, memWork, memForce } => {
-        run benchTool(&mut argv, b"mem")
-        run measured(&mut argv, move memRounds, move memRuntime, move memRuntimes, move memOut, move memWork, memForce)
-      }
-      Tasks.BenchCold { coldRounds, coldRuntime, coldRuntimes, coldOut, coldWork, coldForce, cases } => {
-        run benchTool(&mut argv, b"cold")
-        run measured(&mut argv, move coldRounds, move coldRuntime, move coldRuntimes, move coldOut, move coldWork, coldForce)
-        run words(&mut argv, &cases)
-      }
-      Tasks.BenchAll { allRounds, allMemRounds, allColdRuns, allRuntime, allRuntimes, allOut, allWork, allForce } => {
-        run benchTool(&mut argv, b"all")
-        run measured(&mut argv, move allRounds, move allRuntime, move allRuntimes, move allOut, move allWork, allForce)
-        run valued(&mut argv, b"--mem-rounds", move allMemRounds)
-        run valued(&mut argv, b"--cold-runs", move allColdRuns)
-      }
-      Tasks.OfflineDeps { archives, depsWork } => {
-        run benchTool(&mut argv, b"deps")
-        run valued(&mut argv, b"--from", move archives)
-        run valued(&mut argv, b"--work", move depsWork)
-      }
     }
     run Task.execBytes(b"python3", List<Bytes>.asSlice(&argv))
   }
@@ -201,43 +165,38 @@ pub effect fn main() -> i32 ? &mut HostInput {
   return run Task.main<Tasks>()
 }
 
+// The options of a task that takes only a work directory.
+fn onlyWork(work: Option<Bytes>) -> Measure {
+  return Measure { rounds: Option<u32>.none(), executable: Option<Bytes>.none(), runtimes: Option<Bytes>.none(), out: Option<Bytes>.none(), work: move work, force: false }
+}
+
+fn count(value: Option<u32>) -> u32 {
+  return match move value {
+    Option<u32>.Some { value: given } => given
+    Option<u32>.None => 0
+  }
+}
+
+// What a benchmark task was asked, from its options and names.
+effect fn asked(measure: Measure, names: List<Bytes>) -> Asked
+  ! TaskError | HostInputError | OutOfMemoryError ? &mut HostInput | &mut Allocator {
+  let root = run Task.root()
+  let Measure { rounds, executable, runtimes, out, work, force } = move measure
+  return Asked {
+    root: run Bytes.copy(Path.rawBytes(&root)),
+    work: Kit.orEmpty(move work),
+    out: Kit.orEmpty(move out),
+    runtime: Kit.orEmpty(move executable),
+    runtimes: Kit.orEmpty(move runtimes),
+    rounds: count(rounds),
+    force: force,
+    names: move names,
+  }
+}
+
 // Appends one argument.
 effect fn word(argv: &mut List<Bytes>, text: &[u8]) -> () ! OutOfMemoryError ? &mut Allocator {
   run List<Bytes>.append(&mut argv.*, run Bytes.copy(text))
-}
-
-// Starts a `tools/bench.py` command.
-effect fn benchTool(argv: &mut List<Bytes>, command: &[u8]) -> () ! OutOfMemoryError ? &mut Allocator {
-  run word(&mut argv.*, b"tools/bench.py")
-  run word(&mut argv.*, command)
-}
-
-// Appends the options the measuring commands of `tools/bench.py` share.
-effect fn measured(
-  argv: &mut List<Bytes>,
-  rounds: Option<Bytes>,
-  executable: Option<Bytes>,
-  runtimes: Option<Bytes>,
-  output: Option<Bytes>,
-  workDir: Option<Bytes>,
-  forced: bool,
-) -> () ! OutOfMemoryError ? &mut Allocator {
-  run valued(&mut argv.*, b"--rounds", move rounds)
-  run valued(&mut argv.*, b"--runtime", move executable)
-  run valued(&mut argv.*, b"--runtimes", move runtimes)
-  run valued(&mut argv.*, b"--out", move output)
-  run valued(&mut argv.*, b"--work", move workDir)
-  if forced { run word(&mut argv.*, b"--force") }
-}
-
-// Appends a copy of each argument in `values`.
-effect fn words(argv: &mut List<Bytes>, values: &List<Bytes>) -> () ! OutOfMemoryError ? &mut Allocator {
-  let listed = List<Bytes>.asSlice(values)
-  let mut at: usize = 0
-  while at < listed.length {
-    run word(&mut argv.*, Bytes.asSlice(&listed[at]))
-    at = at + 1
-  }
 }
 
 // Appends `flag` and its value when the option was given.
