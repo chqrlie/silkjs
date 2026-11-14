@@ -465,6 +465,41 @@ Eight steps, each merged to main with the executable's behaviour unchanged. The 
 
 Steps 1 to 3 are sequential. After step 3, steps 4, 5 and 6 can run as parallel streams, since each service owns different files and code that has not moved compiles unchanged. Step 7's package split is last on purpose: boundaries are cheap to move inside one package and expensive across several.
 
+## Progress
+
+**Step 0.** `tools/capability_graph.py` writes [capability-graph.md](capability-graph.md) from the
+sources: who owns each built-in, native function and Silk module, bytes per service, and the 240
+requires and native calls that cross a service line. `--build` adds linked sizes from a build. CI
+(`.github/workflows/capability-graph.yml`) fails on a new crossing. Service boundaries are a first
+cut by name and are not fixed yet.
+
+**Step 1, the spike.** Neither route in "The one dependency of this shape" works on the pinned
+toolchain (0.1.0-dev.74) as written:
+
+- *Requirement rows through the engine hooks* put a row parameter on every signature that reaches
+  a hook: 4,493 `? &mut Allocator` rows in all 474 engine files.
+- *A generic services type*, `Services<C>` with `C` the embedder's capabilities, is cheap in the
+  runtime. Only 223 references in 12 files name `Services`, the `ext` modules are mostly generic
+  over the engine's services already, and the engine already specializes per services type, so
+  dispatch would cost nothing. But the runtime has 266 `export "C" fn` callbacks (WAMR imports,
+  SQLite user functions, every Node-API function, llhttp, OpenSSL, the worker entry handed to
+  `pthread_create`), and each recovers the engine from a C pointer as one concrete type. Silk
+  cannot take a C callback address of a generic instantiation (synchronous-native-callbacks.md,
+  "Exported addresses"), and it has no type-erased generic values (CALLABLE-001).
+
+What does work, as probes on the pinned compiler confirmed: an interface's `static fn present()`
+read under `static if` removes the absent arm before name resolution, in debug builds too, and
+`compileError` there can carry the dependency check. A forwarding interface over one
+`Capabilities<W, A>` struct keeps the runtime generic over a single type however many capabilities
+there are. Dependency C sources are linked as loose objects, so an empty capability leaves its
+library out only when the package holding it is not in the program's dependency graph.
+
+Next: a Silk compiler change that gives a generic function's concrete instantiation a C callback
+address (in progress separately, in silk-lang/silk). With it, `Services<C>` follows the design
+unchanged. Without it, the fallback is a concrete `Services` that reaches each capability package
+through a table of C function pointers, the way the `Embedder` hook works today. Presence then
+becomes a runtime value, and there is one indirect call per capability native.
+
 ## Risks and decisions taken
 
 Decisions made here without asking, each reversible before step 1 lands:

@@ -10,8 +10,9 @@ built or run except the vendored acorn, under Node, to parse the built-in JavaSc
   - the edges that cross a service line without a declared need, which is the JavaScript work
   - bytes of built-in JavaScript, Silk and `extern "C"` declarations per service
 
-The linker-map half of step 0 (bytes of text and data per archive and per `ext` module) needs a
-build; `--link-map PATH` adds it when a map from `silk build` is at hand.
+The linked half of step 0 (bytes per C library and per Silk module) needs a build: `--build build`
+reads a tools/build.py build directory and records it in docs/capability-sizes.json, which later
+runs keep rendering.
 
   python3 tools/capability_graph.py            # writes the report
   python3 tools/capability_graph.py --check    # fails when the report is out of date
@@ -34,6 +35,8 @@ from embed import sources  # noqa: E402
 DOCS = ROOT / 'docs'
 REPORT = DOCS / 'capability-graph.md'
 DATA = DOCS / 'capability-graph.json'
+# Linked sizes from one build (`--build`): machine- and profile-specific, so written only on request.
+SIZES = DOCS / 'capability-sizes.json'
 
 CORE = 'Core'
 EXECUTABLE = 'Executable'
@@ -243,7 +246,7 @@ def silk_inventory():
     return modules
 
 
-def build(link_map: Path | None):
+def build():
     entries = [{'name': name, 'path': str(path)} for name, path in sources()]
     entries.append({'name': 'internal/bootstrap/silk', 'path': str(ROOT / 'runtime/bootstrap.js'), 'module': True})
     known = {entry['name'] for entry in entries}
@@ -298,9 +301,7 @@ def build(link_map: Path | None):
                                   'toService': target_service, 'kind': 'native', 'when': 'call'})
 
     silk = silk_inventory()
-    sizes = None
-    if link_map is not None:
-        sizes = link_map_sizes(link_map)
+    sizes = json.loads(SIZES.read_text()) if SIZES.exists() else None
     return {
         'builtins': builtins,
         'natives': {name: {'id': ids.get(name), 'service': service} for name, service in sorted(native_service.items())},
@@ -310,19 +311,114 @@ def build(link_map: Path | None):
     }
 
 
-def link_map_sizes(path: Path):
-    """Bytes per archive or object from a GNU ld or lld map (`-Wl,-Map=...`)."""
-    sizes: Counter = Counter()
-    text = path.read_text(errors='replace')
-    # lld: "     VMA      LMA     Size Align Out     In      Symbol" rows with hex size, then the input.
-    for match in re.finditer(r'^\s*[0-9a-f]+\s+[0-9a-f]+\s+([0-9a-f]+)\s+\d+\s+(\S+\.(?:a|o)(?:\(\S+\))?):\(\.(?:text|data|rodata|bss)', text, re.M):
-        archive = re.sub(r'\(.*\)$', '', match.group(2))
-        sizes[Path(archive).name] += int(match.group(1), 16)
-    # GNU ld: " .text  0x...  0x<size> <input>".
-    for match in re.finditer(r'^\s\.(?:text|data|rodata|bss)\S*\s+0x[0-9a-f]+\s+0x([0-9a-f]+)\s+(\S+)', text, re.M):
-        archive = re.sub(r'\(.*\)$', '', match.group(2))
-        sizes[Path(archive).name] += int(match.group(1), 16)
-    return dict(sizes.most_common())
+# C libraries by where their sources come from, and the service each one is linked for.
+LIBRARY_SERVICES = {
+    'OpenSSL': 'Crypto, Tls', 'SQLite': 'Database', 'WAMR': 'Wasm', 'libuv': 'Platform',
+    'zlib': 'Compression', 'zstd': 'Compression', 'brotli': 'Compression', 'nghttp2': 'Http2',
+    'llhttp': 'Http', 'inspector transport': 'Inspector', 'built-in JavaScript source': 'Core and every service',
+    'runtime C': CORE,
+}
+ARCHIVE_LIBRARIES = {
+    'silkjs-openssl': 'OpenSSL', 'silkjs-uv': 'libuv', 'silkjs-zlib': 'zlib', 'silkjs-zstd': 'zstd',
+    'silkjs-brotli': 'brotli', 'silkjs-nghttp2': 'nghttp2', 'silkjs-simde': 'WAMR', 'db-sqlite': 'SQLite',
+}
+
+
+def tool(*names):
+    for name in names:
+        found = shutil.which(name)
+        if found:
+            return found
+    raise SystemExit('capability_graph: needs one of ' + ', '.join(names))
+
+
+def manifest_sources():
+    """sha256 of each [native.archive], and rev of each git dependency, to the name that pins it."""
+    import tomllib
+    pins = {}
+    for manifest in ROOT.parent.rglob('silk.toml'):
+        if 'build' in manifest.parts or 'vendor' in manifest.parts:
+            continue
+        # Silk manifests allow multi-line inline tables, which tomllib refuses: read the pins alone.
+        text = manifest.read_text()
+        for name, body in re.findall(r'^\[native\.archive\.([\w-]+)\]\n(.*?)(?=^\[|\Z)', text, re.M | re.S):
+            found = re.search(r'sha256\s*=\s*"([0-9a-f]{64})"', body)
+            if found:
+                pins[found.group(1)] = name
+        for rev, package in re.findall(r'rev\s*=\s*"([0-9a-f]+)"\s*,\s*package\s*=\s*"([\w-]+)"', text):
+            pins[rev] = package
+    overrides = Path.home() / '.silk/native-overrides.toml'
+    if overrides.exists():
+        for name, override in tomllib.loads(overrides.read_text()).get('native', {}).get('override', {}).items():
+            pins[str(Path(override['path']).resolve())] = name
+    return pins
+
+
+def library_of(source: str, pins) -> str:
+    path = Path(source)
+    for key, name in pins.items():
+        if key in source:
+            return ARCHIVE_LIBRARIES.get(name, name)
+    relative = path.as_posix()
+    if '/vendor/wamr/' in relative or '/src/ext/wamr/' in relative:
+        return 'WAMR'
+    if '/vendor/llhttp/' in relative or relative.endswith('http_parser_bridge.c'):
+        return 'llhttp'
+    if relative.endswith('builtin_sources.c'):
+        return 'built-in JavaScript source'
+    if relative.endswith('inspector_transport.c'):
+        return 'inspector transport'
+    native = ROOT.parent / 'native'
+    if relative.startswith(native.as_posix()):
+        return ARCHIVE_LIBRARIES.get('silkjs-' + path.relative_to(native).parts[0], path.relative_to(native).parts[0])
+    return 'runtime C'
+
+
+def build_sizes(directory: Path):
+    """Linked bytes (text and data, not debug information) per C library and per Silk module, from a
+    `tools/build.py` build directory: its native objects, the program object and the symbol table."""
+    name = 'silkjsruntime'
+    objects = sorted((directory / f'{name}.native').glob('*.o'))
+    if not objects:
+        raise SystemExit(f'capability_graph: no native objects in {directory}/{name}.native')
+    pins = manifest_sources()
+    dwarfdump = tool('llvm-dwarfdump', 'llvm-dwarfdump-22')
+    size = tool('llvm-size', 'llvm-size-22', 'size')
+    nm = tool('llvm-nm', 'llvm-nm-22', 'nm')
+    libraries: Counter = Counter()
+    measured = subprocess.run([size, *map(str, objects)], capture_output=True, text=True, check=True).stdout.splitlines()[1:]
+    for obj, row in zip(objects, measured):
+        fields = row.split()
+        bytes_ = int(fields[0]) + int(fields[1])
+        unit = subprocess.run([dwarfdump, '--debug-info', str(obj)], capture_output=True, text=True).stdout
+        found = re.search(r'DW_AT_name\s+\("([^"]+)"\)', unit)
+        libraries[library_of(found.group(1) if found else obj.name, pins)] += bytes_
+    # Silk: every function of the program is in program.o, one section each.
+    modules: Counter = Counter()
+    owner = {}
+    for line in (directory / f'{name}.symbols').read_text().splitlines():
+        parts = line.split('\t')
+        if len(parts) == 3:
+            owner[parts[0]] = parts[2].split('::', 1)[0]
+    listed = subprocess.run([nm, '-S', '--defined-only', str(directory / 'program.o')], capture_output=True, text=True, check=True).stdout
+    for line in listed.splitlines():
+        fields = line.split()
+        if len(fields) == 4 and fields[3] in owner:
+            modules[owner[fields[3]]] += int(fields[1], 16)
+    silk: Counter = Counter()
+    for module, bytes_ in modules.items():
+        package, _, path = module.partition(':')
+        package = package.split('@')[0]
+        if package == 'silkjsruntime':
+            silk[classify(path, SILK_RULES)] += bytes_
+        else:
+            silk[{'silk': 'Silk standard library', 'silkjs': 'Engine', 'pm': EXECUTABLE}.get(package, package)] += bytes_
+    appended = {}
+    for label, relative in (('Built-in bytecode', 'builtin-cache/builtins.bin'), ('Heap image', 'heap-image.bin'), ('Executable', name)):
+        if (directory / relative).exists():
+            appended[label] = (directory / relative).stat().st_size
+    return {'libraries': dict(libraries.most_common()), 'silk': dict(silk.most_common()),
+            'silkModules': dict(modules.most_common(40)), 'files': appended}
 
 
 def kib(size: int) -> str:
@@ -370,14 +466,24 @@ def render(data) -> str:
     lines.append(f"| **Total** | {total['builtins']} | {kib(total['js'])} | {total['load']} | {total['lazy']} | {total['silk']} | {kib(total['silkBytes'])} | {total['extern']} |")
     lines += ['']
 
-    if data['linkMap']:
-        lines += ['## Linked bytes per archive', '', '| Archive or object | KiB |', '| --- | ---: |']
-        for name, size in list(data['linkMap'].items())[:60]:
-            lines.append(f'| `{name}` | {kib(size)} |')
+    sizes = data['linkMap']
+    if sizes:
+        lines += ['## Linked size', '',
+                  f"From one build ({sizes['profile']}): text and data of each native object by the library its source",
+                  'comes from, and of each Silk function by its module, without debug information. Every native object',
+                  'is linked today, so this is what a build without the capability would drop, at most.', '',
+                  '| C library | Service | KiB |', '| --- | --- | ---: |']
+        for name, size in sizes['libraries'].items():
+            lines.append(f"| {name} | {LIBRARY_SERVICES.get(name, '')} | {kib(size)} |")
+        lines += ['', '| Silk code | KiB |', '| --- | ---: |']
+        for name, size in sizes['silk'].items():
+            lines.append(f'| {name} | {kib(size)} |')
+        lines += ['', '| File | MiB |', '| --- | ---: |']
+        for name, size in sizes['files'].items():
+            lines.append(f'| {name} | {size / 1048576:,.1f} |')
         lines.append('')
     else:
-        lines += ['The linked size per archive and per `ext` module is not here yet: it needs a build',
-                  '(`silk build` with a linker map, then `--link-map PATH`).', '']
+        lines += ['Linked sizes are not here yet: build with `tools/build.py`, then run this with `--build build`.', '']
 
     largest = sorted(builtins.items(), key=lambda item: -item[1]['bytes'])[:12]
     lines += ['### Largest built-ins', '', '| Built-in | Service | KiB |', '| --- | --- | ---: |']
@@ -460,12 +566,29 @@ def render(data) -> str:
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
     parser.add_argument('--check', action='store_true', help='fail when the checked-in report is stale')
-    parser.add_argument('--link-map', type=Path, help='a linker map of a silk build, for linked sizes')
+    parser.add_argument('--build', type=Path, help='a tools/build.py build directory: record its linked sizes')
+    parser.add_argument('--profile', default='tools/build.py, debug', help='how that build was made, for the report')
     arguments = parser.parse_args()
-    data = build(arguments.link_map)
+    if arguments.build:
+        recorded = build_sizes(arguments.build.resolve())
+        recorded['profile'] = arguments.profile
+        DOCS.mkdir(exist_ok=True)
+        SIZES.write_text(json.dumps(recorded, indent=1) + '\n')
+    data = build()
     report = render(data) + '\n'
     encoded = json.dumps(data, indent=1, sort_keys=True) + '\n'
     if arguments.check:
+        # A new require or native call across a service line is what the check exists for: name it.
+        recorded = json.loads(DATA.read_text())['crossings'] if DATA.exists() else []
+        key = lambda c: (c['from'], c['to'], c['when'])
+        known = {key(c) for c in recorded}
+        added = [c for c in data['crossings'] if key(c) not in known]
+        if added:
+            listed = '\n'.join(f"  {c['from']} ({c['fromService']}) -> {c['to']} ({c['toService']}), {c['when']}" for c in added)
+            raise SystemExit('capability_graph: new edges across service lines (docs/composable-runtime.md, '
+                             '"The Node surface when a capability is absent"):\n' + listed +
+                             '\nMove the piece to the core, register it from the capability, or declare the need in NEEDS; '
+                             'then run python3 tools/capability_graph.py.')
         stale = [p for p, text in ((REPORT, report), (DATA, encoded)) if not p.exists() or p.read_text() != text]
         if stale:
             raise SystemExit('capability_graph: out of date, run python3 tools/capability_graph.py: ' + ', '.join(str(p.relative_to(ROOT)) for p in stale))

@@ -1,0 +1,27 @@
+name: Capability graph
+# The composable runtime's guard (modules/runtime/docs/composable-runtime.md): a built-in that
+# requires, or calls a native of, another service without a declared need fails here, and the
+# checked-in report must match the sources. Reads the sources only; nothing is built.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - 'modules/runtime/ext/**'
+      - 'modules/runtime/libs/**'
+      - 'modules/runtime/runtime/**'
+      - 'modules/runtime/src/**'
+      - 'modules/runtime/tools/capability_graph*'
+      - 'modules/runtime/docs/capability-*'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the capability graph
+        working-directory: modules/runtime
+        run: python3 tools/capability_graph.py --check
