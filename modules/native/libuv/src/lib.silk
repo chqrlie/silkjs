@@ -1,3 +1,4 @@
-//! libuv 1.51 and uvwasi, compiled into every executable that depends on this package. The
-//! runtime declares the functions it calls itself; this module only gives the package a module to
-//! export.
+//! uvwasi, compiled into every executable that depends on this package. uvwasi is built against
+//! `uvwasi/shim/uv.h` and not against libuv: the header names each libuv function that uvwasi
+//! calls `silk_uvwasi_*`, and the executable must define those symbols. The SilkJS runtime does,
+//! in its `ext.uvwasi_host` module. This module only gives the package a module to export.
