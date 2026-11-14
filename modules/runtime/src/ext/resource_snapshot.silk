@@ -14,14 +14,7 @@ import libs.core.owners as owners
 import libs.core.common as common
 import silkjs.js_std_support as text
 import silkjs.js_std_native as stdio
-import ext.uv_net as uv
-@foreign(noCapture: .("handle"))
-unsafe extern "C" fn uv_handle_get_type(handle: *const u8) -> i32
-unsafe extern "C" fn uv_handle_type_name(kind: i32) -> *const u8
-@foreign(noCapture: .("handle"))
-pub unsafe extern "C" fn uv_is_active(handle: *const u8) -> i32
-@foreign(noCapture: .("handle"))
-pub unsafe extern "C" fn uv_is_closing(handle: *const u8) -> i32
+import ext.uv_loop as uvl
 unsafe effect fn fields<'m,S:EngineServices>(engine:&mut Engine<'m,S>,context:*mut HeapHeader,array:ValueBits,index:u32,pointer:*mut u8,name:&[u8],active:bool,referenced:bool,closing:bool,fd:ValueBits,ownerReferenced:ValueBits,scope:&mut Scope)->() !JsException ?&mut Allocator {
   let record=scope.values[0]
   run unsafe common.defineIndex(&mut engine,context,record,1,ValueBits.Bool { value:active })
@@ -46,11 +39,11 @@ unsafe effect fn requestBody<'m,S:EngineServices>(engine:&mut Engine<'m,S>,conte
   run unsafe fields(&mut engine,context,array,index,pointer,name,true,true,false,ValueBits.Null,ValueBits.Undefined,&mut scope)
 }
 unsafe effect fn handleBody<'m,S:EngineServices>(engine:&mut Engine<'m,S>,context:*mut HeapHeader,array:ValueBits,index:u32,pointer:*mut u8,name:&[u8],ownerReferenced:ValueBits,scope:&mut Scope)->() !JsException ?&mut Allocator {
-  let active=unsafe uv_is_active(pointer)!=0 let referenced=unsafe uv.uv_has_ref(pointer)!=0 let closing=unsafe uv_is_closing(pointer)!=0
+  let active=unsafe uvl.uv_is_active(pointer)!=0 let referenced=unsafe uvl.uv_has_ref(pointer)!=0 let closing=unsafe uvl.uv_is_closing(pointer)!=0
   let mut descriptor:i32=-1 let mut fd=ValueBits.Null
-  if unsafe uv.uv_fileno(pointer,Pointer.fromMutRef<i32>(&mut descriptor))==0 { fd=ValueBits.Int { value:descriptor } }
+  if unsafe uvl.uv_fileno(pointer,Pointer.fromMutRef<i32>(&mut descriptor))==0 { fd=ValueBits.Int { value:descriptor } }
   let memory=engine.memory scope.values[0]=run unsafe common.array(&mut engine,memory,context)
-  let typeValue=run text.cstring(&mut engine,unsafe lendRealm(&context, context),unsafe uv_handle_type_name(unsafe uv_handle_get_type(pointer)))
+  let typeValue=run text.cstring(&mut engine,unsafe lendRealm(&context, context),unsafe uvl.uv_handle_type_name(unsafe uvl.uv_handle_get_type(pointer)))
   run unsafe common.defineIndex(&mut engine,context,scope.values[0],0,typeValue.intoBits())
   run unsafe fields(&mut engine,context,array,index,pointer,name,active,referenced,closing,fd,ownerReferenced,&mut scope)
 }

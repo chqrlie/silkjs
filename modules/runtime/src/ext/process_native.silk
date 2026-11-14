@@ -55,9 +55,8 @@ import ext.spawn_sync
 import ext.fs_async
 import silk.io.reactor { Interest }
 import silk.system.signal_watch { SignalError, SignalWatch }
+import ext.uv_loop as uvl
 unsafe extern "C" fn raise(signal:i32)->i32
-@deferredCallbacks("callback")
-unsafe extern "C" fn uv_async_init(loop:*mut u8,handle:*mut u8,callback:extern "C" fn(*mut u8)->())->i32
 // debugWatch holds SIGUSR1 as a reactor descriptor (signalfd or kqueue) for the inspector's
 // activation, so a start registers it without libuv's signal machinery; debugCallback is retained.
 pub struct State { loop:*mut u8, io:*mut fs_async.State, first:?*mut Handle, next:i32, polling:bool, closing:bool, workers:*mut worker_native.State, watchdog:Option<Arc<Service>>, trace:?*mut Handle, debugWatch:Option<SignalWatch>, debugCallback:ValueBits, debugPaused:bool }
@@ -66,18 +65,18 @@ const DEBUG_SIGNAL_TOKEN:u64=2
 struct Handle { next:?*mut Handle, native:*mut u8, callback:ValueBits, id:i32, kind:i32, pending:i32, code:i64, signal:i32, closed:bool, delivered:bool, closing:bool, observer:Observer }
 unsafe fn nn<T>(p:?*mut T)->*mut T { return unsafe Intrinsic.pointerRequalify<?*mut T,*mut T>(p) }
 unsafe fn bytes<T>(p:*mut T)->*mut u8 { return unsafe Intrinsic.pointerReinterpret<*mut T,*mut u8>(p) }
-unsafe fn owner(native:*mut u8)->*mut Handle { return unsafe Intrinsic.pointerReinterpret<*mut u8,*mut Handle>(unsafe nn(unsafe net.uv_handle_get_data(native))) }
+unsafe fn owner(native:*mut u8)->*mut Handle { return unsafe Intrinsic.pointerReinterpret<*mut u8,*mut Handle>(unsafe nn(unsafe uvl.uv_handle_get_data(native))) }
 fn number(v:ValueBits)->i32 { if v.isNumber() { return f64.toI32(v.numericValue()) } return 0 }
 export "C" fn silkProcessClosed(native:*mut u8)->() { let mut a=() let h=unsafe Pointer.borrowMut<(),Handle>(&mut a,unsafe owner(native)) h.closed=true }
-export "C" fn silkProcessExit(native:*mut u8,code:i64,signal:i32)->() { let mut a=() let h=unsafe Pointer.borrowMut<(),Handle>(&mut a,unsafe owner(native)) h.code=code h.signal=signal h.pending=1 h.closing=true drop h unsafe net.uv_close(native,silkProcessClosed) }
+export "C" fn silkProcessExit(native:*mut u8,code:i64,signal:i32)->() { let mut a=() let h=unsafe Pointer.borrowMut<(),Handle>(&mut a,unsafe owner(native)) h.code=code h.signal=signal h.pending=1 h.closing=true drop h unsafe uvl.uv_close(native,silkProcessClosed) }
 export "C" fn silkProcessSignal(native:*mut u8,signal:i32)->() { let mut a=() let h=unsafe Pointer.borrowMut<(),Handle>(&mut a,unsafe owner(native)) h.signal=signal h.pending=h.pending+1 }
 pub effect fn make(io:*mut fs_async.State,workers:*mut worker_native.State)->*mut State !OutOfMemoryError { let loop=unsafe fs_async.loopPointer(io) let raw=unsafe mem.calloc(1,Layout.of<State>().bytes) if Pointer.isNull<u8>(raw) { fail OutOfMemoryError {} } let p=unsafe Intrinsic.pointerReinterpret<*mut u8,*mut State>(unsafe nn(raw)) unsafe Pointer.put<State>(p,State { loop:loop,io:io,first:Pointer.null<Handle>(),next:1,polling:false,closing:false,workers:workers,watchdog:Option<Arc<Service>>.none(),trace:Pointer.null<Handle>(),debugWatch:Option<SignalWatch>.none(),debugCallback:ValueBits.Undefined,debugPaused:false }) return p }
 unsafe effect fn create(state:*mut State,kind:i32,callback:ValueBits,nativeKind:i32)->*mut Handle !OutOfMemoryError {
   let allocation=unsafe mem.calloc(1,Layout.of<Handle>().bytes) if Pointer.isNull<u8>(allocation) { fail OutOfMemoryError {} }
-  let raw=unsafe nn(allocation) let native=unsafe mem.calloc(1,unsafe net.uv_handle_size(nativeKind)) if Pointer.isNull<u8>(native) { unsafe mem.free(raw) fail OutOfMemoryError {} }
+  let raw=unsafe nn(allocation) let native=unsafe mem.calloc(1,unsafe uvl.uv_handle_size(nativeKind)) if Pointer.isNull<u8>(native) { unsafe mem.free(raw) fail OutOfMemoryError {} }
   let p=unsafe Intrinsic.pointerReinterpret<*mut u8,*mut Handle>(raw) let mut a=() let s=unsafe Pointer.borrowMut<(),State>(&mut a,state) let id=s.next s.next=id+1
   unsafe Pointer.put<Handle>(p,Handle { next:s.first,native:unsafe nn(native),callback:unsafe callback.retained(),id:id,kind:kind,pending:0,code:0,signal:0,closed:false,delivered:false,closing:false,observer:Observer.make(unsafe nn(native)) }) s.first=p
-  unsafe net.uv_handle_set_data(unsafe nn(native),raw)
+  unsafe uvl.uv_handle_set_data(unsafe nn(native),raw)
   return p
 }
 unsafe fn lookup(state:*mut State,id:i32)->?*mut Handle { let a=() let s=unsafe Pointer.borrow<(),State>(&a,state) let mut p=s.first drop s while !Pointer.isNull<Handle>(p) { let h=unsafe Pointer.borrow<(),Handle>(&a,unsafe nn(p)) if h.id==id { return p } p=h.next } return Pointer.null<Handle>() }
@@ -111,11 +110,11 @@ unsafe effect fn spawn<'m,S:EngineServices>(engine:&mut Engine<'m,S>,context:*mu
   let loop=shared
   let hptr=run unsafe create(state,10,args.values[8],10) let h=unsafe Pointer.borrow<(),Handle>(&a,hptr) let native=h.native let id=h.id drop h
   let options=abi.Options { exitCallback:silkProcessExit,file:host.pointer(&file),args:Pointer.fromRef<?*const u8>(&argv.asSlice()[0]),env:Pointer.fromRef<?*const u8>(&env.asSlice()[0]),cwd:if inherit { Pointer.null<u8>() } else { host.pointer(&cwd) },flags:i32.toU32(number(args.values[5])),stdioCount:count,stdio:Pointer.fromRef<abi.Stdio>(&stdio.asSlice()[0]),uid:f64.toU32(args.values[6].numericValue()),gid:f64.toU32(args.values[7].numericValue()) }
-  let status=unsafe abi.uv_spawn(loop,native,Pointer.fromRef<abi.Options>(&options))
-  if status<0 { let mut b=() let h=unsafe Pointer.borrowMut<(),Handle>(&mut b,hptr) h.delivered=true h.closing=true drop h unsafe net.uv_close(native,silkProcessClosed) return ValueBits.Int { value:status } }
+  let status=unsafe uvl.uv_spawn(loop,native,Pointer.fromRef<abi.Options>(&options))
+  if status<0 { let mut b=() let h=unsafe Pointer.borrowMut<(),Handle>(&mut b,hptr) h.delivered=true h.closing=true drop h unsafe uvl.uv_close(native,silkProcessClosed) return ValueBits.Int { value:status } }
   // uv_spawn has consumed only the inherited child endpoints; close our copies now.
   drop children
-  let pid=unsafe abi.uv_process_get_pid(native)
+  let pid=unsafe uvl.uv_process_get_pid(native)
   run unsafe push(&mut engine,context,result,0,ValueBits.Int { value:id }) run unsafe push(&mut engine,context,result,1,ValueBits.Int { value:pid })
   i=0 while i<count { run unsafe push(&mut engine,context,result,i32.toU32(i+2),ValueBits.Int { value:parents.fds.asSlice()[i32.toUsize(i)] }) i=i+1 }
   let returnedFds=parents.fds.asMutSlice() i=0 while i<count { returnedFds[i32.toUsize(i)]=-1 i=i+1 }
@@ -199,7 +198,7 @@ unsafe fn stopSignal(state:*mut State,pointer:*mut Handle)->i32 {
   let anchor=() let handle=unsafe Pointer.borrow<(),Handle>(&anchor,pointer)
   let broker=handle.signal==2 let native=handle.native drop handle
   if broker { return unsafe signalObserver(state,pointer,false) }
-  return unsafe abi.uv_signal_stop(native)
+  return unsafe uvl.uv_signal_stop(native)
 }
 // The trace observer uses the same broker as VM guards and process listeners.
 // Its stable unreferenced async handle persists across enable/disable cycles.
@@ -212,13 +211,13 @@ unsafe effect fn traceEnable(state:*mut State,enable:bool)->i32 !OutOfMemoryErro
     let created=run unsafe create(state,17,ValueBits.Undefined,1)
     let handle=unsafe Pointer.borrowMut<(),Handle>(&mut anchor,created)
     let native=handle.native handle.signal=2 handle.delivered=true drop handle
-    let initialized=unsafe uv_async_init(loop,native,silkProcessInterruptReady)
+    let initialized=unsafe uvl.uv_async_init(loop,native,silkProcessInterruptReady)
     if initialized<0 {
       let handle=unsafe Pointer.borrowMut<(),Handle>(&mut anchor,created)
       handle.closed=true handle.closing=true
       return initialized
     }
-    unsafe net.uv_handle_set_data(native,unsafe bytes(created)) unsafe net.uv_unref(native)
+    unsafe uvl.uv_handle_set_data(native,unsafe bytes(created)) unsafe uvl.uv_unref(native)
     let current=unsafe Pointer.borrowMut<(),State>(&mut anchor,state) current.trace=created drop current
     pointer=created
   }
@@ -258,10 +257,10 @@ unsafe effect fn invoke<'m,S:EngineServices>(engine:&mut Engine<'m,S>,context:*m
   if equal(op,b"ipcRead") || equal(op,b"ipcWrite") { return run unsafe ipcTransfer(&mut engine,context,op,args,result) }
   if equal(op,b"ipcOpen") {
     let p=run unsafe create(state,8,args.values[1],8) let mut a=() let s=unsafe Pointer.borrow<(),State>(&a,state) let loop=s.loop drop s let h=unsafe Pointer.borrowMut<(),Handle>(&mut a,p) let native=h.native let id=h.id h.signal=number(args.values[0]) let fd=h.signal drop h
-    let initialized=unsafe abi.uv_poll_init_socket(loop,native,fd)
+    let initialized=unsafe uvl.uv_poll_init_socket(loop,native,fd)
     if initialized<0 { let h=unsafe Pointer.borrowMut<(),Handle>(&mut a,p) h.closed=true h.delivered=true return ValueBits.Int { value:initialized } }
-    unsafe net.uv_handle_set_data(native,unsafe bytes(p)) let status=unsafe abi.uv_poll_start(native,1,silkProcessIPCReady)
-    if status<0 { let h=unsafe Pointer.borrowMut<(),Handle>(&mut a,p) h.closing=true h.delivered=true drop h unsafe net.uv_close(native,silkProcessClosed) return ValueBits.Int { value:status } }
+    unsafe uvl.uv_handle_set_data(native,unsafe bytes(p)) let status=unsafe uvl.uv_poll_start(native,1,silkProcessIPCReady)
+    if status<0 { let h=unsafe Pointer.borrowMut<(),Handle>(&mut a,p) h.closing=true h.delivered=true drop h unsafe uvl.uv_close(native,silkProcessClosed) return ValueBits.Int { value:status } }
     return ValueBits.Int { value:id }
   }
   if equal(op,b"debugSignalStart") { return ValueBits.Int { value:run unsafe debugSignalStart(state,args.values[0]) } }
@@ -277,26 +276,26 @@ unsafe effect fn invoke<'m,S:EngineServices>(engine:&mut Engine<'m,S>,context:*m
     let p=run unsafe create(state,16,args.values[1],if broker { 1 } else { 16 })
     let mut a=() let s=unsafe Pointer.borrow<(),State>(&a,state) let loop=s.loop drop s
     let h=unsafe Pointer.borrowMut<(),Handle>(&mut a,p) let native=h.native let id=h.id h.signal=signal drop h
-    let initialized=if broker { unsafe uv_async_init(loop,native,silkProcessInterruptReady) } else { unsafe abi.uv_signal_init(loop,native) }
+    let initialized=if broker { unsafe uvl.uv_async_init(loop,native,silkProcessInterruptReady) } else { unsafe uvl.uv_signal_init(loop,native) }
     if initialized<0 { let h=unsafe Pointer.borrowMut<(),Handle>(&mut a,p) h.closed=true h.delivered=true h.closing=true return ValueBits.Int { value:initialized } }
-    unsafe net.uv_handle_set_data(native,unsafe bytes(p))
-    let status=if broker { unsafe signalObserver(state,p,true) } else { unsafe abi.uv_signal_start(native,silkProcessSignal,signal) }
-    unsafe net.uv_unref(native)
-    if status<0 { let h=unsafe Pointer.borrowMut<(),Handle>(&mut a,p) h.closing=true h.delivered=true drop h unsafe net.uv_close(native,silkProcessClosed) return ValueBits.Int { value:status } }
+    unsafe uvl.uv_handle_set_data(native,unsafe bytes(p))
+    let status=if broker { unsafe signalObserver(state,p,true) } else { unsafe uvl.uv_signal_start(native,silkProcessSignal,signal) }
+    unsafe uvl.uv_unref(native)
+    if status<0 { let h=unsafe Pointer.borrowMut<(),Handle>(&mut a,p) h.closing=true h.delivered=true drop h unsafe uvl.uv_close(native,silkProcessClosed) return ValueBits.Int { value:status } }
     return ValueBits.Int { value:id }
   }
   let p=unsafe lookup(state,number(args.values[0])) if Pointer.isNull<Handle>(p) { return ValueBits.Int { value:-3 } }
   let mut a=() let h=unsafe Pointer.borrowMut<(),Handle>(&mut a,unsafe nn(p)) let native=h.native let closing=h.closing
-  if equal(op,b"ipcEvents") { drop h if closing { return ValueBits.Undefined } return ValueBits.Int { value:unsafe abi.uv_poll_start(native,number(args.values[1]),silkProcessIPCReady) } }
-  if equal(op,b"ipcClose") { if !closing { h.closing=true h.delivered=true h.pending=0 let fd=h.signal drop h let _ignored=unsafe abi.uv_poll_stop(native) let _closed=unsafe abi.close(fd) unsafe net.uv_close(native,silkProcessClosed) } return ValueBits.Undefined }
-  if equal(op,b"signalStop") { if !closing { h.closing=true h.delivered=true h.pending=0 drop h let _ignored=unsafe stopSignal(state,unsafe nn(p)) unsafe net.uv_close(native,silkProcessClosed) } return ValueBits.Undefined }
+  if equal(op,b"ipcEvents") { drop h if closing { return ValueBits.Undefined } return ValueBits.Int { value:unsafe uvl.uv_poll_start(native,number(args.values[1]),silkProcessIPCReady) } }
+  if equal(op,b"ipcClose") { if !closing { h.closing=true h.delivered=true h.pending=0 let fd=h.signal drop h let _ignored=unsafe uvl.uv_poll_stop(native) let _closed=unsafe abi.close(fd) unsafe uvl.uv_close(native,silkProcessClosed) } return ValueBits.Undefined }
+  if equal(op,b"signalStop") { if !closing { h.closing=true h.delivered=true h.pending=0 drop h let _ignored=unsafe stopSignal(state,unsafe nn(p)) unsafe uvl.uv_close(native,silkProcessClosed) } return ValueBits.Undefined }
   let exitUndelivered=h.pending>0 && !h.delivered
   drop h
   // libuv reports a child's exit in the same loop turn that reaps it, so Node never sees a
   // reaped child it has not been told about; until JS gets the exit here, the child acts as a
   // zombie, which accepts any signal (Node's kill() then sets killed).
-  if equal(op,b"kill") { if closing { return ValueBits.Int { value:if exitUndelivered { 0 } else { -3 } } } return ValueBits.Int { value:unsafe abi.uv_process_kill(native,number(args.values[1])) } }
-  if !closing { if equal(op,b"ref") { unsafe net.uv_ref(native) } else if equal(op,b"unref") { unsafe net.uv_unref(native) } }
+  if equal(op,b"kill") { if closing { return ValueBits.Int { value:if exitUndelivered { 0 } else { -3 } } } return ValueBits.Int { value:unsafe uvl.uv_process_kill(native,number(args.values[1])) } }
+  if !closing { if equal(op,b"ref") { unsafe uvl.uv_ref(native) } else if equal(op,b"unref") { unsafe uvl.uv_unref(native) } }
   return ValueBits.Undefined
 }
 unsafe effect fn dispatchBody<'m,S:EngineServices>(engine:&mut Engine<'m,S>,context:*mut HeapHeader,state:*mut State,operation:ValueBits,args:ValueBits,scope:&mut Scope)->ValueBits !OutOfMemoryError|JsException ?&mut Allocator {
@@ -383,11 +382,11 @@ pub unsafe effect fn poll<'m,S:EngineServices>(engine:&mut Engine<'m,S>,context:
   let outcome=run Effect.result(unsafe drain(&mut engine,context,state)) let finished=unsafe Pointer.borrowMut<(),State>(&mut a,state) finished.polling=false drop finished unsafe sweep(&mut engine,context,state)
   return match move outcome { Result<bool,OutOfMemoryError|JsException>.Success { value }=>value Result<bool,OutOfMemoryError|JsException>.Failure { error }=>{ fail move error } }
 }
-pub unsafe fn hasPending(state:*mut State)->bool { let a=() let s=unsafe Pointer.borrow<(),State>(&a,state) let mut p=s.first drop s while !Pointer.isNull<Handle>(p) { let h=unsafe Pointer.borrow<(),Handle>(&a,unsafe nn(p)) if (!h.closing && h.kind!=16 && unsafe net.uv_has_ref(h.native)!=0) || (h.pending>0 && !h.delivered) { return true } p=h.next } return false }
+pub unsafe fn hasPending(state:*mut State)->bool { let a=() let s=unsafe Pointer.borrow<(),State>(&a,state) let mut p=s.first drop s while !Pointer.isNull<Handle>(p) { let h=unsafe Pointer.borrow<(),Handle>(&a,unsafe nn(p)) if (!h.closing && h.kind!=16 && unsafe uvl.uv_has_ref(h.native)!=0) || (h.pending>0 && !h.delivered) { return true } p=h.next } return false }
 pub unsafe fn close<'m,S:EngineServices>(engine:&mut Engine<'m,S>,context:*mut HeapHeader,state:*mut State)->() {
   let mut a=() let s=unsafe Pointer.borrowMut<(),State>(&mut a,state) s.closing=true let loop=s.loop let mut p=s.first drop s
-  while !Pointer.isNull<Handle>(p) { let h=unsafe Pointer.borrowMut<(),Handle>(&mut a,unsafe nn(p)) let next=h.next h.delivered=true h.pending=0 if !h.closing { h.closing=true let native=h.native let kind=h.kind let fd=h.signal drop h if kind==16 || kind==17 { let _ignored=unsafe stopSignal(state,unsafe nn(p)) } if kind==8 { let _ignored=unsafe abi.uv_poll_stop(native) let _closed=unsafe abi.close(fd) } unsafe net.uv_close(native,silkProcessClosed) } else { drop h } p=next }
-  while true { unsafe sweep(&mut engine,context,state) let s=unsafe Pointer.borrow<(),State>(&a,state) let done=Pointer.isNull<Handle>(s.first) drop s if done { break } let _ignored=unsafe uv.uv_run(loop,2) }
+  while !Pointer.isNull<Handle>(p) { let h=unsafe Pointer.borrowMut<(),Handle>(&mut a,unsafe nn(p)) let next=h.next h.delivered=true h.pending=0 if !h.closing { h.closing=true let native=h.native let kind=h.kind let fd=h.signal drop h if kind==16 || kind==17 { let _ignored=unsafe stopSignal(state,unsafe nn(p)) } if kind==8 { let _ignored=unsafe uvl.uv_poll_stop(native) let _closed=unsafe abi.close(fd) } unsafe uvl.uv_close(native,silkProcessClosed) } else { drop h } p=next }
+  while true { unsafe sweep(&mut engine,context,state) let s=unsafe Pointer.borrow<(),State>(&a,state) let done=Pointer.isNull<Handle>(s.first) drop s if done { break } let _ignored=unsafe uvl.uv_run(loop,2) }
   let s2=unsafe Pointer.borrowMut<(),State>(&mut a,state)
   if let Option<SignalWatch>.Some { value:watch }=&s2.debugWatch { unsafe fs_async.forgetDescriptor(s2.io,watch.descriptor()) }
   let callback=Intrinsic.replace(s2.debugCallback,ValueBits.Undefined) drop s2
