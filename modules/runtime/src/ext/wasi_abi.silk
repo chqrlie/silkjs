@@ -1,8 +1,9 @@
 //! uvwasi 0.0.23 public C ABI, with the runtime's explicit fd-ownership patch.
-//! Build e76edba54038e097aa58f55eef5ad34cb258b817 after applying
-//! ext/node/internal/wasi/uvwasi-0.0.23-ownership.patch. Link that libuvwasi.a
-//! with the runtime's existing libuv.a; the installed unpatched archive leaks
-//! owned descriptors at teardown and must not be used as a fallback.
+//! The silkjs-libuv package (modules/native/libuv) compiles it: revision
+//! e76edba54038e097aa58f55eef5ad34cb258b817 with ownership.patch applied. An
+//! unpatched uvwasi leaks owned descriptors at teardown and must not be used
+//! as a fallback. uvwasi calls libuv, and the runtime links none:
+//! ext.uvwasi_host defines the functions that uvwasi calls.
 pub extern "C" struct Uvwasi {
   pub fds: ?*mut u8, pub argc: u32, pub argv: ?*mut u8, pub argvBuffer: ?*mut u8,
   pub argvSize: u32, pub envc: u32, pub env: ?*mut u8, pub envBuffer: ?*mut u8,
