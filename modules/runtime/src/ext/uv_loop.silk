@@ -501,10 +501,14 @@ unsafe fn blank(loop: *mut Loop, kind: i32) -> Handle {
     fired: silkUvNoClose, repeat: 0, order: 0
   }
 }
-// Writes a fresh handle of `kind` into `memory` and links it into the loop's list.
+// Writes a fresh handle of `kind` into `memory` (zeroed, or holding the caller's data word first)
+// and links it into the loop's list.
 unsafe fn initialize(loop: *mut Loop, memory: *mut u8, kind: i32) -> *mut Handle {
   let handle = unsafe handleOf(memory)
-  unsafe Pointer.put<Handle>(handle, unsafe blank(loop, kind))
+  // The caller's data word survives initialization, as in libuv: callers set it before or after.
+  let before = () let old = unsafe Pointer.borrow<(), Handle>(&before, handle) let kept = old.data drop old
+  let mut fresh = unsafe blank(loop, kind) fresh.data = kept
+  unsafe Pointer.put<Handle>(handle, move fresh)
   let mut anchor = () let l = unsafe Pointer.borrowMut<(), Loop>(&mut anchor, loop)
   let mut second = () let h = unsafe Pointer.borrowMut<(), Handle>(&mut second, handle)
   h.next = l.first
