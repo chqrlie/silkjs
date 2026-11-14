@@ -49,12 +49,12 @@ import silk.concurrency.thread_native { SpawnError }
 import silk.platform.native.clock { NativeClock }
 import silk.system.system_clock { SystemClock }
 import ext.uv_loop as uvl
+import ext.uv_os { uv_hrtime }
 
 unsafe extern "C" fn calloc(count: usize, size: usize) -> ?*mut u8
 // ext.trace_native's writer of Node's threadpoolwork events: phase is b, B, E or e.
 unsafe extern "C" fn silkThreadpoolTrace(tracing: *mut u8, kind: u8, phase: u8, id: u64, nanoseconds: u64, thread: u64) -> ()
 unsafe extern "C" fn free(pointer: ?*mut u8) -> ()
-unsafe extern "C" fn uv_hrtime() -> u64
 // The token of libuv's backend descriptor in the runtime reactor.
 const LIBUV_TOKEN: u64 = 1
 

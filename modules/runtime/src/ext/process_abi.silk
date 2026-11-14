@@ -6,7 +6,8 @@ pub type ExitCallback = extern "C" fn(*mut u8,i64,i32)->()
 pub type SignalCallback = extern "C" fn(*mut u8,i32)->()
 pub extern "C" struct Stdio { pub flags:i32, pub data:usize }
 pub extern "C" struct Options { pub exitCallback:ExitCallback, pub file:*const u8, pub args:*const ?*const u8, pub env:*const ?*const u8, pub cwd:?*const u8, pub flags:u32, pub stdioCount:i32, pub stdio:*const Stdio, pub uid:u32, pub gid:u32 }
-pub unsafe extern "C" fn uv_hrtime()->u64
+// The monotonic clock is Silk (uv_os), published here under libuv's name.
+pub import ext.uv_os { uv_hrtime }
 pub unsafe extern "C" fn socketpair(domain:i32,kind:i32,protocol:i32,fds:*mut i32)->i32
 pub unsafe extern "C" fn close(fd:i32)->i32
 @foreign(noCapture: .("buffer"))
