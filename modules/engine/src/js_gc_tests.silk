@@ -206,7 +206,7 @@ impl HeapHooks for Hooks {
         }
       self.watchException = false
     }
-    self.freed[self.freedCount] = Pointer.address<HeapHeader>(object)
+    if self.freedCount < 64 { self.freed[self.freedCount] = Pointer.address<HeapHeader>(object) }
     self.freedCount = self.freedCount + 1
     if id == 2 { check(unsafe gc.finalizeCorePayload(&mut self, runtime, object)) return () }
     if id == 5 { unsafe bound.finalize(&mut self, runtime, object) return () }
@@ -363,6 +363,78 @@ test effect fn tenuredYoungSurvivorsAgeIntoTheOldGeneration() -> ()
   run Testing.expect(hooks.freedCount == 4, "a full collection frees the old cycle")
   run unsafe gc.destroyRuntime(&mut hooks, runtime) |> Effect.provideMut<Allocator>(&mut allocator)
   run Testing.expect(allocator.stats().usedBytes == 0, "runtime storage is reclaimed")
+}
+// Edges from young cells to old ones are outside a young collection's counts, so
+// destroying young garbage can drop an old cell's last reference during cycle
+// removal. That cell must still die once the pass is over: left a member with
+// count zero, a weak reference to it would later free its storage while its
+// arena bit still published it (a stale bit the next collection walked).
+test effect fn oldCellsYoungGarbageReleasesLastDieAfterTheYoungCollection() -> ()
+  ! OutOfMemoryError | AssertionError<'static> {
+  let mut allocator = run RuntimeAllocator<SystemAllocator>.make(Allocator.systemAllocatorProvider())
+  let runtime = run runtimeFixture() |> Effect.provideMut<Allocator>(&mut allocator)
+  let mut hooks = Hooks.make()
+  let old = run objectFixture(runtime, 0) |> Effect.provideMut<Allocator>(&mut allocator)
+  let weak = run weakFixture(runtime, old, ValueBits.Undefined) |> Effect.provideMut<Allocator>(&mut allocator)
+  run unsafe gc.collect(&mut hooks, runtime, false) |> Effect.provideMut<Allocator>(&mut allocator)
+  let a = run objectFixture(runtime, 2) |> Effect.provideMut<Allocator>(&mut allocator)
+  let b = run objectFixture(runtime, 1) |> Effect.provideMut<Allocator>(&mut allocator)
+  unsafe connect(a, b)
+  unsafe connect(b, a)
+  unsafe HeapCell.retain(old)
+  let mut anchor = ()
+  let data = unsafe HeapCell.payloadMut<ObjectData, ()>(&mut anchor, a)
+  data.setSlot(1, SlotBits.value(ValueBits.Object { reference: old }))
+  drop data
+  unsafe gc.releaseHeader(&mut hooks, runtime, old)
+  unsafe gc.releaseHeader(&mut hooks, runtime, a)
+  unsafe gc.releaseHeader(&mut hooks, runtime, b)
+  run unsafe gc.collectYoung(&mut hooks, runtime) |> Effect.provideMut<Allocator>(&mut allocator)
+  run Testing.expect(hooks.freedCount == 3 && hooks.correctOrder,
+    "the old cell the young cycle held alone dies with it")
+  run Testing.expect(!unsafe gc.isWeakLive(ValueBits.Object { reference: old }), "its weak reference sees it dead")
+  unsafe gc.releaseHeader(&mut hooks, runtime, weak)
+  run unsafe gc.destroyRuntime(&mut hooks, runtime) |> Effect.provideMut<Allocator>(&mut allocator)
+  run Testing.expect(allocator.stats().allocationCount == 0, "every cell and weak node is freed")
+}
+/// Old cells one young cycle holds alone: more than the zero stack takes.
+const MANY_OLD: usize = 300
+test effect fn manyOldCellsReleasedByYoungGarbageOverflowTheZeroStackAndStillDie() -> ()
+  ! OutOfMemoryError | AssertionError<'static> {
+  let mut allocator = run RuntimeAllocator<SystemAllocator>.make(Allocator.systemAllocatorProvider())
+  allocator.enablePooling()
+  let runtime = run runtimeFixture() |> Effect.provideMut<Allocator>(&mut allocator)
+  let mut hooks = Hooks.make()
+  let mut olds = List<*mut HeapHeader>.make()
+  let mut index: usize = 0
+  while index < MANY_OLD {
+    let old = run objectFixture(runtime, 0) |> Effect.provideMut<Allocator>(&mut allocator)
+    run olds.append(old) |> Effect.provideMut<Allocator>(&mut allocator)
+    index = index + 1
+  }
+  run unsafe gc.collect(&mut hooks, runtime, false) |> Effect.provideMut<Allocator>(&mut allocator)
+  let a = run objectFixture(runtime, MANY_OLD + 1) |> Effect.provideMut<Allocator>(&mut allocator)
+  let b = run objectFixture(runtime, 1) |> Effect.provideMut<Allocator>(&mut allocator)
+  unsafe connect(a, b)
+  unsafe connect(b, a)
+  let mut anchor = ()
+  index = 0
+  while index < MANY_OLD {
+    let data = unsafe HeapCell.payloadMut<ObjectData, ()>(&mut anchor, a)
+    // The cell's own count moves to the slot.
+    data.setSlot(index + 1, SlotBits.value(ValueBits.Object { reference: olds.get(index) }))
+    drop data
+    index = index + 1
+  }
+  unsafe gc.releaseHeader(&mut hooks, runtime, a)
+  unsafe gc.releaseHeader(&mut hooks, runtime, b)
+  run unsafe gc.collectYoung(&mut hooks, runtime) |> Effect.provideMut<Allocator>(&mut allocator)
+  run Testing.expect(hooks.freedCount == MANY_OLD + 2 && hooks.correctOrder,
+    "every old cell dies, also those queued past the zero stack")
+  run unsafe gc.collect(&mut hooks, runtime, false) |> Effect.provideMut<Allocator>(&mut allocator)
+  run Testing.expect(hooks.freedCount == MANY_OLD + 2, "nothing is left for a full collection")
+  drop olds
+  run unsafe gc.destroyRuntime(&mut hooks, runtime) |> Effect.provideMut<Allocator>(&mut allocator)
 }
 unsafe fn young(node: *mut HeapHeader) -> u8 {
   let anchor = () return (unsafe Pointer.borrow<(), HeapHeader>(&anchor, node)).young

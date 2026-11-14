@@ -1574,6 +1574,7 @@ unsafe fn takeOwned(ledger: LedgerPointers, class: usize) -> ?*mut u8 {
   let head = pool.ownerHeads[class]
   if Pointer.isNull<u8>(head) { return head }
   let block = unsafe Intrinsic.pointerRequalify<?*mut u8, *mut u8>(head)
+  unsafe checkNoCell(block)
   let next = unsafe Pointer.read<?*mut u8>(unsafe poolLink(block))
   let skip = unsafe Pointer.read<?*mut u8>(unsafe poolSkip(block))
   pool.ownerHeads[class] = next
@@ -1823,6 +1824,7 @@ export "C" fn silkRuntimeMemoryReclaimPooled(context: ?*mut u8) -> () {
 
 @inlineAlways
 unsafe fn reclaimPooled(block: *mut u8) -> () {
+  unsafe checkNoCell(block)
   let anchor = ()
   let arena = unsafe Pointer.borrow<(), ArenaHeader>(&anchor, unsafe arenaOf(block))
   let ledger = unsafe pointersOf(arena.ledger)
@@ -2031,6 +2033,7 @@ pub unsafe fn pooledBlockBytes(block: *mut u8) -> usize {
 /// cells and slot lists). The block then goes to the owner cache without the gate.
 @inlineAlways
 pub unsafe fn releasePooled(block: *mut u8) -> () {
+  unsafe checkNoCell(block)
   let anchor = ()
   let arena = unsafe Pointer.borrow<(), ArenaHeader>(&anchor, unsafe arenaOf(block))
   let ledger = unsafe pointersOf(arena.ledger)
@@ -2173,6 +2176,14 @@ pub unsafe fn adoptUnpooledBlock(block: *mut u8) -> Intrinsic.RawBuffer<u8> {
 
 /// Bitmap words per arena (one bit per granule).
 pub const CELL_WORDS: usize = 16
+/// Debug checker: traps when a pooled block is freed while its arena still lists
+/// it as a published GC cell. Such a stale bit sends the next collection through
+/// whatever the block holds after reuse.
+pub const CHECK_CELL_BITS: bool = false
+@inlineAlways
+unsafe fn checkNoCell(block: *mut u8) -> () {
+  if CHECK_CELL_BITS && unsafe isCell(block) { Intrinsic.trap("a pooled block was freed while still a published GC cell") }
+}
 
 @inlineAlways
 unsafe fn cellGranule(block: *mut u8) -> usize {
@@ -2344,6 +2355,25 @@ pub unsafe fn clearPendingList(head: *mut ?*mut u8) -> () {
     cursor = header.pendingNext
     header.pendingNext = Pointer.null<u8>()
     header.pendingListed = false
+  }
+}
+/// Takes every arena whose scratch bits are all clear off the pending list at head;
+/// the others stay listed in their order.
+pub unsafe fn prunePendingList(head: *mut ?*mut u8) -> () {
+  let mut link = head
+  while !Pointer.isNull<u8>(unsafe Pointer.read<?*mut u8>(link)) {
+    let arena = unsafe Intrinsic.pointerRequalify<?*mut u8, *mut u8>(unsafe Pointer.read<?*mut u8>(link))
+    let mut anchor = ()
+    let header = unsafe Pointer.borrowMut<(), ArenaHeader>(&mut anchor, unsafe arenaRef(arena))
+    let mut any: u64 = 0
+    let mut index: usize = 0
+    while index < CELL_WORDS { any = u64.bitOr(any, header.pending[index]) index = index + 1 }
+    if any != 0 { link = Pointer.fromMutRef<?*mut u8>(&mut header.pendingNext) continue }
+    let next = header.pendingNext
+    header.pendingNext = Pointer.null<u8>()
+    header.pendingListed = false
+    drop header
+    unsafe Pointer.write<?*mut u8>(link, next)
   }
 }
 /// Word index of arena's cell bitmap.
