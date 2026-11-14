@@ -76,6 +76,10 @@ def cache_build_identity(debug, environment=None):
         paths.update((root / 'tools').glob('*.py'))
         for path in sorted(paths):
             include(namespace + '/' + path.relative_to(root).as_posix(), path.read_bytes())
+    # The runtime's C over WAMR moved to its own package; the identity still covers it.
+    glue = ROOT.parent / 'native/wamr/glue'
+    for path in sorted(glue.glob('*')):
+        include('wamr/' + path.name, path.read_bytes())
     return digest.hexdigest()
 
 

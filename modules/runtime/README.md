@@ -15,7 +15,7 @@ Requirements:
 - A macOS SDK supporting the compiler's macOS 11 deployment target. The build selects the installed macOS 15.5 SDK when `SDKROOT` is unset; otherwise set `SDKROOT` explicitly.
 - Network access on the first build: Silk downloads the pinned, checksum-verified source releases of the C libraries and compiles them itself.
 
-Nothing needs installing besides. libuv, OpenSSL, nghttp2, zlib, Zstandard and Brotli are packages of [`../native`](../native), each compiled from its pinned release (`[native.archive]` in its `silk.toml`). WAMR, with this runtime's patches, is vendored in [`vendor/wamr`](vendor/wamr). The built-in JavaScript is embedded from its files by [`builtin_sources.c`](builtin_sources.c), so an edit to a built-in needs nothing run first; adding or removing one does (`silk generate`, which runs [`tools/embed.py`](tools/embed.py)). SQLite comes from the `db-sqlite` package of [silk-lang/lib-sqlite](https://github.com/silk-lang/lib-sqlite).
+Nothing needs installing besides. libuv, OpenSSL, nghttp2, zlib, Zstandard and Brotli are packages of [`../native`](../native), each compiled from its pinned release (`[native.archive]` in its `silk.toml`). WAMR, with this runtime's patches, is vendored in [`../native/wamr`](../native/wamr), with the runtime's C over it. The built-in JavaScript is embedded from its files by [`builtin_sources.c`](builtin_sources.c), so an edit to a built-in needs nothing run first; adding or removing one does (`silk generate`, which runs [`tools/embed.py`](tools/embed.py)). SQLite comes from the `db-sqlite` package of [silk-lang/lib-sqlite](https://github.com/silk-lang/lib-sqlite).
 
 ```sh
 git clone https://github.com/silk-lang/lib-silkjs.git
