@@ -576,8 +576,9 @@ unsafe fn queueIfDead(node: *mut HeapHeader) -> () {
   // shape may already be released, so runtimeOf is no longer valid for it.
   if unsafe markOf(node) != 0 { return () }
   let runtime = unsafe runtimeOf(node)
-  // During cycle removal the collector owns every dead cell; queueing would double-free.
-  if unsafe phase(runtime) == GcPhase.RemoveCycles { return () }
+  // During cycle removal the collector owns the garbage (marked above); a cell
+  // with mark 0 is one it does not own, which waits for the end of the pass.
+  if unsafe phase(runtime) == GcPhase.RemoveCycles { unsafe deferZero(runtime, node, true) return () }
   unsafe queueZero(runtime, node, true)
 }
 
@@ -1225,11 +1226,40 @@ pub const ZERO_STACK: usize = 256
 pub const MARK_ZOMBIE: u8 = 2
 /// HeapHeader.mark of a cell found reachable when the restore stack was full.
 const MARK_RESTORE: u8 = 3
+/// HeapHeader.mark of a dead cell the collector does not own, queued during cycle
+/// removal in its arena's scratch bits because the zero stack was full; it waits
+/// with the garbage's bits until destroyZombies hands it to drainZero.
+const MARK_DEFERRED: u8 = 4
+/// Queues node, which reached count zero during cycle removal without being
+/// garbage of this collection (mark 0), for drainZero once the pass is over.
+/// A young collection gives such cells: an old cell's edges from young cells
+/// are outside its trial counts, so destroying young garbage can release an old
+/// cell's last reference. Left alone it would stay a member with count zero,
+/// and its weak references would later free its storage while it is published.
+@inlineNever
+unsafe fn deferZero(runtime: *mut HeapHeader, node: *mut HeapHeader, markPending: bool) -> () {
+  let mut anchor = ()
+  let state = unsafe HeapCell.payloadMut<RuntimeState, ()>(&mut anchor, runtime)
+  let depth = u16.toUsize(state.zeroStackCount)
+  drop state
+  // The stack and the linked overflow list are not cycle removal's: queue as usual.
+  if depth < ZERO_STACK || !unsafe HeapCell.isPooledCell(node) { unsafe queueZero(runtime, node, markPending) return () }
+  // The scratch bits hold the garbage now; the mark tells this cell apart.
+  unsafe memory.setPending(unsafe blockAt(node))
+  unsafe listPending(runtime, unsafe memory.blockArena(unsafe blockAt(node)))
+  unsafe mark(node, MARK_DEFERRED)
+  let counted = unsafe HeapCell.payloadMut<RuntimeState, ()>(&mut anchor, runtime)
+  counted.zeroPending = counted.zeroPending + 1
+}
 @inlineAlways
 unsafe fn enqueueZero<H: HeapHooks>(hooks: &mut H, runtime: *mut HeapHeader,
   node: *mut HeapHeader, markPending: bool) -> () {
   let current = unsafe phase(runtime)
-  if current == GcPhase.RemoveCycles { return () }
+  if current == GcPhase.RemoveCycles {
+    // The collector owns the garbage: it destroys those cells itself.
+    if unsafe markOf(node) == 0 { unsafe deferZero(runtime, node, markPending) }
+    return ()
+  }
   if current == GcPhase.None {
     // Deferred releases may have filled the stack. A new cell then belongs
     // behind its stacked predecessors, on the overflow queue.
@@ -1603,6 +1633,8 @@ unsafe effect fn collectCells<H: HeapHooks>(hooks: &mut H, runtime: *mut HeapHea
   unsafe setPhase(runtime, GcPhase.None)
   unsafe destroyZombies(runtime)
   if !young || !unsafe tenured(runtime) { unsafe promoteYoung(runtime, young) } else { unsafe ageYoung(runtime) }
+  // Cells cycle removal released without owning them (deferZero) die now.
+  unsafe drainPending(&mut hooks, runtime)
   // Targets that died in cycles are swept now, not at the next collection: a gc()
   // finalizes them at once, as V8's does.
   if removeWeakObjects && unsafe takeWeakTargetsDied(runtime) { run unsafe sweepWeak(&mut hooks, runtime) }
@@ -1986,12 +2018,21 @@ unsafe fn destroyZombies(runtime: *mut HeapHeader) -> () {
     let mut word: usize = 0
     while word < memory.CELL_WORDS {
       let mut bits = unsafe memory.pendingWord(arena, word)
+      // The bits of deferred cells (deferZero) stay, as drainZero's overflow.
+      let mut deferred: u64 = 0
       unsafe memory.setPendingWord(arena, word, 0)
       while bits != 0 {
-        let node = unsafe cellIn(arena, word, u64.trailingZeros(bits))
+        let bit = u64.trailingZeros(bits)
+        let node = unsafe cellIn(arena, word, bit)
         bits = u64.bitAnd(bits, bits - 1)
         if unsafe memory.isCell(unsafe blockAt(node)) {
           let m = unsafe markOf(node)
+          if m == MARK_DEFERRED {
+            // As queueZero leaves it: an AsyncFunction is queued unmarked.
+            unsafe mark(node, if unsafe kind(node) == HeapKind.AsyncFunction { 0 } else { 1 })
+            deferred = u64.bitOr(deferred, u64.shiftLeft(1, u32.toU64(bit)))
+            continue
+          }
           // Every non-value garbage cell went with its owner.
           require(m != 1 && m != MARK_RESTORE)
           if m == MARK_ZOMBIE {
@@ -2001,13 +2042,17 @@ unsafe fn destroyZombies(runtime: *mut HeapHeader) -> () {
           }
         }
       }
+      if deferred != 0 { unsafe memory.setPendingWord(arena, word, deferred) }
       word = word + 1
     }
     cursor = unsafe memory.nextPendingArena(arena)
   }
   let mut anchor = ()
   let state = unsafe HeapCell.payloadMut<RuntimeState, ()>(&mut anchor, runtime)
-  unsafe memory.clearPendingList(Pointer.fromMutRef<?*mut u8>(&mut state.gcPendingArenas))
+  let pending = state.zeroPending
+  // Only arenas still holding deferred cells stay listed (refillZero drains them).
+  if pending == 0 { unsafe memory.clearPendingList(Pointer.fromMutRef<?*mut u8>(&mut state.gcPendingArenas)) }
+  else { unsafe memory.prunePendingList(Pointer.fromMutRef<?*mut u8>(&mut state.gcPendingArenas)) }
   drop state
   while !Pointer.isNull<HeapHeader>(unsafe firstGc(runtime, 3)) {
     let node = unsafe nonnull(unsafe firstGc(runtime, 3))
