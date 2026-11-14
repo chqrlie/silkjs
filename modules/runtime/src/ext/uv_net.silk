@@ -1,5 +1,7 @@
 //! Opaque libuv networking ABI. Shared request/loop functions live in uv_fs.
 import ext.uv_fs { UvBuf }
+// The address conversions are Silk (uv_inet), published here under libuv's names.
+pub import ext.uv_inet { uv_ip4_addr, uv_ip6_addr, uv_ip4_name, uv_ip6_name }
 pub type CloseCallback = extern "C" fn(*mut u8) -> ()
 pub type StatusCallback = extern "C" fn(*mut u8, i32) -> ()
 pub type AllocCallback = extern "C" fn(*mut u8, usize, *mut UvBuf) -> ()
@@ -97,11 +99,3 @@ pub unsafe extern "C" fn uv_udp_set_ttl(handle: *mut u8, ttl: i32) -> i32
 pub unsafe extern "C" fn uv_recv_buffer_size(handle: *mut u8, value: *mut i32) -> i32
 @foreign(noCapture: .("value"))
 pub unsafe extern "C" fn uv_send_buffer_size(handle: *mut u8, value: *mut i32) -> i32
-@foreign(noCapture: .("text", "address"))
-pub unsafe extern "C" fn uv_ip4_addr(text: *const u8, port: i32, address: *mut u8) -> i32
-@foreign(noCapture: .("text", "address"))
-pub unsafe extern "C" fn uv_ip6_addr(text: *const u8, port: i32, address: *mut u8) -> i32
-@foreign(noCapture: .("address", "text"))
-pub unsafe extern "C" fn uv_ip4_name(address: *const u8, text: *mut u8, size: usize) -> i32
-@foreign(noCapture: .("address", "text"))
-pub unsafe extern "C" fn uv_ip6_name(address: *const u8, text: *mut u8, size: usize) -> i32
