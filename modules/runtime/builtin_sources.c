@@ -318,9 +318,7 @@ static const unsigned char b103[] = {40,102,117,110,99,116,105,111,110,40,109,11
 static const unsigned char b104[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
 #embed "ext/node/internal/deps/acorn/acorn-walk/dist/walk.js" suffix(,)
 10,125,41,};
-static const unsigned char b105[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/deps/amaro/index.js" suffix(,)
-10,125,41,};
+static const unsigned char b105[] = {0};
 static const unsigned char b106[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
 #embed "ext/node/internal/deps/undici/undici.js" suffix(,)
 10,125,41,};
@@ -576,9 +574,7 @@ static const unsigned char b189[] = {40,102,117,110,99,116,105,111,110,40,109,11
 static const unsigned char b190[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
 #embed "ext/node/internal/modules/package_map.js" suffix(,)
 10,125,41,};
-static const unsigned char b191[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/modules/typescript.js" suffix(,)
-10,125,41,};
+static const unsigned char b191[] = {0};
 static const unsigned char b192[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
 #embed "ext/node/internal/modules_binding.js" suffix(,)
 10,125,41,};
@@ -1796,7 +1792,7 @@ static const struct { const unsigned char *data; size_t length; } sources[] = {
   { b102, sizeof b102 },
   { b103, sizeof b103 },
   { b104, sizeof b104 },
-  { b105, sizeof b105 },
+  { b105, 0 },
   { b106, sizeof b106 },
   { b107, sizeof b107 },
   { b108, sizeof b108 },
@@ -1882,7 +1878,7 @@ static const struct { const unsigned char *data; size_t length; } sources[] = {
   { b188, sizeof b188 },
   { b189, sizeof b189 },
   { b190, sizeof b190 },
-  { b191, sizeof b191 },
+  { b191, 0 },
   { b192, sizeof b192 },
   { b193, sizeof b193 },
   { b194, sizeof b194 },
@@ -2255,8 +2251,18 @@ static const struct { const unsigned char *data; size_t length; } sources[] = {
   { b561, sizeof b561 },
 };
 
+/* The built-ins of TypeStripping, which its package installs (tools/embed.py, PACKAGED). */
+const unsigned char *(*silk_type_stripping_sources)(size_t index, size_t *length);
+
 const unsigned char *silk_builtin_source(size_t index, size_t *length) {
   if (index > 561) { *length = 0; return (const unsigned char *)""; }
+  switch (index) {
+    case 105:
+    case 191:
+      if (silk_type_stripping_sources) return silk_type_stripping_sources(index, length);
+      *length = 0; return (const unsigned char *)"";
+    default: break;
+  }
   *length = sources[index].length;
   return sources[index].data;
 }

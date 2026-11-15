@@ -948,6 +948,8 @@ function componentVersions() {
   if (nghttp2 === undefined) delete versions.nghttp2;
   if (sqlite === undefined) delete versions.sqlite;
   if (openssl === undefined) delete versions.openssl;
+  if (!presentServices.has('Http')) delete versions.llhttp;
+  if (!presentServices.has('TypeStripping')) delete versions.amaro;
   if (!hasWasm) delete versions.uvwasi;
   return versions;
 }

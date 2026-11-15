@@ -486,18 +486,22 @@ impl SystemInfo for EmptySystemInfo { static fn present() -> bool { return false
 /// TypeScript stripping: running `.ts` files and `module.stripTypeScriptTypes`, with amaro, which
 /// runs on WebAssembly (`checkCombination`). Without it they throw `ERR_NO_TYPESCRIPT`, as in a
 /// Node build without amaro.
+///
+/// The real implementation is `Amaro` of ./amaro (silkjsruntime-amaro), which brings amaro's
+/// JavaScript: a program without that package does not hold it.
 pub interface TypeStripping {
   /// A constant of the implementation type: whether TypeScript is stripped.
   static fn present() -> bool
+  /// Called once at start: it keeps the implementation's built-in sources in the program.
+  fn link(self: &Self) -> ()
 }
-/// amaro.
-pub struct Amaro {}
-impl Copy for Amaro {}
-impl TypeStripping for Amaro { static fn present() -> bool { return true } }
 /// No TypeScript stripping.
 pub struct EmptyTypeStripping {}
 impl Copy for EmptyTypeStripping {}
-impl TypeStripping for EmptyTypeStripping { static fn present() -> bool { return false } }
+impl TypeStripping for EmptyTypeStripping {
+  static fn present() -> bool { return false }
+  fn link(self: &Self) -> () {}
+}
 
 /// Worker threads: `new Worker()`. `worker_threads` itself, message ports, `process.env` and the
 /// thread identities stay the core's (they stand on the worker natives, 6000), so without worker
@@ -690,6 +694,7 @@ pub interface Composition {
   unsafe fn wasmFinalize<'m>(engine: &mut Engine<'m, Services<Self>>, rt: *mut HeapHeader, object: *mut HeapHeader) -> ()
   unsafe fn wasmOpenHandles<'m>(engine: &Engine<'m, Services<Self>>) -> usize
   effect fn compressionOpen<'m>(engine: &mut Engine<'m, Services<Self>>) -> () ! OutOfMemoryError
+  fn typeStrippingLink<'m>(engine: &Engine<'m, Services<Self>>) -> ()
   effect fn inspectorOpen<'m>(engine: &mut Engine<'m, Services<Self>>, wake: ?*mut u8, mailbox: Mailbox) -> () ! OutOfMemoryError
   unsafe effect fn inspectorCall<'m>(engine: &mut Engine<'m, Services<Self>>, context: *mut HeapHeader, operation: u32, argc: i32, argv: &FrameSlots) -> ValueBits
     ! OutOfMemoryError | JsException ? &mut Allocator
@@ -930,6 +935,7 @@ impl<P: Platform + Copy, M: ModuleResolver + Copy, F: Files + Copy, Z: Compressi
   unsafe fn inspectorDispose<'m>(engine: &mut Engine<'m, Services<Self>>, context: *mut HeapHeader) -> () {
     let mut inspector = engine.services.capabilities.inspector unsafe inspector.dispose(&mut engine, context) engine.services.capabilities.inspector = inspector
   }
+  fn typeStrippingLink<'m>(engine: &Engine<'m, Services<Self>>) -> () { let typeStripping = engine.services.capabilities.typeStripping typeStripping.link() }
   effect fn compressionOpen<'m>(engine: &mut Engine<'m, Services<Self>>) -> () ! OutOfMemoryError {
     run engine.services.capabilities.compression.open()
   }

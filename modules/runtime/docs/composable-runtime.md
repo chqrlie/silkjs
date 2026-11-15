@@ -694,6 +694,7 @@ that depends on the core, as `WamrWasm` does in ./wamr:
 | ./sqlite (`silkjsruntime-sqlite`) | `SqliteDatabase` | SQLite (lib-sqlite) |
 | ./openssl (`silkjsruntime-openssl`) | `OpenSslCrypto`, `OpenSslTls` | OpenSSL |
 | ./inspector (`silkjsruntime-inspector`) | `NodeInspector` | the inspector's WebSocket server (its own sockets and thread) |
+| ./amaro (`silkjsruntime-amaro`) | `Amaro` | amaro's JavaScript (3.8 MB) |
 | ./wamr (`silkjsruntime-wamr`) | `WamrWasm` | WAMR, SIMDe |
 
 The core's manifest no longer lists those libraries. The embedding smoke test checks with `nm`
@@ -715,6 +716,12 @@ The inspector's server computes the WebSocket handshake's SHA-1 itself, so it ne
 metadata the engine keeps on code (`ext/inspector_debugger` and what it uses) stays in the core,
 since `vm` and the loader defer sources whether or not there is an inspector.
 
+Built-in JavaScript can belong to a package too. `tools/embed.py` writes the built-ins of a
+service listed in its `PACKAGED` into that package's C (`amaro/amaro_sources.c`), and the core's
+table (`builtin_sources.c`) keeps an empty entry for each, which a pointer the package's C sets
+when the program loads fills. `Amaro.link`, called once at start, is what makes a program that
+depends on the package link that file, so a program without it holds none of amaro's bytes.
+
 The Embedding workflow (`.github/workflows/embedding.yml`) is the matrix's first two rows: the
 program of the core alone and the program with every capability package, each with its
 expected output and its symbol checks (`silk task symbols`). The executable is the third.
@@ -729,9 +736,6 @@ expected output and its symbol checks (`silk task symbols`). The executable is t
 - libuv stays in the core until the loop plan replaces it; `OsFiles`, `OsNetwork`,
   `OsProcesses`, `OsSystemInfo` and `ThreadWorkers` stay with it for now (a `silkjsruntime-os`
   package once libuv is gone, so that the core touches no libc).
-- Amaro's 3.8 MB of JavaScript is left out of a program without `TypeStripping` at run time but
-  is still embedded in its binary: the built-in sources are one generated table. Per-package
-  built-in tables are the next change to `tools/embed.py`.
 - The heap image and the built-ins' bytecode are still written by `tools/build.py` for the
   executable only. Moving that into a build step any embedding program can run, with the
   implementation types in the image identity, is the remaining half of the step.

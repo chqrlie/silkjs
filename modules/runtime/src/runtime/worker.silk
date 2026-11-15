@@ -625,6 +625,7 @@ unsafe effect fn execute<'m, D: Driver, C: Composition>(engine: &mut Engine<'m, 
   static if Composition.networkPresent() { engine.services.network = run net_native.open(io, Composition.tlsSecureOps(&engine.*)) }
   run Composition.tlsOpen(&mut engine, allocator)
   run Composition.compressionOpen(&mut engine)
+  Composition.typeStrippingLink(&engine.*)
   engine.services.processes = run process_native.make(io, workers)
   run Composition.http2Open(&mut engine)
   run Composition.databaseOpen(&mut engine, allocator)

@@ -2,8 +2,8 @@ name: Embedding
 # The composable runtime's matrix (modules/runtime/docs/composable-runtime.md, step 7): the same
 # embedding host built twice, once from the core alone (every optional capability empty, no file
 # system) and once with every capability's package (WAMR, compression, HTTP/2, HTTP/1, SQLite,
-# OpenSSL, and files in memory). Each must print what the test expects, and nm must find each
-# capability's library only in the program that depends on its package.
+# OpenSSL, the inspector, amaro, and files in memory). Each must print what the test expects, and
+# nm must find each capability's library only in the program that depends on its package.
 on:
   push:
     branches: [main]
@@ -42,7 +42,7 @@ jobs:
       - name: The program of the core alone links no capability library
         working-directory: modules/runtime/tools/capabilities
         run: |
-          for prefix in wasm_runtime_ BrotliEncoder ZSTD_ nghttp2_ llhttp_ sqlite3_ SSL_CTX_; do
+          for prefix in wasm_runtime_ BrotliEncoder ZSTD_ nghttp2_ llhttp_ sqlite3_ SSL_CTX_ silk_inspector_ silk_type_stripping_sources_linked; do
             silk task symbols --binary ../../build/embed-smoke/embed-smoke --prefix "$prefix" --absent
             silk task symbols --binary ../../build/embed-smoke-wamr/embed-smoke-wamr --prefix "$prefix"
           done
