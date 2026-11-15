@@ -2205,6 +2205,15 @@ struct Pool {
   queue: Work, slow: Work, slowMarker: Work, exit: Work
 }
 export "C" fn silkUvCancelled(work: *mut Work) -> () { unsafe abort() }
+// UV_ECANCELED, with which a cancelled unit finishes.
+static if Intrinsic.targetOperatingSystem() == "darwin" { const WORK_CANCELED: i32 = -89 } else { const WORK_CANCELED: i32 = -125 }
+@threadCallbacks("prepare", "parent", "child")
+unsafe extern "C" fn pthread_atfork(prepare: ?extern "C" fn() -> (), parent: ?extern "C" fn() -> (), child: ?extern "C" fn() -> ()) -> i32
+// The word that holds the pool, shared by `pool` and the fork handler.
+unsafe fn poolWord() -> *mut u64 { return Intrinsic.processWord() }
+// libuv's reset_once, registered with pthread_atfork: a forked child has none of the pool's
+// threads, so its next submission starts a new pool.
+export "C" fn silkUvPoolForked() -> () { unsafe Atomic.store<u64>(unsafe poolWord(), 0, MemoryOrder.Release) }
 unsafe fn workAt(pointer: *mut Work) -> *mut u8 { return unsafe Intrinsic.pointerReinterpret<*mut Work, *mut u8>(pointer) }
 fn sameWork(a: ?*mut Work, b: *mut Work) -> bool { return Pointer.address<Work>(a) == Pointer.address<Work>(b) }
 // A circular list whose head is a sentinel node pointing at itself when empty (libuv's uv__queue).
@@ -2237,7 +2246,7 @@ unsafe fn queueRemove(node: *mut Work) -> () {
 }
 // The pool, made by the first caller that needs it; it is never freed.
 unsafe fn pool() -> *mut Pool {
-  let word = Intrinsic.processWord()
+  let word = unsafe poolWord()
   let current = unsafe Atomic.load<u64>(word, MemoryOrder.Acquire)
   if current != 0 { return unsafe Intrinsic.pointerReinterpret<*mut u8, *mut Pool>(unsafe nn(unsafe addressPointer(current))) }
   let memory = unsafe calloc(1, Layout.of<Pool>().bytes)
@@ -2258,7 +2267,10 @@ unsafe fn pool() -> *mut Pool {
   p.threads = count drop p
   let raced = unsafe Atomic.compareExchange<u64>(word, 0, usize.toU64(Pointer.address<u8>(memory)), MemoryOrder.AcquireRelease, MemoryOrder.Acquire)
   match move raced {
-    CompareExchange<u64>.Exchanged => {}
+    CompareExchange<u64>.Exchanged => {
+      let none = Intrinsic.pointerNullFunction<?extern "C" fn() -> ()>()
+      if unsafe pthread_atfork(none, none, silkUvPoolForked) != 0 { unsafe abort() }
+    }
     CompareExchange<u64>.Observed { value: winner } => {
       // Another thread made the pool first; this one was never started.
       let _a = unsafe pthread_mutex_destroy(unsafe nn(lock)) unsafe free(lock) unsafe free(condition) unsafe free(memory)
@@ -2375,7 +2387,7 @@ unsafe fn workDone(loop: *mut Loop) -> () {
   while !Intrinsic.pointerIsNull<?*mut Work>(item) {
     let pointer = unsafe nn(item)
     let mut second = () let w = unsafe Pointer.borrowMut<(), Work>(&mut second, pointer)
-    let next = w.next let done = w.done let status = if unsafe isCancelled(w.work) { -125 } else { 0 }
+    let next = w.next let done = w.done let status = if unsafe isCancelled(w.work) { WORK_CANCELED } else { 0 }
     w.next = Pointer.null<Work>() w.previous = Pointer.null<Work>() drop w
     if !Intrinsic.pointerIsNull<?extern "C" fn(*mut Work, i32) -> ()>(done) {
       let present = unsafe Intrinsic.pointerRequalify<?extern "C" fn(*mut Work, i32) -> (), extern "C" fn(*mut Work, i32) -> ()>(done)
@@ -2418,7 +2430,7 @@ pub unsafe fn workSubmit(memory: *mut u8, unit: *mut Work, kind: i32, work: exte
   let _unlocked = unsafe pthread_mutex_unlock(lock)
 }
 /// libuv's uv__work_cancel: a unit still waiting leaves the queue and finishes with UV_ECANCELED
-/// (-125) at the loop's next wake; one that started or finished answers UV_EBUSY (-16).
+/// (-125, Darwin -89) at the loop's next wake; one that started or finished answers UV_EBUSY (-16).
 pub unsafe fn workCancel(memory: *mut u8, unit: *mut Work) -> i32 {
   let pointer = unsafe pool()
   let anchor = () let p = unsafe Pointer.borrow<(), Pool>(&anchor, pointer)
@@ -2727,5 +2739,6 @@ pub fn keepExports() -> () {
   let _silkUvPollTimerClosed: extern "C" fn(*mut u8) -> () = silkUvPollTimerClosed
   let _silkUvPollDone: extern "C" fn(*mut Work, i32) -> () = silkUvPollDone
   let _silkUvCancelled: extern "C" fn(*mut Work) -> () = silkUvCancelled
+  let _silkUvPoolForked: extern "C" fn() -> () = silkUvPoolForked
   let _silkUvWorker: extern "C" fn(?*mut u8) -> ?*mut u8 = silkUvWorker
 }
