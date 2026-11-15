@@ -1,10 +1,8 @@
 'use strict';
 // The compressed bytes of node:zlib over a matrix of options, inputs, chunk sizes, flushes,
 // parameter changes and resets: one line per case with a digest of the bytes and of the lengths
-// of the chunks a stream emitted. The bytes must be those of zlib 1.3.1, which
-// zlib-1.3.1.digests.json holds (tests/zlib-bytes-smoke.cjs compares; --write renews it with a
-// build that links the C zlib 1.3.1). Node itself builds another zlib (Chromium's), whose bytes
-// differ, so this is not a case of tests/compat.mjs.
+// of the chunks a stream emitted. The bytes must be Node 24's, whose zlib is Chromium's: a case
+// of tests/compat.mjs, which compares the lines with the reference Node's.
 const zlib = require('node:zlib');
 const { generator, input, digest, drive } = require('./common.cjs');
 const C = zlib.constants;
@@ -12,12 +10,7 @@ const C = zlib.constants;
 async function collect() {
   const lines = [];
   const add = (name, bytes, chunks) => {
-    let shown = bytes;
-    if (bytes.length > 10 && bytes[0] === 0x1f && bytes[1] === 0x8b) {
-      // The operating system byte of a gzip header: zlib writes 3 on Unix, 19 on macOS.
-      shown = Buffer.from(bytes); shown[9] = 0xff;
-    }
-    lines.push(`${name} ${bytes.length} ${digest(shown)}${chunks ? ' ' + digest(Buffer.from(chunks.map((c) => c.length).join(','))) : ''}`);
+    lines.push(`${name} ${bytes.length} ${digest(bytes)}${chunks ? ' ' + digest(Buffer.from(chunks.map((c) => c.length).join(','))) : ''}`);
   };
   const inputs = {
     text: input('text', 200000), json: input('json', 150000), random: input('random', 70000),

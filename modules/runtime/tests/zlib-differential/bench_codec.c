@@ -4,7 +4,10 @@
 #include <string.h>
 #include <stdint.h>
 #include <time.h>
-void *zs_deflate_new(int, int, int, int); void zs_deflate_free(void *);
+#ifndef SILK_DEFLATE_NEW
+#define SILK_DEFLATE_NEW zs_deflate_new
+#endif
+void *SILK_DEFLATE_NEW(int, int, int, int); void zs_deflate_free(void *);
 int zs_deflate(void *, unsigned char *, size_t, unsigned char *, size_t, int, size_t *, size_t *);
 void *zr_deflate_new(int, int, int, int); void zr_deflate_free(void *);
 int zr_deflate(void *, unsigned char *, size_t, unsigned char *, size_t, int, size_t *, size_t *);
@@ -52,7 +55,7 @@ int main(int argc, char **argv) {
       double t[2][16];
       for (int r = 0; r < rounds; r++) for (int k = 0; k < 2; k++) {
         int silk = (k + r) & 1; double a = now(); size_t got;
-        if (op == 0) got = silk ? deflate_all(zs_deflate_new, zs_deflate_free, zs_deflate, level, wb, in, n, z, cap, chunk) : deflate_all(zr_deflate_new, zr_deflate_free, zr_deflate, level, wb, in, n, z, cap, chunk);
+        if (op == 0) got = silk ? deflate_all(SILK_DEFLATE_NEW, zs_deflate_free, zs_deflate, level, wb, in, n, z, cap, chunk) : deflate_all(zr_deflate_new, zr_deflate_free, zr_deflate, level, wb, in, n, z, cap, chunk);
         else got = silk ? inflate_all(zs_inflate_new, zs_inflate_free, zs_inflate, wb, z, zl, back, n + 1024, chunk) : inflate_all(zr_inflate_new, zr_inflate_free, zr_inflate, wb, z, zl, back, n + 1024, chunk);
         t[silk][r] = now() - a;
         if (!got || (op == 0 && !chunk && got != zl) || (op == 1 && got != n)) { printf("wrong result: %zu\n", got); return 1; }

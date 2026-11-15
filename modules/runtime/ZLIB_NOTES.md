@@ -8,14 +8,14 @@ symbol. Zstandard and Brotli are as they were.
 | --- | --- | --- |
 | Codecs | `src/stdlib_copy/compress/deflate.silk`, `inflate.silk` | Local copies of the standard library's `silk.compress.deflate` and `silk.compress.inflate` (Silk 0.1.0-dev.74+205aea3f5b2e) with the changes listed below. Nothing in them is specific to Node or SilkJS. |
 | Adapter | `src/ext/zlib_stream.silk` | zlib's calling convention over the codecs: window bits that choose a format, gzip or zlib by the first two bytes, zlib's status codes and message texts, the gzip operating system byte. |
-| Binding | `src/ext/compression_native.silk` | As before, with the zlib kinds calling the adapter where they called C. |
+| Binding | `src/ext/compression_native.silk`, `ext/node/internal/compression/handle.js` | The zlib kinds call the adapter where they called C, and write in place (see "The binding"). |
 
 **The local copies are temporary.** The changes are upstream in
 [silk-lang/silk#3122](https://github.com/silk-lang/silk/pull/3122). Once a Silk release contains
 them: move `silk-version` to that release, delete `src/stdlib_copy`, point the imports in
 `src/ext/zlib_stream.silk` (and `tests/zlib-differential/build.sh`) back at
 `silk.compress.deflate` and `silk.compress.inflate`, and run `tests/zlib-differential` and
-`tests/zlib-bytes-smoke.cjs` again.
+the zlib cases of `silk task compat` again.
 
 ## Who else used zlib
 
@@ -24,7 +24,7 @@ Checked at main `df9c30b`. Only the runtime's own binding linked against it.
 | Possible consumer | Finding |
 | --- | --- |
 | `src/ext/compression_native.silk` | The only caller: `deflateInit2_`, `deflate`, `deflateParams`, `deflateReset`, `deflateSetDictionary`, `deflateEnd`, `inflateInit2_`, `inflate`, `inflateReset`, `inflateSetDictionary`, `inflateEnd`. |
-| `src/ext/os_native.silk` | `zlibVersion`, for `process.versions.zlib`. It still says `1.3.1`, the zlib whose bytes and behaviour the Silk code reproduces. |
+| `src/ext/os_native.silk` | `zlibVersion`, for `process.versions.zlib`. It now says `1.3.2.1-motley-285e94b`, as Node 24 does: the zlib whose bytes the Silk code reproduces (see "Compressed bytes"). |
 | `zlib.crc32` | Already `silk.compress.checksum` before this change. |
 | OpenSSL (`modules/native/openssl`) | Built with `OPENSSL_NO_ZLIB` (`generated/include/openssl/configuration.h`); `crypto/comp/c_zlib.c` compiles to stubs. |
 | nghttp2, libuv, Zstandard, Brotli | No reference. |
@@ -55,7 +55,8 @@ release, plus `silk.compress.checksum` (CRC-32, Adler-32).
 
 ## Changes to the copied files
 
-Each is generic: it makes the codec match zlib 1.3.1, or adds an option that zlib has.
+Each is generic: it makes the codec match zlib 1.3.1, or adds an option that zlib (or
+Chromium's zlib) has.
 
 ### `deflate.silk`
 
@@ -75,6 +76,7 @@ mismatch came within a few scenarios; after them none in the runs recorded under
 | D9 | `Encoder.setGzipSystem(code)`: the operating system byte of the gzip header, 255 by default as before. | zlib writes its build's system (3 on Unix, 19 on macOS); the adapter sets it. |
 | D10 | `reset` keeps the match start and sets the dictionary id to 1 (Adler-32 of nothing). | As `deflateReset`. |
 | D11 | The match search reads through pointers after proving once that its reads are in the window, and compares 8 bytes at a time; the hash insert is inlined and goes through one slice per table. | Speed. After D1–D10 the encoder ran at 0.80–0.95 of zlib's throughput; callgrind, 2 MiB of text at level 6: 948M instructions, zlib 489M. After: about 580M, and 1.04 of zlib's throughput on average. A vectorized hash slide (`u16x8.saturatingSubtract`) was tried and measured no better, so it was not kept. |
+| D12 | `Options.hash`: `Hash.Rolling` (zlib's hash, the default, as before) or `Hash.Multiplicative`, the hash of Chromium's zlib (`insert_string.h` with `chromium_zlib_hash`): the 4 bytes at a position as a little-endian `u32`, times 66,521, plus 66,521, shifted right by 16 and masked. With it, as in Chromium: at least 15 hash bits whatever the memory level, the window is allocated zero-filled with 16 bytes of padding, and the window fill inserts positions while more than 3 bytes are there. The adapter asks for `Multiplicative`. | Node 24 builds Chromium's zlib, so this is what gives Node's bytes. It is also cheaper than the rolling hash: one multiply per position and no dependency on the previous position's hash. Chromium's other deflate changes (the CRC-32 based hash it uses with SIMD, which Node's build does not enable; a `longest_match` that skips a compare it proves is equal) leave the bytes as they are. |
 
 ### `inflate.silk`
 
@@ -89,16 +91,44 @@ mismatch came within a few scenarios; after them none in the runs recorded under
 | I7 | A dynamic block with more than 30 distance codes fails (`SymbolCounts`); a repeat is checked after its extra bits are there; a code-length code with no lengths at all reads as zlib reads it. | Same accept, reject and "need more input" as zlib on damaged data. |
 | I8 | A final input that ends inside a header unit whose first bytes already prove it wrong fails with that cause, not `TruncatedInput`; a zlib header with both a bad check and a bad method keeps the kind `UnsupportedMethod` (the detail is zlib's `HeaderCheck`). | The standard library's own corpus (`streaming-inflate`, `http-content-decoding`) relies on those kinds; with I8 it passes unchanged. |
 
+## The binding
+
+The C binding copied the input into the native side and the output back one byte at a time,
+and for a stream it copied the whole remaining input again for every output chunk (quadratic
+in the input over the number of chunks). That cost more than the codec. Now:
+
+- `write` (op 8) takes the input and output buffers with their offsets, as Node's
+  `handle.write(flush, in, inOff, inLen, out, outOff, outLen)` does, and loops in native code
+  while zlib asks for more room, as Node's `ZlibContext` does. A sync write reads and writes the
+  engine's buffers in place and returns the consumed and written counts through a shared
+  `Uint32Array(2)`, like Node's `writeResult`.
+- An async write on the thread pool reads in place only from ranges of 64 KiB or more
+  (`LEASE_MINIMUM`), and copies smaller ones. A lease calls the engine's `refresh`, which walks
+  every live view (O(views)), so a stream of 1 KiB writes with thousands of live buffers spent its
+  time there.
+- Each handle has one `AsyncResource('ZLIB')`, as Node's handle does, instead of one per call.
+- `zlib.crc32` (op 9) reads its input in place.
+- `params()` on a gzip stream changes nothing, as in Node: its `ZlibContext::SetParams` calls
+  `deflateParams` for DEFLATE and DEFLATERAW only. The C binding called it for gzip too, so a
+  gzip stream with `params()` had other bytes than Node's.
+
 ## Compressed bytes
 
-- Against zlib 1.3.1: **equal.** `tests/zlib-bytes-smoke.cjs` compares 1,089 cases (levels,
-  strategies, window and memory levels, dictionaries, chunk sizes, flushes, parameter changes,
-  resets, with the lengths of the emitted chunks) with digests written by a build that linked the C
-  zlib 1.3.1.
-- Against Node 24: Node builds Chromium's zlib (`process.versions.zlib` is
-  `1.3.2.1-motley-285e94b`), which hashes differently. 697 of the 1,089 cases differ between Node
-  24.22.3 and zlib 1.3.1, so the runtime with the C zlib never had Node's bytes either. Matching
-  Node's bytes would mean porting Chromium's deflate changes, not zlib's.
+**Node 24's bytes.** Node builds Chromium's zlib (`process.versions.zlib` is
+`1.3.2.1-motley-285e94b`), which hashes differently from zlib 1.3.1: 697 of the 1,089 cases of
+`tests/fixtures/zlib/bytes.cjs` differ between Node 24.22.3 and zlib 1.3.1, so the runtime with the
+C zlib 1.3.1 never had Node's bytes either. The first version of this branch matched zlib 1.3.1;
+it was then decided to match Node instead, with D12. Behaviour that does not depend on the hash
+(status codes, messages, accounting, inflate) is the same in both zlibs.
+
+- `silk task compat` case `zlib-compressed-bytes-matrix`: the 1,089 cases (levels, strategies,
+  window and memory levels, dictionaries, chunk sizes, flushes, parameter changes, resets, with the
+  lengths of the emitted chunks, and the gzip operating system byte) against the reference Node.
+  The test against digests of zlib 1.3.1 (`tests/zlib-bytes-smoke.cjs`) is gone.
+- `tests/zlib-differential` builds Node's zlib from `deps/zlib` at v24.22.3 (35 files, pinned by
+  SHA-256 in `node-zlib.sha256`) with the defines of Node's x64 build, and checks the encoder with
+  `Hash.Multiplicative` against it, call by call. `Hash.Rolling` is still checked against zlib
+  1.3.1. Node's build is deterministic: it does not pick a hash by CPU.
 
 ## Verification
 

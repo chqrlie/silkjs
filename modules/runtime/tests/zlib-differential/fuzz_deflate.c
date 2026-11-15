@@ -3,7 +3,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
-void *zs_deflate_new(int, int, int, int); void zs_deflate_free(void *);
+#ifndef SILK_DEFLATE_NEW
+#define SILK_DEFLATE_NEW zs_deflate_new
+#endif
+void *SILK_DEFLATE_NEW(int, int, int, int); void zs_deflate_free(void *);
 int zs_deflate(void *, unsigned char *, size_t, unsigned char *, size_t, int, size_t *, size_t *);
 void zs_deflate_reset(void *); int zs_deflate_params(void *, int, int); int zs_deflate_dictionary(void *, unsigned char *, size_t);
 void *zr_deflate_new(int, int, int, int); void zr_deflate_free(void *);
@@ -47,7 +50,7 @@ static int one(uint64_t seed) {
   int calls = 0;
   size_t n = below(4) == 0 ? below(600000) : below(4) == 0 ? below(300) : below(90000);
   unsigned char *data = malloc(n + 1); generate(data, n, (int)below(6));
-  void *s = zs_deflate_new(level < 0 ? 6 : level, wb, mem, strategy), *r = zr_deflate_new(level, wb, mem, strategy);
+  void *s = SILK_DEFLATE_NEW(level < 0 ? 6 : level, wb, mem, strategy), *r = zr_deflate_new(level, wb, mem, strategy);
   if (!s || !r) FAIL("init silk=%p ref=%p level=%d wb=%d mem=%d strategy=%d", s, r, level, wb, mem, strategy);
   if (verbose) printf("seed=%llu level=%d wb=%d mem=%d strategy=%d n=%zu\n", (unsigned long long)seed, level, wb, mem, strategy, n);
   size_t cap0 = 400000; unsigned char *os = malloc(cap0), *orr = malloc(cap0);

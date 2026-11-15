@@ -7,6 +7,7 @@ import silk.mem.layout { Layout }
 import silk.num.i32
 import silk.num.usize
 import ext.zlib_stream { Call, Deflater, Inflater, message }
+import stdlib_copy.compress.deflate { Hash }
 import silk.compress.checksum { CompressionChecksum }
 import silk.num.u32
 
@@ -29,6 +30,23 @@ unsafe fn report(call: &Call, consumed: ?*mut usize, written: ?*mut usize) -> i3
 export "C" fn zs_deflate_new(level: i32, windowBits: i32, memLevel: i32, strategy: i32) -> ?*mut u8 {
   let mut allocator = Allocator.systemAllocatorProvider()
   let made = run Effect.result(Deflater.make(level, windowBits, memLevel, strategy)) |> Effect.provideMut<Allocator>(&mut allocator)
+  match move made {
+    Result<Result<Deflater, i32>, OutOfMemoryError>.Success { value } => {
+      match move value {
+        Result<Deflater, i32>.Success { value: stream } => {
+          let raw = unsafe calloc(1, Layout.of<Deflater>().bytes)
+          unsafe Pointer.put<Deflater>(unsafe Intrinsic.pointerReinterpret<*mut u8, *mut Deflater>(unsafe nonnull(raw)), move stream)
+          return raw
+        }
+        Result<Deflater, i32>.Failure {..} => { return Pointer.null<u8>() }
+      }
+    }
+    Result<Result<Deflater, i32>, OutOfMemoryError>.Failure {..} => { return Pointer.null<u8>() }
+  }
+}
+export "C" fn zs_deflate_new_rolling(level: i32, windowBits: i32, memLevel: i32, strategy: i32) -> ?*mut u8 {
+  let mut allocator = Allocator.systemAllocatorProvider()
+  let made = run Effect.result(Deflater.makeWith(level, windowBits, memLevel, strategy, Hash.Rolling)) |> Effect.provideMut<Allocator>(&mut allocator)
   match move made {
     Result<Result<Deflater, i32>, OutOfMemoryError>.Success { value } => {
       match move value {

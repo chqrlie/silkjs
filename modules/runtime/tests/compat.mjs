@@ -386,9 +386,10 @@ console.log(log.join('\n'));
 `);
 cases.push({ name: 'promise-combinators-mixed', args: [join(directory, 'promise-combinators-mixed.mjs')] });
 // node:zlib on Silk code (ZLIB_NOTES.md): the programs of tests/fixtures/zlib, which print what
-// zlib reports and not the compressed bytes, since Node builds another zlib.
-for (const name of ['common.cjs', 'streams.json', 'behaviour.cjs', 'fuzz.cjs']) file('zlib/' + name, readFileSync(new URL('./fixtures/zlib/' + name, import.meta.url)));
+// zlib reports and digests of the compressed bytes, which must be Node's.
+for (const name of ['common.cjs', 'streams.json', 'behaviour.cjs', 'fuzz.cjs', 'bytes.cjs']) file('zlib/' + name, readFileSync(new URL('./fixtures/zlib/' + name, import.meta.url)));
 cases.push({ name: 'zlib-behaviour-matrix', args: [join(directory, 'zlib/behaviour.cjs')] });
+cases.push({ name: 'zlib-compressed-bytes-matrix', args: [join(directory, 'zlib/bytes.cjs')] });
 for (const seed of ['7', '99', '2026']) cases.push({ name: 'zlib-fuzz-roundtrips-and-damage-' + seed, args: [join(directory, 'zlib/fuzz.cjs'), seed] });
 let passed = 0, failed = 0;
 try {
