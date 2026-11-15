@@ -2834,7 +2834,7 @@ unsafe effect fn secureSend(handle: *mut Handle, session: *mut u8, plain: *mut u
 // returns its byte count * 2 + 1 when it was sent now, * 2 when queued, or a status; 4 is the
 // same write on a plain (not TLS) stream handle, also one whose reads go to a native HTTP
 // exchange, where a failure also comes as WRITTEN.
-pub unsafe effect fn secure<'m, S: EngineServices>(engine: &mut Engine<'m, S>, context: *mut HeapHeader, state: *mut State, sessions: *mut tls.State, argv: &FrameSlots) -> ValueBits ! OutOfMemoryError | JsException ? &mut Allocator {
+pub unsafe effect fn secure<'m, S: EngineServices>(engine: &mut Engine<'m, S>, context: *mut HeapHeader, state: *mut State, sessions: ?*mut tls.State, argv: &FrameSlots) -> ValueBits ! OutOfMemoryError | JsException ? &mut Allocator {
   let op = number(unsafe common.argument(argv, 0))
   let found = unsafe lookup(state, number(unsafe common.argument(argv, 1)))
   if Pointer.isNull<Handle>(found) { return ValueBits.Int { value: if op == 2 { NOT_SECURE } else { EBADF() } } }
@@ -2843,8 +2843,9 @@ pub unsafe effect fn secure<'m, S: EngineServices>(engine: &mut Engine<'m, S>, c
     let h = unsafe Pointer.borrow<(), Handle>(&anchor, handle)
     let usable = !h.closing && !h.writeShut && Pointer.isNull<u8>(h.secure) && Pointer.isNull<Peer>(h.peer) && Pointer.isNull<Exchange>(h.exchange) && (h.kind == TCP || h.kind == PIPE)
     drop h
-    if !usable { return ValueBits.Int { value: EINVAL() } }
-    let session = unsafe tls.secureAttach(sessions, number(unsafe common.argument(argv, 2)))
+    // Without TLS (Tls.empty) there are no sessions to attach.
+    if !usable || Pointer.isNull<tls.State>(sessions) { return ValueBits.Int { value: EINVAL() } }
+    let session = unsafe tls.secureAttach(unsafe Intrinsic.pointerRequalify<?*mut tls.State, *mut tls.State>(sessions), number(unsafe common.argument(argv, 2)))
     if Pointer.isNull<u8>(session) { return ValueBits.Int { value: EINVAL() } }
     let attached = unsafe Pointer.borrowMut<(), Handle>(&mut anchor, handle) attached.secure = session drop attached
     // Records that came with the handshake's last flight wait in the session already.

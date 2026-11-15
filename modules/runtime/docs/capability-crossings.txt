@@ -164,8 +164,7 @@ internal/stdio	Core	internal/net/transport	Network	load
 internal/stdio	Core	net	Network	lazy
 internal/streams/fast-utf8-stream	Core	fs	Files	lazy
 internal/streams/fast-utf8-stream	Core	internal/fs/utils	Files	lazy
-internal/streams/iter/compression	Core	internal/compression/binding	Compression	load
-internal/streams/iter/transform	Core	internal/compression/constants	Compression	load
+internal/streams/iter/compression	Core	internal/compression/binding	Compression	lazy
 internal/timers_binding	Core	internal/trace_events	Inspector	lazy
 internal/tls/context	Tls	fs	Files	lazy
 internal/trace_events	Inspector	worker_threads	Workers	lazy
@@ -185,14 +184,12 @@ internal/web/blob	Core	fs	Files	lazy
 internal/web/fetch	Network	crypto	Crypto	lazy
 internal/web/fetch/client	Network	tls	Tls	lazy
 internal/web/fetch/formdata	Network	crypto	Crypto	lazy
-internal/web/fetch/transport	Network	internal/compression/constants	Compression	load
 internal/web/fetch/transport	Network	zlib	Compression	lazy
 internal/web/storage	Database	inspector	Inspector	lazy
 internal/web/wasm	Wasm	internal/web/fetch	Network	lazy
-internal/web/websocket	Network	crypto	Crypto	load
-internal/web/websocket/compression	Network	internal/compression/constants	Compression	load
+internal/web/websocket	Network	crypto	Crypto	lazy
 internal/web/websocket/compression	Network	zlib	Compression	lazy
-internal/web/websocket/framing	Network	crypto	Crypto	load
+internal/web/websocket/framing	Network	crypto	Crypto	lazy
 internal/webstreams/adapters	Core	zlib	Compression	lazy
 internal/worker	Workers	host.fsTracking	Files	call
 internal/worker	Workers	internal/heap_prof	Inspector	lazy
@@ -214,8 +211,7 @@ internal/worker/clone	Core	internal/net/binding	Network	lazy
 internal/worker/messaging	Core	host.workerNative	Workers	call
 internal/worker/ports	Core	host.workerNative	Workers	call
 internal/worker/ports	Core	internal/web/websocket/events	Network	load
-internal/ws	Network	crypto	Crypto	load
-internal/ws	Network	https	Tls	load
+internal/ws	Network	crypto	Crypto	lazy
 net	Network	cluster	Processes	lazy
 path	Core	internal/path_events/glob	Files	lazy
 perf_hooks	Core	host.traceNative	Inspector	call

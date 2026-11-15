@@ -339,10 +339,14 @@ unsafe effect fn appendResourceSnapshots<'m, C: Composition>(engine: &mut Engine
   let mut index = f64.toU32(length.numericValue())
   let network = unsafe networkState(&engine.*)
   run unsafe net_native.appendResources(&mut engine, context, network, array, &mut index)
-  let crypto = unsafe cryptoState(&engine.*)
-  run unsafe crypto_native.appendResources(&mut engine, context, crypto, array, &mut index)
-  let compression = unsafe compressionState(&engine.*)
-  run unsafe compression_native.appendResources(&mut engine, context, compression, array, &mut index)
+  static if capabilities.hasCrypto<C>() {
+    let crypto = unsafe cryptoState(&engine.*)
+    run unsafe crypto_native.appendResources(&mut engine, context, crypto, array, &mut index)
+  }
+  static if capabilities.hasCompression<C>() {
+    let compression = unsafe compressionState(&engine.*)
+    run unsafe compression_native.appendResources(&mut engine, context, compression, array, &mut index)
+  }
 }
 unsafe extern "C" fn lgamma(x: f64) -> f64
 unsafe extern "C" fn erfc(x: f64) -> f64
@@ -455,12 +459,18 @@ unsafe effect fn pollOnce<'m, C: Composition>(engine: &mut Engine<'m, Services<C
   if unsafe descriptors.pending(unsafe fs_async.descriptorState(io)) { run unsafe descriptorWarnings(&mut engine, context) }
   run unsafe pumpControl(&mut engine, context)
   if unsafe exceptions.has(unsafe runtime.contextRuntime(context)) { fail JsException {} }
-  let crypto = unsafe cryptoState(&engine.*)
-  let cryptoRan = run unsafe crypto_native.poll(&mut engine, context, crypto)
+  let mut cryptoRan = false
+  static if capabilities.hasCrypto<C>() {
+    let crypto = unsafe cryptoState(&engine.*)
+    cryptoRan = run unsafe crypto_native.poll(&mut engine, context, crypto)
+  }
   let network = unsafe networkState(&engine.*)
   let netRan = run unsafe net_native.poll(&mut engine, context, network)
-  let compression = unsafe compressionState(&engine.*)
-  let compressionRan = run unsafe compression_native.poll(&mut engine, context, compression)
+  let mut compressionRan = false
+  static if capabilities.hasCompression<C>() {
+    let compression = unsafe compressionState(&engine.*)
+    compressionRan = run unsafe compression_native.poll(&mut engine, context, compression)
+  }
   let processes = unsafe processState(&engine.*)
   let processRan = run unsafe process_native.poll(&mut engine, context, processes)
   return ran || netRan || processRan || cryptoRan || compressionRan || wasmReady || napiRan || napiAlive || napiWasAlive
@@ -927,12 +937,14 @@ impl<C: Composition> EngineServices for Services<C> {
       let napi = unsafe napiState(&engine.*)
       return ValueBits.Bool { value: unsafe fs_async.hasPending(io) || unsafe process_native.hasPending(processes) || unsafe wasmReady(&engine.*) || unsafe napi_native.alive(napi) }
     }
+    static if capabilities.hasCrypto<C>() {
     if id == 2100 || id == 2101 {
       // dispatch and submit configure the providers (crypto_native.configureFor).
       let crypto = unsafe cryptoState(&engine.*)
       if id == 2100 { return run unsafe crypto_native.dispatch(&mut engine, context, crypto, argc, argv) }
       let io = unsafe ioState(&engine.*)
       return run unsafe crypto_native.submit(&mut engine, context, crypto, io, argc, argv)
+    }
     }
     if url_native.handles(id) { return run unsafe url_native.dispatch(&mut engine, context, id, argc, argv) }
     if id == 2300 { return run unsafe os_native.dispatch(&mut engine, context, argc, argv) }
@@ -956,28 +968,35 @@ impl<C: Composition> EngineServices for Services<C> {
       let network = unsafe networkState(&engine.*)
       return run unsafe net_native.httpRespondText(&mut engine, context, network, argc, argv)
     }
+    // A socket's TLS session and gather writes: Network's, with TLS's sessions when there are any.
     if id == 2405 {
       let network = unsafe networkState(&engine.*)
-      let sessions = unsafe tlsState(&engine.*)
+      let sessions = engine.services.tls
       return run unsafe net_native.secure(&mut engine, context, network, sessions, argv)
     }
+    static if capabilities.hasTls<C>() {
     if id == 2500 {
       let tls = unsafe tlsState(&engine.*)
       return run unsafe tls_native.dispatch(&mut engine, context, tls, argc, argv)
     }
+    }
+    static if capabilities.hasCompression<C>() {
     if id == 2600 || id == 2601 {
       let compression = unsafe compressionState(&engine.*)
       if id == 2600 { return run unsafe compression_native.dispatch(&mut engine, context, compression, argc, argv) }
       let io = unsafe ioState(&engine.*)
       return run unsafe compression_native.submit(&mut engine, context, compression, io, argc, argv)
     }
+    }
     if id == 2700 {
       let processes = unsafe processState(&engine.*)
       return run unsafe process_native.dispatch(&mut engine, context, processes, unsafe common.argument(argv, 0), unsafe common.argument(argv, 1))
     }
+    static if capabilities.hasHttp2<C>() {
     if id == 5000 {
       let http2 = unsafe http2State(&engine.*)
       return run unsafe http2_native.dispatch(&mut engine, context, http2, argc, argv)
+    }
     }
     if id == 6000 {
       let workers = unsafe workerState(&engine.*)

@@ -7,7 +7,10 @@ const { Headers, immutable, rawHeaders, parsedHeaders, headerList, copyHeaders }
 const { makeResponse, nullBodyStatus } = require('internal/web/fetch/message');
 const { performance } = require('perf_hooks');
 // node:zlib loads with the first encoded body, as in Node (it reads buffer.kMaxLength at load).
-const constants = require('internal/compression/constants');
+// Without compression (Compression.empty) fetch asks for no encoding, so it never decodes one.
+const compression = require('internal/host').hasService('Compression');
+const lazy = name => { let loaded; return new Proxy({}, { get(target, key) { return (loaded ??= require(name))[key]; } }); };
+const constants = lazy('internal/compression/constants');
 let zlib;
 function lazyZlib() { return zlib ??= require('zlib'); }
 const { Transform, PassThrough } = require('stream');
@@ -15,14 +18,15 @@ let client;
 function lazyClient() { return client ??= require('internal/web/fetch/client'); }
 const badPorts = new Set('1 7 9 11 13 15 17 19 20 21 22 23 25 37 42 43 53 69 77 79 87 95 101 102 103 104 109 110 111 113 115 117 119 123 135 137 139 143 161 179 389 427 465 512 513 514 515 526 530 531 532 540 548 554 556 563 587 601 636 989 990 993 995 1719 1720 1723 2049 3659 4045 4190 5060 5061 6000 6566 6665 6666 6667 6668 6669 6679 6697 10080'.split(' '));
 function networkError(cause) { return new TypeError('fetch failed', { cause: cause instanceof Error ? cause : new Error(String(cause)) }); }
-const inflateOptions = { flush: constants.Z_SYNC_FLUSH, finishFlush: constants.Z_SYNC_FLUSH };
+let inflateOptionsValue;
+const inflateOptions = () => inflateOptionsValue ??= { flush: constants.Z_SYNC_FLUSH, finishFlush: constants.Z_SYNC_FLUSH };
 class Inflate extends Transform {
   constructor() { super(); this.decoder = null; this.failure = null; }
   _read(size) { if (this.decoder) this.decoder.resume(); Transform.prototype._read.call(this, size); }
   _transform(chunk, encoding, callback) {
     if (!chunk.length) { callback(); return; }
     if (!this.decoder) {
-      this.decoder = (chunk[0] & 15) === 8 ? lazyZlib().createInflate(inflateOptions) : lazyZlib().createInflateRaw(inflateOptions);
+      this.decoder = (chunk[0] & 15) === 8 ? lazyZlib().createInflate(inflateOptions()) : lazyZlib().createInflateRaw(inflateOptions());
       this.decoder.on('data', data => { if (!this.push(data)) this.decoder.pause(); });
       this.decoder.on('error', error => { this.failure = error; this.destroy(error); });
     }
@@ -40,12 +44,12 @@ class Inflate extends Transform {
 // coding is one it passes through as is.
 function decoders(value) {
   const coding = value.toLowerCase().split(',').map(item => item.trim()).filter(Boolean);
-  if (!coding.every(item => ['gzip', 'x-gzip', 'deflate', 'x-deflate', 'br', 'identity'].includes(item))) return null;
+  if (!compression || !coding.every(item => ['gzip', 'x-gzip', 'deflate', 'x-deflate', 'br', 'identity'].includes(item))) return null;
   const result = [];
   for (const item of coding.reverse()) {
     if (item === 'identity') continue;
     result.push(item === 'br' ? lazyZlib().createBrotliDecompress({ flush: constants.BROTLI_OPERATION_FLUSH, finishFlush: constants.BROTLI_OPERATION_FLUSH })
-      : item === 'deflate' || item === 'x-deflate' ? new Inflate() : lazyZlib().createGunzip(inflateOptions));
+      : item === 'deflate' || item === 'x-deflate' ? new Inflate() : lazyZlib().createGunzip(inflateOptions()));
   }
   return result.length ? result : null;
 }
@@ -78,7 +82,7 @@ function requestHeaders(record, url) {
   if (!list.has('accept')) list.set('accept', ['*/*']);
   if (!list.has('accept-language')) list.set('accept-language', ['*']);
   if (!list.has('user-agent')) list.set('user-agent', ['node']);
-  if (!list.has('accept-encoding')) list.set('accept-encoding', [list.has('range') ? 'identity' : url.protocol === 'https:' ? 'br, gzip, deflate' : 'gzip, deflate']);
+  if (!list.has('accept-encoding')) list.set('accept-encoding', [list.has('range') || !compression ? 'identity' : url.protocol === 'https:' ? 'br, gzip, deflate' : 'gzip, deflate']);
   list.set('sec-fetch-mode', [record.mode]);
   const referer = referrer(record, url);
   if (referer) list.set('referer', [referer]); else list.delete('referer');

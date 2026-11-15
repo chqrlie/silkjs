@@ -1,7 +1,7 @@
 'use strict';
 
 const { Buffer } = require('buffer');
-const { randomBytes } = require('crypto');
+const randomBytes = (...args) => require('crypto').randomBytes(...args);
 // Bound both compressed wire messages and expanded messages before allocation.
 const MAX_MESSAGE = 64 * 1024 * 1024;
 function failure(message, closeCode = 1002) {

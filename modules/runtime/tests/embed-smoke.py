@@ -28,10 +28,12 @@ def expected(wasm, files):
         'add 5',
         'wasm ' + wasm,
         'lib 42',
+        'libraries ' + ('object object function object object' if files else 'undefined undefined undefined undefined undefined'),
         'env EMBED_SMOKE fixed /embed-smoke',
         'setenv EPERM',
         *(['fs function', 'read hello from memory', 'dir greeting.txt,out.txt 6 false'] if files else
           ['fs ERR_UNKNOWN_BUILTIN_MODULE undefined false']),
+        'crypto ' + ('there' if files else 'ERR_NO_CRYPTO'),
         'cjs helpers',
         'missing ERR_MODULE_NOT_FOUND',
         'tick 1',

@@ -150,7 +150,7 @@ pub unsafe effect fn configureRuntime(pointer: *mut State, rt: *mut HeapHeader, 
   unsafe runtime.setMaxStackSize(rt, size)
 }
 /// Connects the isolate to its runtime loop: messages and thread events for it wake `io`.
-pub unsafe effect fn attach(pointer: *mut State, io: *mut fs_async.State, crypto: *mut crypto_native.State) -> () ! OutOfMemoryError {
+pub unsafe effect fn attach(pointer: *mut State, io: *mut fs_async.State, crypto: ?*mut crypto_native.State) -> () ! OutOfMemoryError {
   let mut anchor = () let state = unsafe Pointer.borrowMut<(), State>(&mut anchor, pointer)
   state.io = io state.crypto = crypto
   let guard = state.group.registry.get().lock() let mut threadAnchor = ()

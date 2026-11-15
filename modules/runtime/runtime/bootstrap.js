@@ -1387,7 +1387,7 @@ function runtimeFlag(arg) {
   try {
     if (internalRequire('internal/permission').applyOption(arg) ||
         internalRequire('internal/startup_controls').applyOption(arg) ||
-        internalRequire('internal/tls/options').applyOption(arg) ||
+        (presentServices.has('Tls') && internalRequire('internal/tls/options').applyOption(arg)) ||
         internalRequire('internal/heap_prof').applyOption(arg) ||
         internalRequire('internal/options').applyInspectorOption(arg)) return true;
   }
@@ -1952,7 +1952,7 @@ function run(restored = false) {
   const tlsErrors = tlsOptions ? internalRequire('internal/tls/options').validate() : [];
   if (tlsErrors.length) return cliError(tlsErrors);
   // Only an OpenSSL option or OPENSSL_CONF initializes OpenSSL at startup.
-  const opensslError = tlsOptions || process.env.OPENSSL_CONF ? internalRequire('internal/tls/options').processOpenSSLOptions() : undefined;
+  const opensslError = presentServices.has('Tls') && (tlsOptions || process.env.OPENSSL_CONF) ? internalRequire('internal/tls/options').processOpenSSLOptions() : undefined;
   if (opensslError !== undefined) {
     host.writeStartupDiagnostic(process.execPath + ': ' + opensslError + '\n');
     return process.exit(1);

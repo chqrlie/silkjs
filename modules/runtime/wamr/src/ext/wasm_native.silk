@@ -121,15 +121,18 @@ unsafe effect fn typeCode<'m, C: Composition>(engine: &mut Engine<'m, host.Servi
   if eq(name, b"i32") { return 127 } if eq(name, b"i64") { return 126 } if eq(name, b"f32") { return 125 } if eq(name, b"f64") { return 124 } if eq(name, b"v128") { return 123 } if eq(name, b"anyfunc") || eq(name, b"funcref") { return 112 } if eq(name, b"externref") { return 111 } if eq(name, b"anyref") { return 110 } if eq(name, b"eqref") { return 109 } if eq(name, b"i31ref") { return 108 } if eq(name, b"structref") { return 107 } if eq(name, b"arrayref") { return 106 } if eq(name, b"exnref") { return 105 }
   return run engine.throwError(unsafe lendRealm(&ctx, ctx), NativeErrorKind.Type, b"Invalid WebAssembly value type")
 }
-unsafe effect fn error<'m,T, C: Composition>(engine: &mut Engine<'m, host.Services<C>>, ctx: *mut HeapHeader, state: *mut State, code: i32, message: ?*const u8) -> T ! OutOfMemoryError | JsException ? &mut Allocator {
+/// Throws WAMR's error `code` with `message`. It is not generic over a result: through the
+/// engine's host hooks every native reaches it again, and a recursion may not specialize one
+/// function twice, so callers return a placeholder after it.
+unsafe effect fn raise<'m, C: Composition>(engine: &mut Engine<'m, host.Services<C>>, ctx: *mut HeapHeader, state: *mut State, code: i32, message: ?*const u8) -> () ! OutOfMemoryError | JsException ? &mut Allocator {
   if code == 3 { fail OutOfMemoryError {} }
-  if code == 2 { let value = run unsafe exceptionValue(&mut engine, ctx, state, unsafe c.silk_wasm_last_exception(unsafe store(state))) return run unsafe exceptions.throwValue<T, Engine<'m, host.Services<C>>>(&mut engine, unsafe runtime.contextRuntime(ctx), unsafe value.retained()) }
+  if code == 2 { let value = run unsafe exceptionValue(&mut engine, ctx, state, unsafe c.silk_wasm_last_exception(unsafe store(state))) return run unsafe exceptions.throwValue<(), Engine<'m, host.Services<C>>>(&mut engine, unsafe runtime.contextRuntime(ctx), unsafe value.retained()) }
   let msg = run unsafe cstring(&mut engine, ctx, state, message)
   if code == 4 || code == 5 { let bytes = run text.text(&mut engine, unsafe lendRealm(&ctx, ctx), unsafe lendFor(msg)) let mut kind = NativeErrorKind.Type if code == 5 { kind = NativeErrorKind.Range } return run engine.throwError(unsafe lendRealm(&ctx, ctx), kind, bytes.asSlice()) }
   let mut name = b"runtime" if code == 6 { name = b"compile" } if code == 7 { name = b"link" } if code == 9 { name = b"suspend" }
   let kind = run unsafe string(&mut engine, ctx, state, name)
   let value = run unsafe callback(&mut engine, ctx, state, b"error", &[kind, msg])
-  return run unsafe exceptions.throwValue<T, Engine<'m, host.Services<C>>>(&mut engine, unsafe runtime.contextRuntime(ctx), unsafe value.retained())
+  return run unsafe exceptions.throwValue<(), Engine<'m, host.Services<C>>>(&mut engine, unsafe runtime.contextRuntime(ctx), unsafe value.retained())
 }
 unsafe fn uncatchable(ctx: *mut HeapHeader) -> bool {
   let rt = unsafe runtime.contextRuntime(ctx)
@@ -147,7 +150,7 @@ unsafe effect fn checkpoint<'m, C: Composition>(engine: &mut Engine<'m, host.Ser
 }
 unsafe effect fn checked<'m, C: Composition>(engine: &mut Engine<'m, host.Services<C>>, ctx: *mut HeapHeader, state: *mut State, ok: bool) -> () ! OutOfMemoryError | JsException ? &mut Allocator {
   run unsafe checkpoint(&mut engine, ctx, state)
-  if !ok { run unsafe error<'m, ()>(&mut engine, ctx, state, unsafe c.silk_wasm_error_kind(unsafe store(state)), unsafe c.silk_wasm_error(unsafe store(state))) }
+  if !ok { run unsafe raise(&mut engine, ctx, state, unsafe c.silk_wasm_error_kind(unsafe store(state)), unsafe c.silk_wasm_error(unsafe store(state))) }
 }
 unsafe effect fn handle<'m, C: Composition>(engine: &mut Engine<'m, host.Services<C>>, ctx: *mut HeapHeader, state: *mut State, native: ?*mut u8) -> ValueBits ! OutOfMemoryError | JsException ? &mut Allocator { run unsafe checked(&mut engine, ctx, state, !Pointer.isNull<u8>(native)) let keptValue8 = run unsafe ownership.makeOwner(&mut engine, ctx, unsafe owner(state), unsafe c.silk_wasm_kind(native), native) return run unsafe keep(&mut engine, ctx, state, keptValue8) }
 unsafe effect fn required<'m, C: Composition>(engine: &mut Engine<'m, host.Services<C>>, ctx: *mut HeapHeader, state: *mut State, value: ValueBits, kind: u32) -> ?*mut u8 ! OutOfMemoryError | JsException ? &mut Allocator { let native = unsafe ownership.getNative(unsafe owner(state), value, kind) if Pointer.isNull<u8>(native) { return run engine.throwError(unsafe lendRealm(&ctx, ctx), NativeErrorKind.Type, b"Invalid WebAssembly native receiver") } return native }
@@ -345,13 +348,13 @@ unsafe effect fn instantiate<'m, C: Composition>(engine: &mut Engine<'m, host.Se
       if Pointer.isNull<u8>(entry.handle) {
         let suspended = run unsafe callback(&mut engine, ctx, state, b"suspending", &[value]) let mut function = value
         if !core.undefined(suspended) { function = suspended entry.suspending = 1 }
-        if !engine.isCallable(unsafe lendRealm(&ctx, ctx), unsafe lendFor(function)) { return run unsafe error<'m, ValueBits>(&mut engine, ctx, state, 7, Pointer.fromRef<u8>(&b"WebAssembly function import must be callable\0"[0])) }
+        if !engine.isCallable(unsafe lendRealm(&ctx, ctx), unsafe lendFor(function)) { run unsafe raise(&mut engine, ctx, state, 7, Pointer.fromRef<u8>(&b"WebAssembly function import must be callable\0"[0])) return ValueBits.Undefined }
         entry.callable = run unsafe reference(state, function)
       }
     } else {
       entry.handle = run unsafe unwrap(&mut engine, ctx, state, value, t.kind)
       if Pointer.isNull<u8>(entry.handle) {
-        if t.kind != 5 || (t.mutable != 0) { return run unsafe error<'m, ValueBits>(&mut engine, ctx, state, 7, Pointer.fromRef<u8>(&b"WebAssembly import has incompatible resource type\0"[0])) }
+        if t.kind != 5 || (t.mutable != 0) { run unsafe raise(&mut engine, ctx, state, 7, Pointer.fromRef<u8>(&b"WebAssembly import has incompatible resource type\0"[0])) return ValueBits.Undefined }
         entry.value = run unsafe convertIn(&mut engine, ctx, state, t.valueType, value)
       }
     }
@@ -427,7 +430,8 @@ unsafe effect fn importBody<'m, C: Composition>(engine: &mut Engine<'m, host.Ser
     let awaited = run unsafe observe(&mut engine, ctx, state, value)
     if !(unsafe c.silk_wasm_suspension_allowed(invocation) != 0) {
       run promise.performThen(&mut engine, unsafe lendRealm(&ctx, ctx), unsafe lendFor(awaited), unsafe lendFor(ValueBits.Undefined), unsafe lendFor(ValueBits.Undefined), unsafe lendFor(ValueBits.Undefined), unsafe lendFor(ValueBits.Undefined))
-      return run unsafe error<'m, i32>(&mut engine, ctx, state, 9, Pointer.fromRef<u8>(&b"Cannot suspend across a JavaScript boundary\0"[0]))
+      run unsafe raise(&mut engine, ctx, state, 9, Pointer.fromRef<u8>(&b"Cannot suspend across a JavaScript boundary\0"[0]))
+      return 0
     }
     let a = () let s = unsafe Pointer.borrow<(), State>(&a, state) let current = s.current drop s
     let mut jobPointer = unsafe c.silk_wasm_invocation_host(invocation)
@@ -470,7 +474,7 @@ unsafe effect fn finish<'m, C: Composition>(engine: &mut Engine<'m, host.Service
   let a = () let job = unsafe Pointer.borrow<(), Job>(&a, jobPointer) let invocation = job.invocation let types = ptr(&job.resultTypes) drop job
   let status = unsafe c.silk_wasm_invocation_status(invocation)
   if status == 2 { let value = run unsafe exceptionValue(&mut engine, ctx, state, unsafe c.silk_wasm_thrown(invocation)) return run unsafe exceptions.throwValue<ValueBits, Engine<'m, host.Services<C>>>(&mut engine, unsafe runtime.contextRuntime(ctx), unsafe value.retained()) }
-  if status != 0 { return run unsafe error<'m, ValueBits>(&mut engine, ctx, state, unsafe c.silk_wasm_invocation_error_kind(invocation), unsafe c.silk_wasm_invocation_error(invocation)) }
+  if status != 0 { run unsafe raise(&mut engine, ctx, state, unsafe c.silk_wasm_invocation_error_kind(invocation), unsafe c.silk_wasm_invocation_error(invocation)) return ValueBits.Undefined }
   let mut count: u32 = 0 let values = unsafe c.silk_wasm_results(invocation, Pointer.fromMutRef<u32>(&mut count))
   if count == 0 { return ValueBits.Undefined }
   if count == 1 { return run unsafe convertOut(&mut engine, ctx, state, u8.toU32(unsafe at<u8>(types, 0)), unsafe at<c.WasmValue>(values, 0)) }
@@ -877,11 +881,13 @@ unsafe effect fn compileOperation<'m, C: Composition>(engine: &mut Engine<'m, ho
   let offset = run unsafe extent(&mut engine, ctx, offsetValue) let length = run unsafe extent(&mut engine, ctx, lengthValue)
   if length == 0 {
     if validate { return ValueBits.Bool { value: false } }
-    return run unsafe error<'m, ValueBits>(&mut engine, ctx, state, 6, Pointer.fromRef<u8>(&b"WebAssembly module is empty\0"[0]))
+    run unsafe raise(&mut engine, ctx, state, 6, Pointer.fromRef<u8>(&b"WebAssembly module is empty\0"[0]))
+    return ValueBits.Undefined
   }
   if length > 1073741824 {
     if validate { return ValueBits.Bool { value: false } }
-    return run unsafe error<'m, ValueBits>(&mut engine, ctx, state, 6, Pointer.fromRef<u8>(&b"WebAssembly module exceeds the 1 GiB limit\0"[0]))
+    run unsafe raise(&mut engine, ctx, state, 6, Pointer.fromRef<u8>(&b"WebAssembly module exceeds the 1 GiB limit\0"[0]))
+    return ValueBits.Undefined
   }
   let mut bytes = List<u8>.make() let mut optionsValue = ValueBits.Undefined
   if !validate { bytes = run unsafe snapshot(&mut engine, ctx, buffer, offset, length) }
@@ -923,7 +929,7 @@ unsafe effect fn builtinFailure<'m, C: Composition>(engine: &mut Engine<'m, host
   unsafe c.silk_wasm_invocation_fail(invocation, 8, text.pointer(&bytes)) return true
 }
 unsafe effect fn raiseBody<'m, C: Composition>(engine: &mut Engine<'m, host.Services<C>>, ctx: *mut HeapHeader, state: *mut State, kind: i32, message: ?*const u8) -> ?*mut u8 ! OutOfMemoryError | JsException ? &mut Allocator {
-  let result = run Effect.result(unsafe error<'m, ()>(&mut engine, ctx, state, kind, message))
+  let result = run Effect.result(unsafe raise(&mut engine, ctx, state, kind, message))
   match move result { Result<(), OutOfMemoryError | JsException>.Success { .. } => () Result<(), OutOfMemoryError | JsException>.Failure { error } => { match move error { OutOfMemoryError {} => { fail OutOfMemoryError {} } JsException {} => () } } }
   let value = run unsafe keep(&mut engine, ctx, state, unsafe exceptions.take(unsafe runtime.contextRuntime(ctx)))
   return run unsafe thrown(&mut engine, ctx, state, value)

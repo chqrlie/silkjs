@@ -5,5 +5,5 @@ const os = require('os').constants;
 const files = require('internal/host').hasService('Files') ? require('fs').constants : {};
 module.exports = Object.freeze({
   ...os.dlopen, ...os.errno, ...os.priority, ...os.signals,
-  ...files, ...require('crypto').constants,
+  ...files, ...(require('internal/host').hasService('Crypto') ? require('crypto').constants : {}),
 });

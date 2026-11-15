@@ -67,7 +67,7 @@ import ext.napi_native
 import ext.profile_native
 import ext.inspector_native
 import libs.core.intl as intl
-import libs.core.capabilities { Composition }
+import libs.core.capabilities { Composition, checkCombination }
 import libs.core.capabilities as capabilities
 import ext.http_parser_native
 import ext.trace_native
@@ -337,11 +337,11 @@ unsafe fn openHandles<'m, C: Composition>(engine: &Engine<'m, Services<C>>) -> b
   let services = &engine.services
   let mut open = false
   if let Option<*mut net_native.State>.Some { value } = Pointer.nonNullMut<net_native.State>(services.network) { open = unsafe reportOpen(b"network and DNS", unsafe net_native.openHandles(value)) || open }
-  if let Option<*mut crypto_native.State>.Some { value } = Pointer.nonNullMut<crypto_native.State>(services.crypto) { open = unsafe reportOpen(b"crypto", unsafe crypto_native.openHandles(value)) || open }
-  if let Option<*mut tls_native.State>.Some { value } = Pointer.nonNullMut<tls_native.State>(services.tls) { open = unsafe reportOpen(b"TLS", unsafe tls_native.openHandles(value)) || open }
-  if let Option<*mut compression_native.State>.Some { value } = Pointer.nonNullMut<compression_native.State>(services.compression) { open = unsafe reportOpen(b"zlib", unsafe compression_native.openHandles(value)) || open }
+  static if capabilities.hasCrypto<C>() { if let Option<*mut crypto_native.State>.Some { value } = Pointer.nonNullMut<crypto_native.State>(services.crypto) { open = unsafe reportOpen(b"crypto", unsafe crypto_native.openHandles(value)) || open } }
+  static if capabilities.hasTls<C>() { if let Option<*mut tls_native.State>.Some { value } = Pointer.nonNullMut<tls_native.State>(services.tls) { open = unsafe reportOpen(b"TLS", unsafe tls_native.openHandles(value)) || open } }
+  static if capabilities.hasCompression<C>() { if let Option<*mut compression_native.State>.Some { value } = Pointer.nonNullMut<compression_native.State>(services.compression) { open = unsafe reportOpen(b"zlib", unsafe compression_native.openHandles(value)) || open } }
   if let Option<*mut process_native.State>.Some { value } = Pointer.nonNullMut<process_native.State>(services.processes) { open = unsafe reportOpen(b"child process", unsafe process_native.openHandles(value)) || open }
-  if let Option<*mut http2_native.State>.Some { value } = Pointer.nonNullMut<http2_native.State>(services.http2) { open = unsafe reportOpen(b"HTTP/2", unsafe http2_native.openHandles(value)) || open }
+  static if capabilities.hasHttp2<C>() { if let Option<*mut http2_native.State>.Some { value } = Pointer.nonNullMut<http2_native.State>(services.http2) { open = unsafe reportOpen(b"HTTP/2", unsafe http2_native.openHandles(value)) || open } }
   if let Option<*mut sqlite_native.State>.Some { value } = Pointer.nonNullMut<sqlite_native.State>(services.sqlite) { open = unsafe reportOpen(b"SQLite", unsafe sqlite_native.openHandles(value)) || open }
   open = unsafe reportOpen(b"WASI", unsafe Composition.wasmOpenHandles(&engine.*)) || open
   return open
@@ -449,11 +449,16 @@ unsafe effect fn configure<'m, C: Composition>(engine: &mut Engine<'m, Services<
   run unsafe function(&mut engine, context, native, b"builtinService", 42)
   // The services this runtime has (docs/composable-runtime.md): the bootstrap registers only
   // their built-ins. Every one is here until each becomes a capability the embedder chooses.
-  // Wasm and Files are the embedder's choice (`Capabilities`); the rest are still always here.
+  // Files, Compression, Http2, Crypto, Tls and Wasm are the embedder's choice (`Capabilities`); the rest are
+  // still always here.
   let mut wasm: &[u8] = b"" static if capabilities.hasWasm<C>() { wasm = b"Wasm" }
   let mut files: &[u8] = b"" static if capabilities.hasFiles<C>() { files = b"Files" }
-  let present = [b"Platform", b"ModuleResolver", files, b"Network", b"Processes", b"SystemInfo", b"Workers", b"Crypto", b"Tls",
-    b"Compression", b"Http", b"Http2", wasm, b"Database", b"TypeStripping", b"Inspector", b"NativeAddons", b"HostApi"]
+  let mut compression: &[u8] = b"" static if capabilities.hasCompression<C>() { compression = b"Compression" }
+  let mut http2: &[u8] = b"" static if capabilities.hasHttp2<C>() { http2 = b"Http2" }
+  let mut crypto: &[u8] = b"" static if capabilities.hasCrypto<C>() { crypto = b"Crypto" }
+  let mut tls: &[u8] = b"" static if capabilities.hasTls<C>() { tls = b"Tls" }
+  let present = [b"Platform", b"ModuleResolver", files, b"Network", b"Processes", b"SystemInfo", b"Workers", crypto, tls,
+    compression, b"Http", http2, wasm, b"Database", b"TypeStripping", b"Inspector", b"NativeAddons", b"HostApi"]
   let services = run unsafe common.array(&mut engine, memory, context)
   let mut named: usize = 0
   while named < present.length {
@@ -472,8 +477,10 @@ unsafe effect fn configure<'m, C: Composition>(engine: &mut Engine<'m, Services<
   // The first four are fs's, there only with a file system; the rest are the loop's.
   static if !capabilities.hasFiles<C>() { at = 4 }
   while at < ioNames.length { run unsafe function(&mut engine, context, native, ioNames[at], 2000 + usize.toU32(at)) at = at + 1 }
-  run unsafe function(&mut engine, context, native, b"crypto", 2100)
-  run unsafe function(&mut engine, context, native, b"cryptoAsync", 2101)
+  static if capabilities.hasCrypto<C>() {
+    run unsafe function(&mut engine, context, native, b"crypto", 2100)
+    run unsafe function(&mut engine, context, native, b"cryptoAsync", 2101)
+  }
   let asyncNames = [b"getAsyncContext", b"setAsyncContext", b"setAsyncHooksEnabled", b"asyncHookFatal"]
   at = 0
   while at < asyncNames.length { run unsafe function(&mut engine, context, native, asyncNames[at], 2200 + usize.toU32(at)) at = at + 1 }
@@ -494,11 +501,13 @@ unsafe effect fn configure<'m, C: Composition>(engine: &mut Engine<'m, Services<
   run unsafe function(&mut engine, context, native, b"httpChunk", 2403)
   run unsafe function(&mut engine, context, native, b"httpRespondText", 2404)
   run unsafe function(&mut engine, context, native, b"secure", 2405)
-  run unsafe function(&mut engine, context, native, b"tls", 2500)
-  run unsafe function(&mut engine, context, native, b"compression", 2600)
-  run unsafe function(&mut engine, context, native, b"compressionAsync", 2601)
+  static if capabilities.hasTls<C>() { run unsafe function(&mut engine, context, native, b"tls", 2500) }
+  static if capabilities.hasCompression<C>() {
+    run unsafe function(&mut engine, context, native, b"compression", 2600)
+    run unsafe function(&mut engine, context, native, b"compressionAsync", 2601)
+  }
   run unsafe function(&mut engine, context, native, b"processNative", 2700)
-  run unsafe function(&mut engine, context, native, b"http2", 5000)
+  static if capabilities.hasHttp2<C>() { run unsafe function(&mut engine, context, native, b"http2", 5000) }
   run unsafe function(&mut engine, context, native, b"workerNative", 6000)
   run unsafe function(&mut engine, context, native, b"sqliteNative", 7000)
   run unsafe function(&mut engine, context, native, b"moduleNative", 19000)
@@ -601,18 +610,17 @@ unsafe effect fn execute<'m, D: Driver, C: Composition>(engine: &mut Engine<'m, 
     run unsafe intl.install(&mut engine, context, &process.namespace)
   }
   engine.services.io = run fs_async.make()
-  engine.services.crypto = run crypto_native.open(main)
+  static if capabilities.hasCrypto<C>() { engine.services.crypto = run crypto_native.open(main) }
   let io = unsafe Intrinsic.pointerRequalify<?*mut fs_async.State, *mut fs_async.State>(engine.services.io)
   let workers = unsafe Intrinsic.pointerRequalify<?*mut worker_native.State, *mut worker_native.State>(engine.services.workers)
-  let crypto = unsafe Intrinsic.pointerRequalify<?*mut crypto_native.State, *mut crypto_native.State>(engine.services.crypto)
-  run unsafe worker_native.attach(workers, io, crypto)
+  run unsafe worker_native.attach(workers, io, engine.services.crypto)
   let mailbox = match unsafe worker_native.mailbox(workers) { Option<Mailbox>.Some { value } => value _ => { Intrinsic.trap("worker diagnostics are not attached") } }
   engine.services.inspector = run inspector_native.create(unsafe fs_async.wakerAddress(io), mailbox)
   engine.services.network = run net_native.open(io)
-  engine.services.tls = run tls_native.open(allocator)
-  engine.services.compression = run compression_native.open()
+  static if capabilities.hasTls<C>() { engine.services.tls = run tls_native.open(allocator) }
+  static if capabilities.hasCompression<C>() { engine.services.compression = run compression_native.open() }
   engine.services.processes = run process_native.make(io, workers)
-  engine.services.http2 = run http2_native.open()
+  static if capabilities.hasHttp2<C>() { engine.services.http2 = run http2_native.open() }
   engine.services.sqlite = run sqlite_native.open(allocator)
   engine.services.napi = run napi_native.open(allocator, unsafe Intrinsic.pointerReinterpret<*mut worker_native.State, *mut u8>(workers), worker_native.silkNodeFatalReport, io)
   static if capabilities.hasWasm<C>() {
@@ -801,6 +809,7 @@ unsafe effect fn realm<'m, D: Driver, C: Composition>(engine: &mut Engine<'m, Se
         }
         _ => ()
       }
+      static if capabilities.hasTls<C>() {
       match Pointer.nonNullMut<tls_native.State>(engine.services.tls) {
         Option<*mut tls_native.State>.Some { value: tls } => {
           unsafe tls_native.close(&mut engine, context, tls)
@@ -808,12 +817,15 @@ unsafe effect fn realm<'m, D: Driver, C: Composition>(engine: &mut Engine<'m, Se
         }
         _ => ()
       }
+      }
+      static if capabilities.hasHttp2<C>() {
       match Pointer.nonNullMut<http2_native.State>(engine.services.http2) {
         Option<*mut http2_native.State>.Some { value: http2 } => {
           unsafe http2_native.close(http2)
           engine.services.http2 = Pointer.null<http2_native.State>()
         }
         _ => ()
+      }
       }
       match Pointer.nonNullMut<sqlite_native.State>(engine.services.sqlite) {
         Option<*mut sqlite_native.State>.Some { value: sqlite } => {
@@ -831,6 +843,7 @@ unsafe effect fn realm<'m, D: Driver, C: Composition>(engine: &mut Engine<'m, Se
       }
       unsafe Composition.wasmCloseWasi(&mut engine, context)
       unsafe Composition.wasmClose(&mut engine, context)
+      static if capabilities.hasCompression<C>() {
       match Pointer.nonNullMut<compression_native.State>(engine.services.compression) {
         Option<*mut compression_native.State>.Some { value: compression } => {
           unsafe compression_native.close(&mut engine, context, compression, io)
@@ -838,9 +851,12 @@ unsafe effect fn realm<'m, D: Driver, C: Composition>(engine: &mut Engine<'m, Se
         }
         _ => ()
       }
+      }
+      static if capabilities.hasCrypto<C>() {
       match Pointer.nonNullMut<crypto_native.State>(engine.services.crypto) {
         Option<*mut crypto_native.State>.Some { value: crypto } => { unsafe crypto_native.close(&mut engine, context, crypto, io) engine.services.crypto = Pointer.null<crypto_native.State>() }
         _ => ()
+      }
       }
       unsafe fs_async.close(&mut engine, context, io) engine.services.io = Pointer.null<fs_async.State>()
     }
@@ -1021,6 +1037,7 @@ unsafe effect fn executeRuntime<D: Driver, C: Composition>(workers: *mut worker_
 /// capabilities, and returns its exit status. `mode.exiting` is for the executable alone: the
 /// process ends with it.
 pub effect fn executeMain<D: Driver, C: Composition>(arguments: &List<Bytes>, mode: Mode, driver: &mut D, capabilities: C) -> i32 ! OutOfMemoryError | SynchronizationError ? &mut Allocator {
+  checkCombination<C>()
   let namespace = run ClassIdAllocator.make()
   let process = run Process.make(&namespace)
   let domain = run WaiterDomain.make()

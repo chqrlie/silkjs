@@ -68,7 +68,9 @@ const {
   validateObject,
 } = require('internal/streams/iter/support');
 const binding = require('internal/streams/iter/compression');
-const constants = require('internal/compression/constants');
+// Loaded when a compression transform is made: a runtime without compression loads this module too.
+const lazy = name => { let loaded; return new Proxy({}, { get(target, key) { return (loaded ??= require(name))[key]; } }); };
+const constants = lazy('internal/compression/constants');
 
 const {
   // Zlib modes

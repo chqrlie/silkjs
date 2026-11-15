@@ -173,6 +173,69 @@ pub interface Files {
   unsafe fn execute(self: &Self, call: &Call, out: &mut Outcome) -> ()
 }
 
+/// Compression: `node:zlib`, `CompressionStream` and `DecompressionStream`, over zlib, zstd and
+/// brotli. Native ids 2600 and 2601 are this capability's. A library service: its contract is its
+/// presence until the library is replaced (docs/composable-runtime.md, step 8).
+pub interface Compression {
+  /// A constant of the implementation type: whether compression is there.
+  static fn present() -> bool
+}
+/// zlib, zstd and brotli.
+pub struct NativeCompression {}
+impl Copy for NativeCompression {}
+impl Compression for NativeCompression { static fn present() -> bool { return true } }
+/// No compression: `node:zlib` is not there, and neither are `CompressionStream` and
+/// `DecompressionStream`.
+pub struct EmptyCompression {}
+impl Copy for EmptyCompression {}
+impl Compression for EmptyCompression { static fn present() -> bool { return false } }
+
+/// HTTP/2: `node:http2`, over nghttp2. Native id 5000 is this capability's. A library service,
+/// as `Compression` is.
+pub interface Http2 {
+  /// A constant of the implementation type: whether HTTP/2 is there.
+  static fn present() -> bool
+}
+/// nghttp2.
+pub struct Nghttp2 {}
+impl Copy for Nghttp2 {}
+impl Http2 for Nghttp2 { static fn present() -> bool { return true } }
+/// No HTTP/2: `node:http2` is not there.
+pub struct EmptyHttp2 {}
+impl Copy for EmptyHttp2 {}
+impl Http2 for EmptyHttp2 { static fn present() -> bool { return false } }
+
+/// Crypto: `node:crypto` and `globalThis.crypto`, over OpenSSL. Native ids 2100 and 2101 are this
+/// capability's. A library service, as `Compression` is. Without it `require('crypto')` fails with
+/// `ERR_NO_CRYPTO`, as in a Node build without OpenSSL.
+pub interface Crypto {
+  /// A constant of the implementation type: whether crypto is there.
+  static fn present() -> bool
+}
+/// OpenSSL's crypto.
+pub struct OpenSslCrypto {}
+impl Copy for OpenSslCrypto {}
+impl Crypto for OpenSslCrypto { static fn present() -> bool { return true } }
+/// No crypto.
+pub struct EmptyCrypto {}
+impl Copy for EmptyCrypto {}
+impl Crypto for EmptyCrypto { static fn present() -> bool { return false } }
+
+/// TLS: `node:tls` and `node:https`, over OpenSSL. Native id 2500 is this capability's, and the
+/// sessions that a socket's upgrade (2405, Network's) attaches. It needs `Crypto` (`checkCombination`).
+pub interface Tls {
+  /// A constant of the implementation type: whether TLS is there.
+  static fn present() -> bool
+}
+/// OpenSSL's TLS.
+pub struct OpenSslTls {}
+impl Copy for OpenSslTls {}
+impl Tls for OpenSslTls { static fn present() -> bool { return true } }
+/// No TLS.
+pub struct EmptyTls {}
+impl Copy for EmptyTls {}
+impl Tls for EmptyTls { static fn present() -> bool { return false } }
+
 /// The file type bits ([`ModuleResolver.kind`]) of a regular file.
 pub const MODULE_FILE: i32 = 0o100000
 /// The file type bits of a directory.
@@ -203,12 +266,16 @@ pub interface ModuleResolver {
 /// a capability the program does not want is given its empty implementation.
 ///
 /// ```silk
-/// let capabilities = Capabilities { platform: OsPlatform {}, modules: NodeResolution {}, files: OsFiles {}, wasm: EmptyWasm {}, hostApi: EmptyHostApi {} }
+/// let capabilities = Capabilities { platform: OsPlatform {}, modules: NodeResolution {}, files: OsFiles {}, compression: NativeCompression {}, http2: Nghttp2 {}, crypto: OpenSslCrypto {}, tls: OpenSslTls {}, wasm: EmptyWasm {}, hostApi: EmptyHostApi {} }
 /// ```
-pub struct Capabilities<P, M, F, W, A> {
+pub struct Capabilities<P, M, F, Z, H, K, T, W, A> {
   pub platform: P,
   pub modules: M,
   pub files: F,
+  pub compression: Z,
+  pub http2: H,
+  pub crypto: K,
+  pub tls: T,
   pub wasm: W,
   pub hostApi: A,
 }
@@ -221,6 +288,14 @@ pub interface Composition {
   static fn wasmPresent() -> bool
   /// `Files.present` of the program's file system.
   static fn filesPresent() -> bool
+  /// `Compression.present` of the program's compression.
+  static fn compressionPresent() -> bool
+  /// `Http2.present` of the program's HTTP/2.
+  static fn http2Present() -> bool
+  /// `Crypto.present` of the program's crypto.
+  static fn cryptoPresent() -> bool
+  /// `Tls.present` of the program's TLS.
+  static fn tlsPresent() -> bool
   /// `Files.native` of the program's file system.
   static fn filesNative() -> bool
   /// `Files.direct` of the program's file system.
@@ -263,15 +338,24 @@ static fn presentOf<W: Wasm>() -> bool { return Wasm.present() }
 static fn nativeFiles<F: Files>() -> bool { return Files.native() }
 static fn directFiles<F: Files>() -> bool { return Files.direct() }
 static fn presentFiles<F: Files>() -> bool { return Files.present() }
+static fn presentCompression<Z: Compression>() -> bool { return Compression.present() }
+static fn presentHttp2<H: Http2>() -> bool { return Http2.present() }
+static fn presentCrypto<K: Crypto>() -> bool { return Crypto.present() }
+static fn presentTls<T: Tls>() -> bool { return Tls.present() }
 
-impl<P: Platform + Copy, M: ModuleResolver + Copy, F: Files + Copy, W: Wasm + Copy, A: HostApi + Copy> Composition for Capabilities<P, M, F, W, A> {
+impl<P: Platform + Copy, M: ModuleResolver + Copy, F: Files + Copy, Z: Compression + Copy, H: Http2 + Copy, K: Crypto + Copy, T: Tls + Copy, W: Wasm + Copy, A: HostApi + Copy>
+  Composition for Capabilities<P, M, F, Z, H, K, T, W, A> {
+  static fn cryptoPresent() -> bool { return presentCrypto<K>() }
+  static fn tlsPresent() -> bool { return presentTls<T>() }
+  static fn compressionPresent() -> bool { return presentCompression<Z>() }
+  static fn http2Present() -> bool { return presentHttp2<H>() }
   static fn wasmPresent() -> bool { return presentOf<W>() }
   static fn filesPresent() -> bool { return presentFiles<F>() }
   static fn filesNative() -> bool { return nativeFiles<F>() }
   static fn filesDirect() -> bool { return directFiles<F>() }
   unsafe fn filesExecute(self: &Self, call: &Call, out: &mut Outcome) -> () { unsafe self.files.execute(&call, &mut out) }
   fn forWorker(self: &Self) -> Self {
-    return Capabilities<P, M, F, W, A> { platform: self.platform.forWorker(), modules: self.modules.forWorker(), files: self.files.forWorker(), wasm: self.wasm.forWorker(), hostApi: self.hostApi.forWorker() }
+    return Capabilities<P, M, F, Z, H, K, T, W, A> { platform: self.platform.forWorker(), modules: self.modules.forWorker(), files: self.files.forWorker(), compression: self.compression, http2: self.http2, crypto: self.crypto, tls: self.tls, wasm: self.wasm.forWorker(), hostApi: self.hostApi.forWorker() }
   }
   effect fn platformGetenv<'m>(engine: &Engine<'m, Services<Self>>, name: &[u8], into: &mut List<u8>) -> bool ! OutOfMemoryError ? &mut Allocator {
     let platform = engine.services.capabilities.platform return run platform.getenv(name, &mut into.*)
@@ -346,6 +430,23 @@ impl<P: Platform + Copy, M: ModuleResolver + Copy, F: Files + Copy, W: Wasm + Co
     let api = engine.services.capabilities.hostApi return run api.call(&mut engine, id, realm, argc, argv)
   }
 }
+
+/// Whether the program has crypto (`Crypto.present`): a constant, for `static if`.
+pub static fn hasCrypto<C: Composition>() -> bool { return Composition.cryptoPresent() }
+/// Whether the program has TLS (`Tls.present`): a constant, for `static if`.
+pub static fn hasTls<C: Composition>() -> bool { return Composition.tlsPresent() }
+
+/// The capabilities that need others: a combination without what one needs does not build.
+pub fn checkCombination<C: Composition>() -> () {
+  static if Composition.tlsPresent() && !Composition.cryptoPresent() {
+    compileError("Tls needs Crypto: give Capabilities a real crypto (OpenSslCrypto), or no TLS (EmptyTls)")
+  }
+}
+
+/// Whether the program has compression (`Compression.present`): a constant, for `static if`.
+pub static fn hasCompression<C: Composition>() -> bool { return Composition.compressionPresent() }
+/// Whether the program has HTTP/2 (`Http2.present`): a constant, for `static if`.
+pub static fn hasHttp2<C: Composition>() -> bool { return Composition.http2Present() }
 
 /// Whether the program has a file system (`Files.present`): a constant, for `static if`.
 pub static fn hasFiles<C: Composition>() -> bool { return Composition.filesPresent() }

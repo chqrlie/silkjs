@@ -4,8 +4,8 @@
 // public modules expose, grouped as Node's src/node_constants.cc groups them.
 const os = require('os').constants;
 const fs = require('internal/host').hasService('Files') ? require('fs').constants : {};
-const crypto = require('crypto').constants;
-const zlib = require('zlib').constants;
+const crypto = require('internal/host').hasService('Crypto') ? require('crypto').constants : {};
+const zlib = require('internal/host').hasService('Compression') ? require('zlib').constants : {};
 
 // Node's TRACE_EVENT_PHASE_* values: the character code of each phase letter.
 const trace = { __proto__: null };

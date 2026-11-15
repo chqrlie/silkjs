@@ -12,26 +12,26 @@ declarations, the libc and library surface each service reaches today. Requires 
 
 | Service | Built-ins | JavaScript KiB | Load-time requires | Lazy requires | Silk files | Silk KiB | `extern "C"` |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Core | 326 | 3,473.3 | 950 | 352 | 41 | 718.3 | 80 |
+| Core | 326 | 3,474.2 | 948 | 353 | 41 | 725.9 | 80 |
 | Platform | 0 | 0.0 | 0 | 0 | 2 | 10.8 | 0 |
 | ModuleResolver | 15 | 181.7 | 22 | 20 | 2 | 6.9 | 0 |
 | Files | 18 | 238.9 | 76 | 40 | 5 | 81.2 | 49 |
-| Network | 45 | 1,421.2 | 277 | 62 | 4 | 253.4 | 107 |
+| Network | 45 | 1,422.2 | 271 | 65 | 4 | 253.6 | 107 |
 | Processes | 10 | 88.4 | 50 | 14 | 3 | 68.5 | 60 |
 | SystemInfo | 2 | 11.6 | 4 | 2 | 2 | 38.9 | 61 |
 | Workers | 6 | 47.6 | 15 | 20 | 4 | 117.0 | 24 |
-| Crypto | 28 | 453.5 | 159 | 55 | 3 | 162.5 | 280 |
+| Crypto | 28 | 453.6 | 159 | 55 | 3 | 162.5 | 280 |
 | Tls | 12 | 315.8 | 44 | 9 | 3 | 102.5 | 213 |
 | Compression | 7 | 61.0 | 25 | 1 | 2 | 39.1 | 48 |
 | Http | 2 | 33.6 | 8 | 3 | 3 | 37.3 | 28 |
 | Http2 | 7 | 242.8 | 51 | 2 | 2 | 56.6 | 103 |
-| Wasm | 3 | 35.9 | 3 | 1 | 5 | 179.1 | 156 |
+| Wasm | 3 | 35.9 | 3 | 1 | 5 | 179.3 | 156 |
 | Database | 6 | 54.8 | 8 | 7 | 2 | 85.6 | 6 |
 | TypeStripping | 2 | 3,716.1 | 2 | 4 | 0 | 0.0 | 0 |
 | Inspector | 24 | 165.0 | 40 | 47 | 18 | 234.1 | 33 |
 | NativeAddons | 1 | 10.6 | 0 | 7 | 4 | 221.7 | 205 |
-| Executable | 47 | 577.1 | 323 | 35 | 6 | 38.6 | 21 |
-| **Total** | 561 | 11,128.9 | 2057 | 681 | 111 | 2,452.2 | 1474 |
+| Executable | 47 | 577.1 | 323 | 35 | 6 | 38.7 | 21 |
+| **Total** | 561 | 11,130.9 | 2049 | 685 | 111 | 2,460.4 | 1474 |
 
 ## Linked size
 
@@ -96,7 +96,7 @@ build without the capability would drop, at most.
 | `internal/webstreams/readablestream` | Core | 116.6 |
 | `internal/web/vendor/text-encoding/data/euc-kr.cp` | Core | 112.8 |
 | `internal/web/vendor/text-encoding/data/big5.cp` | Core | 112.4 |
-| `crypto` | Crypto | 106.2 |
+| `crypto` | Crypto | 106.3 |
 
 ## Edges across service lines
 
@@ -107,7 +107,7 @@ Load-time edges block an empty service outright; lazy ones fail only on the path
 
 | From | To | Edges | Load-time |
 | --- | --- | ---: | ---: |
-| Core | Compression | 7 | 4 |
+| Core | Compression | 6 | 2 |
 | Core | Crypto | 15 | 2 |
 | Core | Database | 1 | 0 |
 | Core | Executable | 14 | 4 |
@@ -140,15 +140,15 @@ Load-time edges block an empty service outright; lazy ones fail only on the path
 | Inspector | Workers | 7 | 2 |
 | ModuleResolver | Files | 2 | 1 |
 | NativeAddons | Workers | 1 | 0 |
-| Network | Compression | 5 | 2 |
-| Network | Crypto | 6 | 3 |
+| Network | Compression | 3 | 0 |
+| Network | Crypto | 6 | 0 |
 | Network | Database | 1 | 0 |
 | Network | Files | 2 | 0 |
 | Network | Http2 | 1 | 0 |
 | Network | Inspector | 6 | 5 |
 | Network | Processes | 2 | 0 |
 | Network | SystemInfo | 1 | 1 |
-| Network | Tls | 5 | 1 |
+| Network | Tls | 4 | 0 |
 | Network | Workers | 1 | 0 |
 | Processes | Http | 1 | 0 |
 | Tls | Files | 2 | 0 |
@@ -327,8 +327,7 @@ Load-time edges block an empty service outright; lazy ones fail only on the path
 | `internal/stdio` | Core | `net` | Network | lazy |
 | `internal/streams/fast-utf8-stream` | Core | `fs` | Files | lazy |
 | `internal/streams/fast-utf8-stream` | Core | `internal/fs/utils` | Files | lazy |
-| `internal/streams/iter/compression` | Core | `internal/compression/binding` | Compression | load |
-| `internal/streams/iter/transform` | Core | `internal/compression/constants` | Compression | load |
+| `internal/streams/iter/compression` | Core | `internal/compression/binding` | Compression | lazy |
 | `internal/timers_binding` | Core | `internal/trace_events` | Inspector | lazy |
 | `internal/tls/context` | Tls | `fs` | Files | lazy |
 | `internal/trace_events` | Inspector | `worker_threads` | Workers | lazy |
@@ -347,15 +346,13 @@ Load-time edges block an empty service outright; lazy ones fail only on the path
 | `internal/web/blob` | Core | `fs` | Files | lazy |
 | `internal/web/fetch/client` | Network | `tls` | Tls | lazy |
 | `internal/web/fetch/formdata` | Network | `crypto` | Crypto | lazy |
-| `internal/web/fetch/transport` | Network | `internal/compression/constants` | Compression | load |
 | `internal/web/fetch/transport` | Network | `zlib` | Compression | lazy |
 | `internal/web/fetch` | Network | `crypto` | Crypto | lazy |
 | `internal/web/storage` | Database | `inspector` | Inspector | lazy |
 | `internal/web/wasm` | Wasm | `internal/web/fetch` | Network | lazy |
-| `internal/web/websocket/compression` | Network | `internal/compression/constants` | Compression | load |
 | `internal/web/websocket/compression` | Network | `zlib` | Compression | lazy |
-| `internal/web/websocket/framing` | Network | `crypto` | Crypto | load |
-| `internal/web/websocket` | Network | `crypto` | Crypto | load |
+| `internal/web/websocket/framing` | Network | `crypto` | Crypto | lazy |
+| `internal/web/websocket` | Network | `crypto` | Crypto | lazy |
 | `internal/webstreams/adapters` | Core | `zlib` | Compression | lazy |
 | `internal/worker/broadcast` | Workers | `internal/web/websocket/events` | Network | load |
 | `internal/worker/clone` | Core | `crypto` | Crypto | lazy |
@@ -377,8 +374,7 @@ Load-time edges block an empty service outright; lazy ones fail only on the path
 | `internal/worker` | Workers | `internal/trace_events` | Inspector | lazy |
 | `internal/worker` | Workers | `internal/watch_mode/dependencies` | Executable | lazy |
 | `internal/worker` | Workers | `internal/worker/profiles` | Inspector | lazy |
-| `internal/ws` | Network | `crypto` | Crypto | load |
-| `internal/ws` | Network | `https` | Tls | load |
+| `internal/ws` | Network | `crypto` | Crypto | lazy |
 | `net` | Network | `cluster` | Processes | lazy |
 | `path` | Core | `internal/path_events/glob` | Files | lazy |
 | `perf_hooks` | Core | `host.traceNative` | Inspector | call |
@@ -459,12 +455,16 @@ Built-ins that call require with a computed name, which no static check can see;
 | `internal/main/mksnapshot` | 0 | 1 |
 | `internal/sea` | 0 | 1 |
 | `internal/streams/fast-utf8-stream` | 0 | 1 |
+| `internal/streams/iter/transform` | 0 | 1 |
 | `internal/test_runner/utils` | 0 | 1 |
 | `internal/worker` | 0 | 1 |
 | `internal/worker/js_transferable` | 0 | 1 |
+| `internal/ws` | 0 | 1 |
 | `worker_threads` | 0 | 1 |
+| `internal/web/fetch/transport` | 0 | 1 |
 | `internal/web/index` | 0 | 2 |
 | `internal/web/vendor/text-encoding/lib/main/Encoding` | 0 | 1 |
 | `internal/web/websocket` | 0 | 1 |
+| `internal/web/websocket/compression` | 0 | 1 |
 | `internal/loader/loader` | 0 | 1 |
 | `internal/bootstrap/silk` | 0 | 4 |

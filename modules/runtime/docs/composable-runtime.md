@@ -188,7 +188,7 @@ pub service Binding {
 
 **Dispatch.** `Services.nativeGeneric` stays an if-chain over constant id ranges, with each arm under its service's constant `present`. The calls the loop makes per callback (immediates 2230 to 2241, the clock, `bufferOperation`) stay in the core ahead of the chain, as today. Id blocks stay fixed numbers in one registry file in the core, because bytecode caches and heap images store them, and a block belongs to a service, not to an implementation. The gate is equal instruction counts on Octane and the HTTP benchmarks.
 
-**Services that need each other.** `Tls` needs `Network` and `Crypto`. `Http2` and `Inspector` need `Network`. `TypeStripping` needs `Wasm`, because amaro runs on WebAssembly. `localStorage` needs `Database` and `Files`. `embed.start` checks the `present` constants in a static assertion, so a wrong combination fails the build with a message naming both services. If the pinned compiler cannot evaluate that assertion, the same check runs first thing at start. Step 1 settles which.
+**Services that need each other.** `Tls` needs `Network` and `Crypto`. `Http2` and `Inspector` need `Network`. `TypeStripping` needs `Wasm`, because amaro runs on WebAssembly. `localStorage` needs `Database` and `Files`. `embed.start` checks the `present` constants in a static assertion, so a wrong combination fails the build with a message naming both services (`checkCombination`, step 5).
 
 **The one dependency of this shape.** Native functions reach a service as an Effect requirement, and they are called through the engine's host hooks, whose requirement is fixed at `? &mut Allocator` today. The hooks have to carry a generic requirement row. Step 1 measures that on Octane instruction counts before anything else moves. If it costs, the same services become the fields of one `Capabilities` struct passed to `embed.start`. The embedder then writes a field per service instead of a `provideMut` line per service, and nothing else in this design changes.
 
@@ -607,6 +607,28 @@ Still to come in step 4: the readers that do not go through `fs` and open files 
 preopens (WAMR's own file layer), SQLite's VFS, and OpenSSL's root certificates. A
 `ModuleResolver` over a `Files` (so a rooted or in-memory file system also serves modules) is a
 small addition when an embedder needs it.
+
+**Step 5, first part: Compression, Http2, Crypto, Tls.** Each is a library service with a
+presence constant and an empty implementation: `NativeCompression` and `EmptyCompression`,
+`Nghttp2` and `EmptyHttp2`, `OpenSslCrypto` and `EmptyCrypto`, `OpenSslTls` and `EmptyTls`.
+`Capabilities` is now `{ platform, modules, files, compression, http2, crypto, tls, wasm, hostApi }`.
+Without one, its natives are not registered, its state is not opened, its loop turn and resource
+report are not compiled, and its built-ins are not there; `require('crypto')` fails with
+`ERR_NO_CRYPTO` and `globalThis.crypto` is undefined, as in a Node build without OpenSSL, and
+fetch asks for no content encoding without compression. The built-ins of other services that
+reached into these at load (`constants`, the constants binding, `stream/web`, the iterable stream
+transforms, fetch's transport, WebSocket and `internal/ws`, `crypto`'s cipher lists, the option
+lookup) load them when used. Their C exports stay kept (`ext/keep_exports.silk`): the C glue that
+calls them is still linked until the package split (step 7). Their contract is presence for now:
+the natives, state and poll of each still live in the core and move with their package in step 7.
+
+"Services that need each other" is settled at build time: `checkCombination` runs a `static if`
+with `compileError` for each rule, so a program that gives `Capabilities` a real `Tls` and an
+empty `Crypto` does not build ("Tls needs Crypto: give Capabilities a real crypto (OpenSslCrypto),
+or no TLS (EmptyTls)"). `silk check` does not report it, since it does not instantiate the
+runtime; `silk build` does.
+
+The smoke test without WebAssembly has none of the four; the one with it has all of them.
 
 ## Risks and decisions taken
 
