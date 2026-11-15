@@ -62,9 +62,9 @@ The trace sink (`src/ext/trace_native.silk`, `trace_abi.silk`) is another positi
 
 ## 5. System/process records and native ownership
 
-**Sources:** `src/ext/os_abi.silk`, `src/ext/os_native.silk`.
+**Sources:** `src/ext/os_abi.silk`, `src/ext/os_native.silk`, `src/ext/uv_os.silk`, `src/ext/uv_inet.silk`.
 
-The runtime now reads CPU information, network interfaces, user records, resource usage, and memory through native APIs. The integrated executable passed the exercised OS/process identity, usage-shape, and umask comparisons against Node 24.22.2; this is not exhaustive platform verification.
+The runtime now reads CPU information, network interfaces, user records, resource usage, and memory through native APIs. The queries themselves (`uv_os.silk`) and the socket address conversions (`uv_inet.silk`) are Silk that keeps libuv 1.51's names, structures, statuses and results; on Linux they were compared with libuv 1.51.0 itself over real and substituted `/proc` and cgroup files. The integrated executable passed the exercised OS/process identity, usage-shape, and umask comparisons against Node 24.22.2; this is not exhaustive platform verification.
 
 **Potential stdlib contribution:** owned CPU/interface/passwd results, growable native string queries, credential/group operations, and normalized resource counters. Preserve Darwin/Linux LP64 layout differences, unsigned IDs, allocator cleanup, and platform errno semantics. Exclude the JS property/encoding adapters.
 

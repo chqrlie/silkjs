@@ -141,16 +141,23 @@ uvwasi (MIT)
   Revision: e76edba54038e097aa58f55eef5ad34cb258b817.
   ../native/libuv/uvwasi is its src/ and include/ with
   ../native/libuv/uvwasi/ownership.patch applied.
+  ../native/libuv/uvwasi/shim/uv.h, which uvwasi is compiled against in place
+  of libuv's uv.h, takes its error, handle type and event numbers from
+  libuv 1.51.0 (MIT).
   License: vendor/licenses/UVWASI-LICENSE.
 
 3. Downloaded at build time, not source-vendored
 ------------------------------------------------
+libuv 1.51.0 (MIT) is no longer downloaded or compiled. The Silk modules that
+replace it (src/ext/uv_loop.silk, uv_os.silk, uv_inet.silk, uv_addon.silk and
+uvwasi_host.silk) follow its behavior and adapt parts of its logic, so its
+license notice still applies to them (vendor/licenses/LIBUV-LICENSE).
+
 Silk downloads these source releases, checks their SHA-256 and compiles them
 into the executable ([native.archive] in each silk.toml):
 
   SIMDe (MIT), header-only, for WAMR: this package's silk.toml.
     vendor/licenses/SIMDe-LICENSE retains upstream COPYING.
-  libuv 1.51.0 (MIT): ../native/libuv
   OpenSSL 3.5.4 (Apache-2.0): ../native/openssl, with the files its Configure
     writes in ../native/openssl/generated
   nghttp2 1.66.0 (MIT): ../native/nghttp2

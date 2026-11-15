@@ -22,9 +22,9 @@ import silk.io.reactor { ReactorError, Waker }
 import silk.num.usize
 import ext.blocking_pool as pool
 import ext.fs_async as loops
-import ext.uv_fs as uv
 import ext.napi_core as napi
 import ext.napi_values as values
+import ext.uv_loop as uvl
 
 const OK: i32 = 0
 const INVALID_ARG: i32 = 1
@@ -872,7 +872,7 @@ pub export "C" fn silk_napi_async_close(env: *mut u8) -> () {
     let s2 = unsafe Pointer.borrow<(), Async>(&a, unsafe nn(state)) let functions = s2.functions drop s2
     if !cleanup && !more && !unsafe workPending(unsafe nn(state)) && Pointer.isNull<Function>(functions) { break }
     // Addon libuv handles, such as an async cleanup hook's timer, run on the runtime's guest loop.
-    let _ignored = unsafe uv.uv_run(unsafe loops.loopPointer(io), RUN_NOWAIT)
+    let _ignored = unsafe uvl.uv_run(unsafe loops.loopPointer(io), RUN_NOWAIT)
     if !more { run unsafe loops.waitWork(io) }
   }
   while true {

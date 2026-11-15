@@ -10,15 +10,9 @@ import silk.core.ownership { Drop }
 import silk.concurrency.atomic { Atomic, MemoryOrder }
 import silk.concurrency.sync { Mutex }
 import silk.concurrency.thread { Concurrent, Transferable }
-import ext.process_abi as process
 import ext.uv_net as net
-import ext.uv_fs as uv
+import ext.uv_loop as uvl
 
-@deferredCallbacks("callback")
-unsafe extern "C" fn uv_async_init(loop: *mut u8, handle: *mut u8, callback: extern "C" fn(*mut u8) -> ()) -> i32
-unsafe extern "C" fn uv_async_send(handle: *mut u8) -> i32
-@foreign(noCapture: .("loop"))
-unsafe extern "C" fn uv_stop(loop: *mut u8) -> ()
 @threadCallbacks("start")
 unsafe extern "C" fn pthread_create(thread: *mut usize, attributes: ?*const u8, start: extern "C" fn(?*mut u8) -> ?*mut u8, argument: ?*mut u8) -> i32
 unsafe extern "C" fn pthread_join(thread: usize, result: ?*mut ?*mut u8) -> i32
@@ -71,13 +65,13 @@ impl Handles {
 export "C" fn silkVMInterruptClosed(handle: *mut u8) -> () {}
 impl Drop for Handles {
   fn drop(self: &mut Self) -> () {
-    if self.signalReady { unsafe net.uv_close(unsafe nonnull(self.signal), silkVMInterruptClosed) }
-    if self.wakeReady { unsafe net.uv_close(unsafe nonnull(self.wake), silkVMInterruptClosed) }
+    if self.signalReady { unsafe uvl.uv_close(unsafe nonnull(self.signal), silkVMInterruptClosed) }
+    if self.wakeReady { unsafe uvl.uv_close(unsafe nonnull(self.wake), silkVMInterruptClosed) }
     if self.loopReady {
       // Both handles are closing, so UV_RUN_DEFAULT drains their close callbacks
       // and returns without waiting for another external event.
-      let _drained = unsafe uv.uv_run(unsafe nonnull(self.loop), 0)
-      let closed = unsafe process.uv_loop_close(unsafe nonnull(self.loop))
+      let _drained = unsafe uvl.uv_run(unsafe nonnull(self.loop), 0)
+      let closed = unsafe uvl.uv_loop_close(unsafe nonnull(self.loop))
       if closed != 0 { Intrinsic.trap("VM interrupt loop retained a foreign handle") }
     }
     unsafe net.free(self.signal) unsafe net.free(self.wake) unsafe net.free(self.loop)
@@ -99,7 +93,7 @@ unsafe fn nonnull<T>(pointer: ?*mut T) -> *mut T {
   return unsafe Intrinsic.pointerRequalify<?*mut T, *mut T>(pointer)
 }
 unsafe fn ownerFor(handle: *mut u8) -> *mut Owner {
-  return unsafe Intrinsic.pointerReinterpret<*mut u8, *mut Owner>(unsafe nonnull(unsafe net.uv_handle_get_data(handle)))
+  return unsafe Intrinsic.pointerReinterpret<*mut u8, *mut Owner>(unsafe nonnull(unsafe uvl.uv_handle_get_data(handle)))
 }
 effect fn allocate(bytes: usize) -> *mut u8 ! OutOfMemoryError {
   let memory = unsafe net.calloc(1, bytes)
@@ -112,19 +106,19 @@ effect fn allocate(bytes: usize) -> *mut u8 ! OutOfMemoryError {
 /// their native owners. No native thread retains the service itself.
 pub effect fn make() -> Service ! OutOfMemoryError | StartError {
   let mut handles = Handles.empty()
-  handles.loop = run allocate(unsafe process.uv_loop_size())
+  handles.loop = run allocate(unsafe uvl.uv_loop_size())
   let loop = unsafe nonnull(handles.loop)
-  let initialized = unsafe process.uv_loop_init(loop)
+  let initialized = unsafe uvl.uv_loop_init(loop)
   if initialized != 0 { fail StartError { code: initialized } }
   handles.loopReady = true
-  handles.wake = run allocate(unsafe net.uv_handle_size(asyncKind))
+  handles.wake = run allocate(unsafe uvl.uv_handle_size(asyncKind))
   let wake = unsafe nonnull(handles.wake)
-  let asynchronous = unsafe uv_async_init(loop, wake, silkVMInterruptControl)
+  let asynchronous = unsafe uvl.uv_async_init(loop, wake, silkVMInterruptControl)
   if asynchronous != 0 { fail StartError { code: asynchronous } }
   handles.wakeReady = true
-  handles.signal = run allocate(unsafe net.uv_handle_size(signalKind))
+  handles.signal = run allocate(unsafe uvl.uv_handle_size(signalKind))
   let signal = unsafe nonnull(handles.signal)
-  let initializedSignal = unsafe process.uv_signal_init(loop, signal)
+  let initializedSignal = unsafe uvl.uv_signal_init(loop, signal)
   if initializedSignal != 0 { fail StartError { code: initializedSignal } }
   handles.signalReady = true
 
@@ -136,7 +130,7 @@ pub effect fn make() -> Service ! OutOfMemoryError | StartError {
   let mut owner = run Box<Owner>.make(Owner { handles: move handles, gate: move gate, control: move control, ack: Acknowledgement { storage: move storage, pointer: acknowledgement } }) |> Effect.provideMut<Allocator>(&mut allocator)
   let pointer = Pointer.fromMutRef<Owner>(&mut owner.getMut()[0])
   let raw = unsafe Intrinsic.pointerReinterpret<*mut Owner, *mut u8>(pointer)
-  unsafe net.uv_handle_set_data(wake, raw) unsafe net.uv_handle_set_data(signal, raw)
+  unsafe uvl.uv_handle_set_data(wake, raw) unsafe uvl.uv_handle_set_data(signal, raw)
   let mut watcher = Service { owner: move owner, thread: 0, started: false }
   let status = unsafe pthread_create(Pointer.fromMutRef<usize>(&mut watcher.thread), Pointer.null<u8>(), silkVMInterruptThread, raw)
   if status != 0 { fail StartError { code: status } }
@@ -147,7 +141,7 @@ pub effect fn make() -> Service ! OutOfMemoryError | StartError {
 export "C" fn silkVMInterruptThread(raw: ?*mut u8) -> ?*mut u8 {
   let pointer = unsafe Intrinsic.pointerReinterpret<*mut u8, *mut Owner>(unsafe nonnull(raw))
   let anchor = () let owner = unsafe Pointer.borrow<(), Owner>(&anchor, pointer)
-  let _ignored = unsafe uv.uv_run(unsafe nonnull(owner.handles.loop), 0)
+  let _ignored = unsafe uvl.uv_run(unsafe nonnull(owner.handles.loop), 0)
   return Pointer.null<u8>()
 }
 
@@ -166,7 +160,7 @@ export "C" fn silkVMInterruptSignal(handle: *mut u8, signal: i32) -> () {
     while !Pointer.isNull<Observer>(current) {
       let observer = unsafe Pointer.borrowMut<(), Observer>(&mut anchor, unsafe nonnull(current))
       let _previous = unsafe Atomic.fetchAdd<u32>(Pointer.fromMutRef<u32>(&mut observer.pending), 1, MemoryOrder.Release)
-      let _notified = unsafe uv_async_send(observer.wake)
+      let _notified = unsafe uvl.uv_async_send(observer.wake)
       current = observer.next
     }
   }
@@ -179,17 +173,17 @@ export "C" fn silkVMInterruptControl(handle: *mut u8) -> () {
   let mut guard = owner.control.lock() let control = guard.getMut()
   control.status = 0
   if control.desired && !control.active {
-    control.status = unsafe process.uv_signal_start(unsafe nonnull(owner.handles.signal), silkVMInterruptSignal, sigint)
+    control.status = unsafe uvl.uv_signal_start(unsafe nonnull(owner.handles.signal), silkVMInterruptSignal, sigint)
     control.active = control.status == 0
   } else {
     if !control.desired && control.active {
       // On Unix uv_signal_stop returns 0 for every initialized live handle.
-      let _ignored = unsafe process.uv_signal_stop(unsafe nonnull(owner.handles.signal))
+      let _ignored = unsafe uvl.uv_signal_stop(unsafe nonnull(owner.handles.signal))
       control.active = false
     }
   }
   let stopping = control.stopping drop control drop guard
-  if stopping { unsafe uv_stop(unsafe nonnull(owner.handles.loop)) }
+  if stopping { unsafe uvl.uv_stop(unsafe nonnull(owner.handles.loop)) }
   unsafe Atomic.store<u32>(owner.ack.pointer, 1, MemoryOrder.Release)
   unsafe Atomic.notifyOne(owner.ack.pointer)
 }
@@ -198,7 +192,7 @@ export "C" fn silkVMInterruptControl(handle: *mut u8) -> () {
 // returns 0 for a live async handle; it neither allocates nor loses early wakes.
 fn synchronize(owner: &Owner) -> () {
   unsafe Atomic.store<u32>(owner.ack.pointer, 0, MemoryOrder.Release)
-  let _ignored = unsafe uv_async_send(unsafe nonnull(owner.handles.wake))
+  let _ignored = unsafe uvl.uv_async_send(unsafe nonnull(owner.handles.wake))
   while unsafe Atomic.load<u32>(owner.ack.pointer, MemoryOrder.Acquire) == 0 {
     let _notified = unsafe Atomic.wait(owner.ack.pointer, 0, Option<u64>.none())
   }

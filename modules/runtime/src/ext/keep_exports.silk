@@ -17,6 +17,9 @@ import ext.process_native
 import ext.sqlite_native
 import ext.tls_native
 import ext.trace_native
+import ext.uv_addon
+import ext.uv_loop
+import ext.uvwasi_host
 import ext.vm_interrupt
 import ext.vm_native
 import ext.wasm_native
@@ -42,6 +45,9 @@ pub fn all() -> () {
   sqlite_native.keepExports()
   tls_native.keepExports()
   trace_native.keepExports()
+  uv_addon.keepExports()
+  uv_loop.keepExports()
+  uvwasi_host.keepExports()
   vm_interrupt.keepExports()
   vm_native.keepExports()
   wasm_native.keepExports()
