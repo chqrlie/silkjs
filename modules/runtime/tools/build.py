@@ -17,7 +17,7 @@ from embed import ROOT, cache_build_identity, sources
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--release', action='store_true')
-    parser.add_argument('--output', type=Path, default=ROOT / 'build/silkjsruntime')
+    parser.add_argument('--output', type=Path, default=ROOT / 'build/silkjs')
     args = parser.parse_args()
     manifest = tomllib.loads((ROOT / 'silk.toml').read_text())
     version = manifest['package']['silk-version']

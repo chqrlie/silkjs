@@ -11,7 +11,7 @@ of line. Most of the gap to V8's interpreter on large programs is instruction-ca
 and the profile roughly halves them (Octane PdfJS and Typescript, which are not training
 inputs, run with 47-51% fewer I1 misses).
 
-    SILK_CLANG=/path/to/clang python3 scripts/pgo_build.py            # -> build/pgo/silkjs
+    SILK_CLANG=/path/to/clang python3 scripts/pgo_build.py            # -> build/pgo/silkjs-engine
     python3 scripts/pgo_build.py --output /tmp/silkjs --keep          # keep build/pgo/work
 
 SILK_CLANG names the Clang to build with (as for `silk build`), and llvm-profdata must sit
@@ -29,7 +29,7 @@ sys.path.insert(0, os.path.join(ROOT, "scripts"))
 import v8bench  # noqa: E402
 import toolchain  # noqa: E402
 
-RELEASE = str(toolchain.silk_output() / "llvm" / "x86_64-unknown-linux-gnu" / "release" / "silkjs")
+RELEASE = str(toolchain.silk_output() / "llvm" / "x86_64-unknown-linux-gnu" / "release" / "silkjs-engine")
 
 
 def wrapper(path, clang, flags):
@@ -63,7 +63,7 @@ def train(binary, work, profiles):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--output", default=os.path.join(ROOT, "build", "pgo", "silkjs"))
+    parser.add_argument("--output", default=os.path.join(ROOT, "build", "pgo", "silkjs-engine"))
     parser.add_argument("--keep", action="store_true", help="keep build/pgo/work (profiles, instrumented CLI)")
     args = parser.parse_args()
     clang = os.environ.get("SILK_CLANG") or shutil.which("clang")

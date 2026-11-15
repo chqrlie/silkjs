@@ -844,7 +844,7 @@ function componentVersions() {
   const versions = {
     node: nodeVersion, acorn: '8.18.0', amaro: '1.1.11',
     brotli: `${brotli >>> 24}.${(brotli >>> 12) & 0xfff}.${brotli & 0xfff}`,
-    llhttp: '9.4.3', napi: '10', nghttp2, openssl, quickjs: '2026-06-04', silkjsruntime: '0.1.0', sqlite,
+    llhttp: '9.4.3', napi: '10', nghttp2, openssl, quickjs: '2026-06-04', silkjs: '0.1.0', sqlite,
     uv, uvwasi: '0.0.23', zlib, zstd,
   };
   if (zlib === undefined) delete versions.zlib;
@@ -1798,7 +1798,7 @@ function run(restored = false) {
       case '--security-revert':
         host.writeStartupDiagnostic(`${process.execPath}: Error: Attempt to revert an unknown CVE [${value}]\n`);
         return process.exit(12);
-      case '--version': host.stdout.write('silkjsruntime 0.1.0 (QuickJS; Node 24 target)\n'); return;
+      case '--version': host.stdout.write('silkjs 0.1.0 (QuickJS; Node 24 target)\n'); return;
       // node.cc: --help runs internal/main/print_help from Node's option table.
       case '--help': internalRequire('internal/main/print_help').print(process.stdout); return;
       // node_options.cc GetBashCompletion: every option and alias the parser knows.

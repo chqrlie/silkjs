@@ -6,8 +6,8 @@ score (higher is better). `--instructions` runs a fixed number of iterations of 
 benchmark under callgrind and prints instruction counts (lower is better), which is
 deterministic and so usable on a noisy host.
 
-    python3 scripts/v8bench.py build/.../release/silkjs ../quickjs/qjs
-    python3 scripts/v8bench.py --instructions old/silkjs new/silkjs --only richards splay
+    python3 scripts/v8bench.py build/.../release/silkjs-engine ../quickjs/qjs
+    python3 scripts/v8bench.py --instructions old/silkjs-engine new/silkjs-engine --only richards splay
 """
 import argparse
 import os

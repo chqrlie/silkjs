@@ -1,5 +1,5 @@
 'use strict';
-// Run: build/silkjsruntime tests/inspector-builtin-source-smoke.cjs
+// Run: build/silkjs tests/inspector-builtin-source-smoke.cjs
 // Debugger.enable hashes the source of every script it reports, built-ins included.
 // The inventory names each script by the first of its functions found in the heap,
 // so it must find the text from whichever function that is.

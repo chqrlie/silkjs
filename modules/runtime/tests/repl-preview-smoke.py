@@ -13,7 +13,7 @@ import sys
 import termios
 import time
 
-executable = str(pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else 'build/silkjsruntime').resolve())
+executable = str(pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else 'build/silkjs').resolve())
 ansi = re.compile(rb'\x1b\[[0-?]*[ -/]*[@-~]')
 
 

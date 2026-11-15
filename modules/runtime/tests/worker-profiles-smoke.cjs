@@ -1,5 +1,5 @@
 'use strict';
-// Run with build/silkjsruntime tests/worker-profiles-smoke.cjs.
+// Run with build/silkjs tests/worker-profiles-smoke.cjs.
 // Uses native interrupt delivery while worker guest JavaScript never yields.
 const assert = require('node:assert/strict');
 const { Worker, isMainThread, workerData } = require('node:worker_threads');

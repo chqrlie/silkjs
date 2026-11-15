@@ -1,4 +1,4 @@
-# Node's own test suite against silkjsruntime
+# Node's own test suite against silkjs
 
 These scripts run the upstream Node test tree (`test/parallel`, `test/es-module`, ...) against a
 runtime binary and compare with a reference Node, test by test. The denominator is the set of tests
@@ -18,7 +18,7 @@ Run (`NODE_SRC` defaults to `~/setup/node-src`; unset `NODE_OPTIONS` first):
 
 ```sh
 python3 run.py /opt/node24/bin/node node-parallel.json parallel 4      # reference, once
-python3 run.py ../../build/silkjsruntime rt-parallel.json parallel 4 [regex]
+python3 run.py ../../build/silkjs rt-parallel.json parallel 4 [regex]
 python3 report.py node-parallel.json rt-parallel.json fails.json        # per-module table
 python3 sig.py node-parallel.json rt-parallel.json 80                   # failures grouped by first error
 ```

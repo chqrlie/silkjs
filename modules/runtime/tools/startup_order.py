@@ -2,7 +2,7 @@
 """Writes tools/startup-order.txt and tools/server-order.txt: the functions a start of
 the runtime runs, then the rest that HTTP and HTTPS servers run.
 
-Usage: python3 tools/startup_order.py path/to/silkjsruntime [callgrind.out ...]
+Usage: python3 tools/startup_order.py path/to/silkjs [callgrind.out ...]
 
 Runs the given release executable under valgrind's callgrind on a few small starts (an
 empty script, one console.log, a local require, a timer), each from the executable's

@@ -1,5 +1,5 @@
 'use strict';
-// Run: build/silkjsruntime tests/inspector-smoke.cjs
+// Run: build/silkjs tests/inspector-smoke.cjs
 // All assertions exercise the public API and production native inspector.
 const assert = require('node:assert/strict');
 const inspector = require('node:inspector');

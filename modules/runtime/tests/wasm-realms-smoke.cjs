@@ -1,5 +1,5 @@
 'use strict';
-// Run with Node 24 or silkjsruntime; covers brands, identity and operation realms.
+// Run with Node 24 or silkjs; covers brands, identity and operation realms.
 const assert = require('node:assert/strict');
 const vm = require('node:vm');
 const { binary, signature, named, exported, echo, I32 } = require('./wasm-fixtures.cjs');

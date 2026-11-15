@@ -26,7 +26,7 @@ union Tasks {
 impl CommandLine for Tasks {
   static fn command() -> Command<Tasks> {
     return Command<Tasks>.make("tasks", "The SilkJS runtime's tasks")
-      |> Command.variant("Build", "Build the runtime executable, build/silkjsruntime")
+      |> Command.variant("Build", "Build the runtime executable, build/silkjs")
       |> Command.option("release", Opt.about("Optimize for speed"))
       |> Command.option("output", Opt.about("Where to write the executable"))
       |> Command.variant("Embed", "Regenerate the built-ins index (builtin_sources.c, src/runtime/embedded.silk) after adding or removing a built-in")
