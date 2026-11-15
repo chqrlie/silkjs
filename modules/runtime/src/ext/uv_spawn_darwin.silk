@@ -231,9 +231,15 @@ static if Intrinsic.targetOperatingSystem() == "darwin" {
   }
 
   // ---- The program ------------------------------------------------------------------------------
+  unsafe extern "C" fn _NSGetEnviron() -> *mut *const ?*const u8
+  // libuv's `options->env ? options->env : environ`: a null environment is the parent's.
+  unsafe fn childEnvironment(options: &Options) -> *const ?*const u8 {
+    if Pointer.address<?*const u8>(options.env) != 0 { return options.env }
+    return unsafe Pointer.read<*const ?*const u8>(unsafe _NSGetEnviron())
+  }
   unsafe fn spawnRetrying(pid: *mut i32, path: *const u8, actions: *const u8, attributes: *const u8, options: &Options) -> i32 {
     while true {
-      let status = unsafe posix_spawn(pid, path, actions, attributes, options.args, options.env)
+      let status = unsafe posix_spawn(pid, path, actions, attributes, options.args, unsafe childEnvironment(options))
       if status != EINTR { return status }
     }
     return EINTR
@@ -246,7 +252,7 @@ static if Intrinsic.targetOperatingSystem() == "darwin" {
     while unsafe byteAt(file, index) != 0 { if unsafe byteAt(file, index) == 47 { return unsafe spawnRetrying(pid, file, actions, attributes, options) } index = index + 1 }
     // PATH in the child's environment (uv__spawn_find_path_in_env), or _PATH_DEFPATH (<paths.h>).
     let mut path: *const u8 = text(b"/usr/bin:/bin\0")
-    let environment = unsafe Pointer.assumeMany<?*const u8>(options.env)
+    let environment = unsafe Pointer.assumeMany<?*const u8>(unsafe childEnvironment(options))
     let mut entry: usize = 0
     while true {
       let variable = unsafe Pointer.read<?*const u8>(unsafe Pointer.at<?*const u8>(environment, entry))

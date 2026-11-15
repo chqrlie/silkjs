@@ -192,6 +192,13 @@ def main():
     print('passed only with Silk:', ' '.join(sorted(n for n, p in silk.items() if p and not real.get(n, False))) or 'none')
     if regressions:
         print('FAILED with Silk, passed with libuv:', ' '.join(regressions))
+        # Each failing test's own report, from the runner's TAP output.
+        with open(os.path.join(work, 'silk.tap'), errors='replace') as tap:
+            blocks = re.split(r'\n(?=(?:not ok|ok) \d+ - )', tap.read())
+        for block in blocks:
+            match = re.match(r'not ok \d+ - (\S+)', block)
+            if match and match.group(1) in regressions:
+                print('\n'.join(block.splitlines()[:40]))
         return 1
     print('no test fails with Silk that passes with libuv')
     return 0
