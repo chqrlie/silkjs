@@ -18,7 +18,7 @@ silk task bench-all              # the three above into one results directory, a
 | Option | Meaning | Default |
 | --- | --- | --- |
 | `--rounds N` | Interleaved rounds; runs per case for `bench-cold` | 6, 3, 30 |
-| `--runtime PATH` | The runtime executable | `$SILKJS_RUNTIME`, else `build/silkjsruntime` |
+| `--runtime PATH` | The runtime executable | `$SILKJS_RUNTIME`, else `build/silkjs` |
 | `--runtimes a,b` | Columns: `silkjs`, `bun_nojit`, `bun_nojit_smol`; `bench-cold` also takes `bun` (JIT on) | `$RUNTIMES`, else the three |
 | `--out DIR` | Where results go | `<work>/results/<UTC time>` |
 | `--work DIR` | The work directory `bench-setup` fills | `$SILKJS_BENCH_WORK`, else `build/bench` |

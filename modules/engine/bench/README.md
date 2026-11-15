@@ -71,7 +71,7 @@ silk task bench-report                     # the table with the wasm columns; --
 silk task bench-fixed --only richards,deltablue old/silkjs new/silkjs    # A/B on fixed work
 ```
 
-`--rounds N`, `--engine PATH` (the silkjs executable; default `$SILKJS_ENGINE`, else this host's
+`--rounds N`, `--engine PATH` (the engine executable; default `$SILKJS_ENGINE`, else this host's
 release build), `--engines a,b` (columns; default every installed one of `silkjs`, `v8-jitless`,
 `jsc-nojit`, `qjs`, `silkjs-wasm`, `qjs-wasm`), `--jit` (add `v8-jit` and `jsc-jit`, for context
 only), `--out DIR` (default `<work>/results`), `--work DIR` (default `$SILKJS_BENCH_WORK`, else

@@ -49,7 +49,7 @@ impl CommandLine for Measure {
   static fn command() -> Command<Measure> {
     return Command<Measure>.make("measure", "")
       |> Command.option("rounds", Opt.about("Interleaved rounds (default: 6 for bench, 3 for bench-mem; runs per case for bench-cold, 30)"))
-      |> Command.option("executable", Opt.about("The runtime executable (default: build/silkjsruntime)") |> Opt.long("runtime") |> Opt.env("SILKJS_RUNTIME"))
+      |> Command.option("executable", Opt.about("The runtime executable (default: build/silkjs)") |> Opt.long("runtime") |> Opt.env("SILKJS_RUNTIME"))
       |> Command.option("runtimes", Opt.about("Columns, comma-separated: silkjs,bun_nojit,bun_nojit_smol (the default); bench-cold also takes bun") |> Opt.env("RUNTIMES"))
       |> Command.option("out", Opt.about("The results directory (default: <work>/results/<UTC time>)"))
       |> Command.option("work", Opt.about("The work directory of bench-setup (default: build/bench)") |> Opt.env("SILKJS_BENCH_WORK"))
@@ -60,7 +60,7 @@ impl CommandLine for Measure {
 impl CommandLine for Tasks {
   static fn command() -> Command<Tasks> {
     return Command<Tasks>.make("tasks", "The SilkJS runtime's tasks")
-      |> Command.variant("Build", "Build the runtime executable, build/silkjsruntime")
+      |> Command.variant("Build", "Build the runtime executable, build/silkjs")
       |> Command.option("release", Opt.about("Optimize for speed"))
       |> Command.option("output", Opt.about("Where to write the executable"))
       |> Command.variant("Embed", "Regenerate the built-ins index (builtin_sources.c, src/runtime/embedded.silk) after adding or removing a built-in")

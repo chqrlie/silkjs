@@ -1,8 +1,8 @@
-# silkjsruntime
+# SilkJS
 
-A Node-compatible JavaScript runtime written in [Silk](https://github.com/silk-lang/silk), using [SilkJS](../engine), the native Silk port of QuickJS, instead of V8.
+SilkJS is a Node-compatible JavaScript runtime written in [Silk](https://github.com/silk-lang/silk). It runs on the [SilkJS Engine](../engine), the native Silk port of QuickJS, instead of V8. The package is `silkjs-runtime` and the command is `silkjs`.
 
-Node 24 is the compatibility reference. [Deno](https://github.com/denoland/deno) is an organizational reference for the core/extension split—not a runtime dependency or a source of Deno-specific APIs. JavaScript executes in SilkJS; there is no Node or V8 execution fallback.
+Node 24 is the compatibility reference. [Deno](https://github.com/denoland/deno) is an organizational reference for the core/extension split—not a runtime dependency or a source of Deno-specific APIs. JavaScript executes in the SilkJS Engine; there is no Node or V8 execution fallback.
 
 ## Build
 
@@ -22,7 +22,7 @@ git clone https://github.com/silk-lang/lib-silkjs.git
 cd lib-silkjs/modules/runtime
 silk use
 silk task build
-./build/silkjsruntime -p 'process.versions'
+./build/silkjs -p 'process.versions'
 ```
 
 A plain `silk build` builds the executable too, and is how a program that embeds the runtime builds (see [Embed](#embed)). `silk task build` adds what only an executable that can run on the build machine gets: the built-ins' bytecode, compiled by the executable itself and linked into it, and a startup heap image, so a start does not run the bootstrap.
@@ -34,26 +34,26 @@ The engine is this repository's [`modules/engine`](../engine), a path dependency
 ## Run
 
 ```sh
-./build/silkjsruntime app.js
-./build/silkjsruntime app.mjs
-./build/silkjsruntime app.ts
-./build/silkjsruntime -e 'console.log(require("node:path").join("a", "b"))'
-./build/silkjsruntime --test
-./build/silkjsruntime -i
+./build/silkjs app.js
+./build/silkjs app.mjs
+./build/silkjs app.ts
+./build/silkjs -e 'console.log(require("node:path").join("a", "b"))'
+./build/silkjs --test
+./build/silkjs -i
 ```
 
 The package manager of [`modules/pm`](../pm) is in the executable. Its commands come where a script would, and run without starting the engine:
 
 ```sh
-./build/silkjsruntime install            # what package.json lists; the lockfile is sjs.lock
-./build/silkjsruntime add left-pad       # also: add -D, add name@range, add name@tag
-./build/silkjsruntime remove left-pad
-./build/silkjsruntime update
-./build/silkjsruntime ci                 # install, and fail when the lockfile is out of date
-./build/silkjsruntime run build          # a script of package.json; arguments follow the name
-./build/silkjsruntime run -r build       # in every package of the workspace that has the script
-./build/silkjsruntime exec tsc --noEmit  # a command of the dependencies
-./build/silkjsruntime dlx cowsay hello   # a command of a package the project does not have
+./build/silkjs install            # what package.json lists; the lockfile is sjs.lock
+./build/silkjs add left-pad       # also: add -D, add name@range, add name@tag
+./build/silkjs remove left-pad
+./build/silkjs update
+./build/silkjs ci                 # install, and fail when the lockfile is out of date
+./build/silkjs run build          # a script of package.json; arguments follow the name
+./build/silkjs run -r build       # in every package of the workspace that has the script
+./build/silkjs exec tsc --noEmit  # a command of the dependencies
+./build/silkjs dlx cowsay hello   # a command of a package the project does not have
 ```
 
 In a workspace, a `package.json` with `workspaces`, the commands install for every package from any of their directories, and `add --filter <name>` or `add -w` choose the package to change.
@@ -64,13 +64,13 @@ The install scripts of a dependency run only when `allowBuilds` in the `package.
 
 A dependency can also be a tarball (`https://…/pad.tgz`, `file:vendor/pad.tgz`), a directory (`file:../pad` copies it, `link:../pad` links it) or a repository on GitHub, GitLab or Bitbucket (`github:owner/repo#v1.0.0`, `owner/repo`, `git+https://…`), which is installed without git. [`modules/pm`](../pm) has the details.
 
-A script file named like one of the commands (`install`, `i`, `ci`, `add`, `remove`, `rm`, `uninstall`, `un`, `update`, `up`, `upgrade`, `run`, `run-script`, `exec`, `dlx`) is run with its path: `./build/silkjsruntime ./install`.
+A script file named like one of the commands (`install`, `i`, `ci`, `add`, `remove`, `rm`, `uninstall`, `un`, `update`, `up`, `upgrade`, `run`, `run-script`, `exec`, `dlx`) is run with its path: `./build/silkjs ./install`.
 
 The implementation includes CommonJS and ESM package loading, TypeScript execution, filesystem and process APIs, streams, networking and TLS/HTTP2, crypto and WebCrypto, workers and cluster, SQLite, Intl (SilkJS's ECMA-402 implementation in Silk, with its own CLDR-derived locale data; no ICU), Web APIs, WebAssembly/WASI, Node-API addons, the test runner, REPL, inspector, and native profiling. Feature-specific fixtures in [`tests/`](tests/) exercise these contracts, including cross-process and cross-realm ownership and failure paths.
 
 ## Embed
 
-Another Silk program can run the runtime inside itself with [`runtime.embed`](src/runtime/embed.silk) (`silkjsruntime` exports it). The executable owns its process; an embedded runtime does not. Its host passes the arguments it would have had, turns the loop from its own loop, and `process.exit()` ends the runtime instead of the process:
+Another Silk program can run the runtime inside itself with [`runtime.embed`](src/runtime/embed.silk) (the `silkjs-runtime` package exports it). The executable owns its process; an embedded runtime does not. Its host passes the arguments it would have had, turns the loop from its own loop, and `process.exit()` ends the runtime instead of the process:
 
 ```silk
 struct App {}

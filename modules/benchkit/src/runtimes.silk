@@ -33,7 +33,7 @@ pub struct Asked {
   pub work: Bytes,
   /// The results directory; empty means `results/<UTC time>` under the work directory.
   pub out: Bytes,
-  /// The runtime executable; empty means `build/silkjsruntime` under `root`.
+  /// The runtime executable; empty means `build/silkjs` under `root`.
   pub runtime: Bytes,
   /// Comma-separated columns; empty means `silkjs,bun_nojit,bun_nojit_smol`.
   pub runtimes: Bytes,
@@ -92,7 +92,7 @@ effect fn places(asked: &Asked, withJit: bool) -> Places
   }
   let mut runtime = Bytes.make()
   if Kit.listed(&columns, b"silkjs") {
-    runtime = run Kit.absolute(root, if Bytes.length(&asked.runtime) > 0 { Bytes.asSlice(&asked.runtime) } else { b"build/silkjsruntime" })
+    runtime = run Kit.absolute(root, if Bytes.length(&asked.runtime) > 0 { Bytes.asSlice(&asked.runtime) } else { b"build/silkjs" })
     let size = run Kit.fileSize(Bytes.asSlice(&runtime))
     if size < 0 {
       run Kit.abort(Bytes.asSlice(&runtime), b" is not there: build the runtime with `silk task build --release`, or pass --runtime / set SILKJS_RUNTIME")

@@ -1,5 +1,5 @@
 'use strict';
-// Run with Node 24 or silkjsruntime: http2-controls-smoke.cjs
+// Run with Node 24 or silkjs: http2-controls-smoke.cjs
 // modes: controls, cancel, settings-limit, goaway, exchange, tls, unknown-protocol.
 // Uses real TCP/TLS peers and temporary OpenSSL-generated keys unless overridden.
 const assert = require('assert');

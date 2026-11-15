@@ -1,5 +1,5 @@
 'use strict';
-// Run with Node 24 or silkjsruntime; no assembler or second engine is needed.
+// Run with Node 24 or silkjs; no assembler or second engine is needed.
 const assert = require('node:assert/strict');
 const { Worker, isMainThread, parentPort, workerData } = require('node:worker_threads');
 const { binary, signature, named, exported, I32, I64, EXTERNREF } = require('./wasm-fixtures.cjs');

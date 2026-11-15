@@ -53,7 +53,7 @@ impl CommandLine for Measure {
   static fn command() -> Command<Measure> {
     return Command<Measure>.make("measure", "")
       |> Command.option("rounds", Opt.about("Interleaved rounds (default 3; 7 for bench-fixed)"))
-      |> Command.option("engine", Opt.about("The silkjs executable (default: this host's release build)") |> Opt.env("SILKJS_ENGINE"))
+      |> Command.option("engine", Opt.about("The engine executable (default: this host's release build)") |> Opt.env("SILKJS_ENGINE"))
       |> Command.option("engines", Opt.about("Columns, comma-separated (default: every installed one of silkjs,v8-jitless,jsc-nojit,qjs,silkjs-wasm,qjs-wasm)"))
       |> Command.option("jit", Opt.about("Add the v8-jit and jsc-jit columns, for context only"))
       |> Command.option("out", Opt.about("The results directory (default: <work>/results)"))
@@ -79,7 +79,7 @@ impl CommandLine for Tasks {
       |> Command.option("skipMicro", Opt.about("Skip the micro benchmark (about 15 minutes)"))
       |> Command.option("skipMacro", Opt.about("Skip the macro workloads"))
       |> Command.arg("only", Opt.about("Macro names or micro test prefixes to run"))
-      |> Command.variant("Pgo", "Build the release CLI with profile-guided optimization (build/pgo/silkjs)")
+      |> Command.variant("Pgo", "Build the release CLI with profile-guided optimization (build/pgo/silkjs-engine)")
       |> Command.option("pgoOutput", Opt.about("Where to write the optimized CLI") |> Opt.long("output"))
       |> Command.option("keep", Opt.about("Keep build/pgo/work: profiles and the instrumented CLI"))
       |> Command.variant("FunctionOrder", "Regenerate startup.order from a release build under callgrind")

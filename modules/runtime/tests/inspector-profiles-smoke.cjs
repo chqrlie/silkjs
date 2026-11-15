@@ -1,5 +1,5 @@
 'use strict';
-// Run with build/silkjsruntime tests/inspector-profiles-smoke.cjs.
+// Run with build/silkjs tests/inspector-profiles-smoke.cjs.
 // Exercises production native recorders and graph visitor, not fabricated packets.
 const assert = require('node:assert/strict');
 const inspector = require('node:inspector');

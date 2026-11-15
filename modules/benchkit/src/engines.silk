@@ -79,7 +79,7 @@ effect fn places(asked: &Asked) -> Places
     let machine = run Kit.firstLine(&[b"uname", b"-m"], Bytes.asSlice(&work))
     let architecture: &[u8] = if Kit.same(Bytes.asSlice(&machine), b"x86_64") { b"x86_64" } else { b"aarch64" }
     let mut built = run Kit.cat3(root, b"/../../build/llvm/", architecture)
-    run Bytes.append(&mut built, b"-unknown-linux-gnu/release/silkjs")
+    run Bytes.append(&mut built, b"-unknown-linux-gnu/release/silkjs-engine")
     run Kit.absolute(b"/", Bytes.asSlice(&built))
   }
   let nodeName = run Kit.variable(b"NODE_REFERENCE")

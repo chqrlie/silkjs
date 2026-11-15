@@ -34,7 +34,7 @@ effect fn program() -> i32 ! HostInputError | OutOfMemoryError | Synchronization
   // ending the process. Children start with every signal at its default. The process is the
   // executable's, so these are too: an embedded runtime leaves its host's signals alone.
   static if Intrinsic.targetOperatingSystem() != "windows" { let _ignored = unsafe signal(13, 1) let _ignoredFileSize = unsafe signal(25, 1) }
-  // The commands of the package manager come where a script would: `silkjsruntime install`.
+  // The commands of the package manager come where a script would: `silkjs install`.
   // They run without the JavaScript engine. Called as `node`, which is what the package manager
   // gives the scripts of packages on a machine without Node.js, the executable has no commands:
   // `node install` runs the file.
@@ -45,7 +45,7 @@ effect fn program() -> i32 ! HostInputError | OutOfMemoryError | Synchronization
   match move run HostInput.argument(1) {
     Option.Some { value: word } => {
       if asNode == false && cli.isCommand(Bytes.asSlice(&word)) {
-        return run cli.execute("silkjsruntime", true)
+        return run cli.execute("silkjs", true)
       }
     }
     Option.None => {}
@@ -59,7 +59,7 @@ pub effect fn main() -> i32 ? &mut HostInput {
   return match move result {
     Result<i32, HostInputError | OutOfMemoryError | SynchronizationError>.Success { value } => value
     Result<i32, HostInputError | OutOfMemoryError | SynchronizationError>.Failure { .. } => {
-      let _written = platform.writeAll(2, b"silkjsruntime: unable to initialize native runtime\n")
+      let _written = platform.writeAll(2, b"silkjs: unable to initialize native runtime\n")
       return 1
     }
   }

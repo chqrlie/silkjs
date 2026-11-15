@@ -4,10 +4,10 @@ import { join, resolve, dirname } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 
-const runtime = resolve(process.env.SILKJS_RUNTIME || 'build/silkjsruntime');
+const runtime = resolve(process.env.SILKJS_RUNTIME || 'build/silkjs');
 const reference = process.env.NODE_REFERENCE || process.execPath;
 const filter = new RegExp(process.argv[2] || '');
-const directory = mkdtempSync(join(tmpdir(), 'silkjsruntime-compat-'));
+const directory = mkdtempSync(join(tmpdir(), 'silkjs-compat-'));
 function file(name, content) {
   const path = join(directory, name);
   mkdirSync(dirname(path), { recursive: true });

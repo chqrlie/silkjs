@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Inject a Silk-prepared SEA blob into a thin Darwin arm64 runtime and sign it.
 
-Usage: python3 tools/sea.py --runtime build/silkjsruntime --blob app.blob --output app
-Preparation runs in Silk: silkjsruntime --experimental-sea-config sea-config.json.
+Usage: python3 tools/sea.py --runtime build/silkjs --blob app.blob --output app
+Preparation runs in Silk: silkjs --experimental-sea-config sea-config.json.
 This is not Node/postject's V8 blob format. No JS engine runs in this injector.
 """
 import argparse
