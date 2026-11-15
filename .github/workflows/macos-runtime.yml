@@ -79,6 +79,15 @@ jobs:
           if [ -f tests/loop-behavior.mjs ]; then
             SILKJS_RUNTIME="$RUNNER_TEMP/silkjs" node tests/loop-behavior.mjs 2>&1 | tee "$RUNNER_TEMP/loop-behavior.log" | tail -60
           fi
+      - name: libuv's own test suite, real libuv against the Silk exports
+        if: always()
+        working-directory: modules/runtime
+        run: |
+          curl --fail --location https://dist.libuv.org/dist/v1.51.0/libuv-v1.51.0.tar.gz | tar xz -C "$RUNNER_TEMP"
+          python3 tools/libuv_suite.py --libuv-src "$RUNNER_TEMP/libuv-v1.51.0" --work "$RUNNER_TEMP/uvsuite" > "$RUNNER_TEMP/libuv-suite.log" 2>&1; s=$?
+          tail -8 "$RUNNER_TEMP/libuv-suite.log"
+          cp "$RUNNER_TEMP/uvsuite/real.tap" "$RUNNER_TEMP/uvsuite/silk.tap" "$RUNNER_TEMP/" 2>/dev/null || true
+          exit $s
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -86,3 +95,4 @@ jobs:
           path: |
             ${{ runner.temp }}/*.log
             ${{ runner.temp }}/*.txt
+            ${{ runner.temp }}/*.tap
