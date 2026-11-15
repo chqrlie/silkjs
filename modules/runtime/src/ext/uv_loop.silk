@@ -669,9 +669,13 @@ pub unsafe fn uv_loop_close(memory: *mut u8) -> i32 {
 pub unsafe fn uv_loop_fork(memory: *mut u8) -> i32 {
   let loop = unsafe loopOf(memory)
   let mut anchor = () let l = unsafe Pointer.borrowMut<(), Loop>(&mut anchor, loop)
+  // As libuv's uv__io_fork: epoll's descriptor is inherited and closed first; a kqueue is not
+  // inherited, so its old number may already be the new queue's and is only forgotten.
+  static if Intrinsic.targetOperatingSystem() != "darwin" { let _closed = unsafe close(l.backend) }
+  l.backend = -1
   let queue = unsafe queueOpen()
   if queue < 0 { return queue }
-  let _closed = unsafe close(l.backend) l.backend = queue
+  l.backend = queue
   let mut wake: [i32; 2] = [-1; 2]
   let made = unsafe makePipe(&mut wake, true)
   if made != 0 { return made }

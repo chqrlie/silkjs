@@ -32,12 +32,19 @@ ENTRY = r'''
 #include <stdio.h>
 #include <string.h>
 int uv_test_main(int argc, char **argv);
+#include <stdlib.h>
+/* A program of the caller's (--diagnostic), run instead of the suite when UV_SUITE_DIAGNOSTIC is set. */
+__attribute__((weak)) int uv_suite_diagnostic(void) { return 2; }
 #ifdef __APPLE__
 extern int *_NSGetArgc(void);
 extern char ***_NSGetArgv(void);
-int uv_suite_entry(void) { return uv_test_main(*_NSGetArgc(), *_NSGetArgv()); }
+int uv_suite_entry(void) {
+  if (getenv("UV_SUITE_DIAGNOSTIC")) return uv_suite_diagnostic();
+  return uv_test_main(*_NSGetArgc(), *_NSGetArgv());
+}
 #else
 int uv_suite_entry(void) {
+  if (getenv("UV_SUITE_DIAGNOSTIC")) return uv_suite_diagnostic();
   static char buffer[65536];
   static char *argv[256];
   FILE *f = fopen("/proc/self/cmdline", "rb");
@@ -152,18 +159,45 @@ def run_suite(runner, directory, log):
     return results
 
 
+def diagnose(path, source, work, compiler, silk_runner):
+    """Runs the --diagnostic program with libuv and with the Silk exports and prints both."""
+    stub = os.path.join(work, 'diagnostic-main.c')
+    with open(stub, 'w') as main:
+        main.write('int uv_suite_diagnostic(void);\nint main(void) { return uv_suite_diagnostic(); }\n')
+    real = os.path.join(work, 'diagnostic-real')
+    archive = os.path.join(work, 'real', 'libuv.a')
+    run([compiler, '-O0', '-g', *sysroot(), '-I', os.path.join(source, 'include'), os.path.abspath(path), stub, archive, '-lpthread', '-o', real]
+        + ([] if sys.platform == 'darwin' else ['-ldl', '-lm', '-lrt']))
+    outputs = []
+    for program, environment in ((real, {}), (silk_runner, {'UV_SUITE_DIAGNOSTIC': '1'})):
+        directory = os.path.join(work, 'diagnostic-run')
+        os.makedirs(directory, exist_ok=True)
+        done = subprocess.run([program], cwd=directory, env={**os.environ, **environment}, capture_output=True, text=True, timeout=120)
+        outputs.append(done.stdout + done.stderr + f'exit {done.returncode}\n')
+    print('--- diagnostic, libuv / Silk')
+    for left, right in zip(outputs[0].splitlines(), outputs[1].splitlines()):
+        print(('   ' if left == right else '!! ') + left + ('' if left == right else '   |   ' + right))
+    print('--- end of diagnostic')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     parser.add_argument('--libuv-src', required=True)
     parser.add_argument('--work', required=True)
+    parser.add_argument('--diagnostic', help='a C file defining int uv_suite_diagnostic(void), linked into the Silk runner')
     options = parser.parse_args()
     source = os.path.abspath(options.libuv_src)
     work = os.path.abspath(options.work)
     compiler = os.environ.get('SILK_CLANG', 'clang')
     os.makedirs(work, exist_ok=True)
     compile_tests(source, os.path.join(work, 'objects'), compiler)
+    if options.diagnostic:
+        run([compiler, '-O0', '-g', *sysroot(), '-I', os.path.join(source, 'include'), '-c', os.path.abspath(options.diagnostic),
+             '-o', os.path.join(work, 'objects', 'diagnostic.o')])
     silk_runner = build_silk(work, os.path.join(work, 'objects'), compiler)
     real_runner = build_real(source, work)
+    if options.diagnostic:
+        diagnose(options.diagnostic, source, work, compiler, silk_runner)
     directory = os.path.join(work, 'run')
     if os.path.exists(directory):
         shutil.rmtree(directory)

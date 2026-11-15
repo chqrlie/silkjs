@@ -38,6 +38,6 @@ jobs:
         run: |
           curl --fail --location https://dist.libuv.org/dist/v1.51.0/libuv-v1.51.0.tar.gz | tar xz -C "$RUNNER_TEMP"
           set +e
-          python3 tools/libuv_suite.py --libuv-src "$RUNNER_TEMP/libuv-v1.51.0" --work "$RUNNER_TEMP/uvsuite" > "$RUNNER_TEMP/libuv-suite.log" 2>&1; s=$?
+          python3 tools/libuv_suite.py --libuv-src "$RUNNER_TEMP/libuv-v1.51.0" --work "$RUNNER_TEMP/uvsuite" --diagnostic tools/libuv_diagnostic.c > "$RUNNER_TEMP/libuv-suite.log" 2>&1; s=$?
           grep -v '^\[ *[0-9]*%\]' "$RUNNER_TEMP/libuv-suite.log" | tail -400
           exit $s
