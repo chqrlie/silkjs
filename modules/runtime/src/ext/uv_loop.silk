@@ -1046,12 +1046,26 @@ pub unsafe fn uv_poll_init_socket(loopMemory: *mut u8, memory: *mut u8, fd: i32)
 /// Starts, or changes, the events (`UV_READABLE` 1, `UV_WRITABLE` 2, `UV_DISCONNECT` 4,
 /// `UV_PRIORITIZED` 8) that call `callback(handle, status, events)`. No events stops the handle.
 pub unsafe fn uv_poll_start(memory: *mut u8, events: i32, callback: PollCallback) -> i32 {
+  return unsafe pollStart(memory, events, callback, false)
+}
+/// uv_poll_start for addons (ext.uv_api_loop): on macOS the additions wait for the next wait's
+/// kevent call, as libuv's kqueue backend, so filters report in libuv's order and a refused
+/// EV_OOBAND arrives first. The runtime's own poll handles (process IPC) register at once: one may
+/// start from another thread than the one waiting, and must not wait for that wait to end.
+pub unsafe fn uv_poll_start_deferred(memory: *mut u8, events: i32, callback: PollCallback) -> i32 {
+  return unsafe pollStart(memory, events, callback, true)
+}
+unsafe fn pollStart(memory: *mut u8, events: i32, callback: PollCallback, deferred: bool) -> i32 {
   let handle = unsafe handleOf(memory)
   let mut anchor = () let h = unsafe Pointer.borrowMut<(), Handle>(&mut anchor, handle)
   if (h.flags & (CLOSING | CLOSED)) != 0 { return -22 }
   let wanted = events & (UV_READABLE | UV_WRITABLE | UV_DISCONNECT | UV_PRIORITIZED)
   let loop = h.loop let fd = h.fd let previous = h.registered drop h
-  let status = unsafe queueSetLoop(loop, fd, usize.toU64(Pointer.address<Handle>(handle)), previous, wanted)
+  let tag = usize.toU64(Pointer.address<Handle>(handle))
+  let status = if deferred { unsafe queueSetLoop(loop, fd, tag, previous, wanted) } else {
+    let anchorLoop = () let l = unsafe Pointer.borrow<(), Loop>(&anchorLoop, loop) let queue = l.backend drop l
+    unsafe queueSet(queue, fd, tag, previous, wanted)
+  }
   if status != 0 { return status }
   let h2 = unsafe Pointer.borrowMut<(), Handle>(&mut anchor, handle)
   h2.registered = wanted h2.polled = callback drop h2

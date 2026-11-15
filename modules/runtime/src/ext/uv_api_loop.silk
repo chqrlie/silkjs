@@ -475,7 +475,7 @@ pub unsafe export "C" fn pollStart(handle: *mut u8, events: i32, callback: ?exte
   let _stopped = unsafe uvl.uv_poll_stop(inner)
   if events == 0 { return 0 }
   unsafe Pointer.write<?extern "C" fn(*mut u8, i32, i32) -> ()>(unsafe Intrinsic.pointerReinterpret<*mut u8, *mut ?extern "C" fn(*mut u8, i32, i32) -> ()>(unsafe at(handle, CALLBACK_OFFSET)), callback)
-  return unsafe uvl.uv_poll_start(inner, events, silkUvApiPolled)
+  return unsafe uvl.uv_poll_start_deferred(inner, events, silkUvApiPolled)
 }
 pub unsafe export "C" fn pollStop(handle: *mut u8) -> i32 as "uv_poll_stop" { let live = unsafe abi.liveInner(handle) if Pointer.isNull<u8>(live) { return 0 } return unsafe uvl.uv_poll_stop(unsafe nn(live)) }
 
