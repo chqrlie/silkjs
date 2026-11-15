@@ -9,6 +9,7 @@
 
 const { Buffer } = require('buffer');
 const { call, asyncCall } = require('internal/compression/binding');
+const { AsyncResource } = require('async_hooks');
 const constants = require('internal/compression/constants');
 const { codes: { ERR_INVALID_ARG_TYPE, ERR_OUT_OF_RANGE } } = require('internal/streams/support');
 
@@ -24,6 +25,8 @@ for (const key of Object.keys(constants)) {
 
 // Native kinds of internal/compression/binding.
 const DEFLATE = 1, GZIP = 3, DEFLATERAW = 5;
+// The binding's write op, by number.
+const WRITE = 8;
 const BROTLI_ENCODER = 8, BROTLI_DECODER = 9, ZSTD_COMPRESS = 10;
 
 function initializationFailed(message = 'Initialization failed') {
@@ -128,6 +131,10 @@ class CompressionHandle {
     this._id = id;
     this._writeState = writeState;
     this._callback = callback;
+    // A synchronous write's input consumed and output written.
+    this._words = new Uint32Array(2);
+    // One async resource for the handle's life, as Node's zlib handle is.
+    this._resource = new AsyncResource('ZLIB');
     closeHandles.register(this, id, this);
   }
 
@@ -178,24 +185,27 @@ class CompressionHandle {
     this._writeInProgress = true;
     const done = (value) => {
       this._writeInProgress = false;
-      const view = new DataView(value);
-      const status = view.getInt32(0, true);
-      const consumed = view.getUint32(4, true), written = view.getUint32(8, true);
+      let status = 0, consumed, written;
+      if (value === 0) { consumed = this._words[0]; written = this._words[1]; }
+      else {
+        const view = new DataView(value);
+        status = view.getInt32(0, true); consumed = view.getUint32(4, true); written = view.getUint32(8, true);
+      }
       this._writeState[0] = outLength - written;
       this._writeState[1] = length - consumed;
       if (this._pendingClose) this.close();
       if (status !== 0) {
-        const message = value.byteLength > 20 ? Buffer.from(value, 20).toString('latin1') : undefined;
+        const message = value !== 0 && value.byteLength > 20 ? Buffer.from(value, 20).toString('latin1') : undefined;
         this._error(status, message);
         return;
       }
       if (!sync) this._callback.call(this);
     };
-    if (sync) { done(call('write', args)); return; }
+    if (sync) { args.push(this._words.buffer); done(call(WRITE, args)); return; }
     asyncCall('write', args, (err, value) => {
       if (err) { this._writeInProgress = false; this._error(constants.Z_STREAM_ERROR, err.message); return; }
       done(value);
-    });
+    }, this._resource);
   }
 
   write(flush, input, inOffset, inLength, out, outOffset, outLength) {
@@ -221,6 +231,7 @@ class CompressionHandle {
     this._id = 0;
     closeHandles.unregister(this);
     call('close', [id]);
+    if (this._resource) { this._resource.emitDestroy(); this._resource = null; }
   }
 }
 
