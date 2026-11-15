@@ -444,7 +444,7 @@ static if Intrinsic.targetOperatingSystem() == "darwin" {
       if (item.events & POLL_OUT) != 0 { events = events | UV_WRITABLE }
       if (item.events & POLL_RDHUP) != 0 { events = events | UV_DISCONNECT }
       if (item.events & POLL_PRI) != 0 { events = events | UV_PRIORITIZED }
-      if (item.events & (POLL_ERR | POLL_HUP)) != 0 { events = events | QUEUE_ERROR if (item.events & POLL_ERR) != 0 { events = events | 512 } }
+      if (item.events & (POLL_ERR | POLL_HUP)) != 0 { events = events | QUEUE_ERROR if (item.events & POLL_ERR) != 0 { events = events | 512 } if (item.events & POLL_HUP) != 0 { events = events | IO_HANGUP } }
       ready[index] = Ready { tag: pollTag(&item), events: events }
       index = index + 1
     }
@@ -986,7 +986,7 @@ unsafe fn pollReady(loop: *mut Loop, handle: *mut Handle, ready: i32) -> bool {
     let callback = h.polled let registered = h.registered
     let mut events = ready & registered
     // libuv's epoll quirk: an error or hangup alone wakes every event the watcher waits for.
-    if (ready & QUEUE_ERROR) != 0 { events = events | registered | IO_ERROR }
+    if (ready & QUEUE_ERROR) != 0 { events = events | registered | IO_ERROR | (ready & IO_HANGUP) }
     drop h
     if events == 0 { return false }
     unsafe metricsLeave(loop)
@@ -1296,7 +1296,8 @@ unsafe fn childInit(options: &Options, count: i32, use: [*]mut i32, errorFd: i32
   if (options.flags & 2) != 0 { if unsafe setgid(options.gid) != 0 { unsafe writeErrno(errorFd) } }
   if (options.flags & 1) != 0 { if unsafe setuid(options.uid) != 0 { unsafe writeErrno(errorFd) } }
   // execvp searches the PATH of the child's environment, so that replaces `environ` first.
-  if !Pointer.isNull<*const ?*const u8>(environment) { unsafe Pointer.write<*const ?*const u8>(unsafe Intrinsic.pointerRequalify<?*mut *const ?*const u8, *mut *const ?*const u8>(environment), options.env) }
+  // A null environment inherits the parent's, as in libuv.
+  if !Pointer.isNull<*const ?*const u8>(environment) && Pointer.address<?*const u8>(options.env) != 0 { unsafe Pointer.write<*const ?*const u8>(unsafe Intrinsic.pointerRequalify<?*mut *const ?*const u8, *mut *const ?*const u8>(environment), options.env) }
   let none: [u8; 128] = [0; 128]
   if unsafe pthread_sigmask(SIG_SETMASK, Pointer.fromRef<u8>(&none[0]), Pointer.null<u8>()) != 0 { unsafe abort() }
   let _ignored = unsafe execvp(options.file, options.args)
@@ -2529,6 +2530,9 @@ unsafe fn runPhase(loop: *mut Loop, kind: i32) -> () {
 // ---- Descriptor handles for other modules -----------------------------------------------------
 /// The `events` bit that a descriptor handle's callback gets with an error or hangup condition.
 pub const IO_ERROR: i32 = 256
+/// The `events` bit that comes with IO_ERROR when the condition is a hangup (epoll's EPOLLHUP;
+/// kqueue reports none).
+pub const IO_HANGUP: i32 = 1024
 /// Initializes a descriptor handle of libuv kind `kind` (UV_TCP 12, UV_NAMED_PIPE 7, UV_TTY 14,
 /// UV_UDP 15) with no descriptor yet.
 pub unsafe fn ioInit(loopMemory: *mut u8, memory: *mut u8, kind: i32) -> () {
@@ -2564,6 +2568,17 @@ pub unsafe fn ioWatch(memory: *mut u8, events: i32, callback: PollCallback) -> i
 pub unsafe fn ioWatched(memory: *const u8) -> i32 {
   let anchor = () let h = unsafe Pointer.borrow<(), Handle>(&anchor, unsafe handleOfConst(memory))
   return h.registered
+}
+/// Whether a poll or descriptor handle of the loop watches `fd` (libuv's uv__fd_exists).
+pub unsafe fn ioDescriptorWatched(loopMemory: *const u8, fd: i32) -> bool {
+  let anchor = () let l = unsafe Pointer.borrow<(), Loop>(&anchor, unsafe Intrinsic.pointerReinterpret<*const u8, *const Loop>(loopMemory))
+  let mut handle = l.first drop l
+  while !Pointer.isNull<Handle>(handle) {
+    let h = unsafe Pointer.borrow<(), Handle>(&anchor, unsafe nn(handle))
+    if (h.kind == UV_POLL || (h.flags & IO) != 0) && h.fd == fd && h.registered != 0 && (h.flags & (CLOSING | CLOSED)) == 0 { return true }
+    handle = h.next
+  }
+  return false
 }
 /// libuv's uv__handle_start and uv__handle_stop for a module that manages its handle's activity.
 pub unsafe fn ioActivate(memory: *mut u8) -> () { unsafe start(unsafe handleOf(memory)) }
