@@ -22,7 +22,8 @@ jobs:
       matrix:
         # This branch, and main from before the libuv replacement (C libuv linked) as the baseline
         # its fixture results are compared with.
-        source: [branch, f3d5ea8affce5bc169df95191b55ab47e3db2740]
+        # df9c30b: main just before this work merged (main's later commits, C libuv), for the benchmarks.
+        source: [branch, f3d5ea8affce5bc169df95191b55ab47e3db2740, df9c30baf2b211c60153eea8807e1206cbedb409]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -138,3 +139,5 @@ jobs:
           chmod +x "$RUNNER_TEMP"/bin/*/silkjs
           ls -la "$RUNNER_TEMP"/bin/*/silkjs
           python3 tools/ci_bench.py "$RUNNER_TEMP/bin/silkjs-f3d5ea8affce5bc169df95191b55ab47e3db2740/silkjs" "$RUNNER_TEMP/bin/silkjs-branch/silkjs" --rounds 12 | tee "$RUNNER_TEMP/bench.txt"
+          echo "== against main df9c30b (main's later commits, C libuv)"
+          python3 tools/ci_bench.py "$RUNNER_TEMP/bin/silkjs-df9c30baf2b211c60153eea8807e1206cbedb409/silkjs" "$RUNNER_TEMP/bin/silkjs-branch/silkjs" --rounds 12 | tee "$RUNNER_TEMP/bench-df9c30b.txt"
