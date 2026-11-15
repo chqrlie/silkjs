@@ -323,6 +323,13 @@ function createLoader(host, builtins) {
     return result.slice();
   }
 
+  // node:X for a module of a service this program does not have (docs/composable-runtime.md).
+  function absent(name, specifier) {
+    const code = builtins.absent?.(name);
+    if (code === undefined) return;
+    throw code === 'ERR_UNKNOWN_BUILTIN_MODULE' ? error(code, specifier) : error(code);
+  }
+
   function builtinName(specifier) {
     // The runtime's own modules, such as silk:serve, have only their silk: names.
     if (builtinPrefix(specifier, 'silk:')) {
@@ -331,11 +338,15 @@ function createLoader(host, builtins) {
     }
     if (builtinPrefix(specifier, 'node:')) {
       const name = builtinSlice(specifier, 5);
+      absent(name, specifier);
       if (builtins.runtime(name) || (!builtins.listed(name) && !builtins.listed(specifier))) {
         throw error('ERR_UNKNOWN_BUILTIN_MODULE', specifier);
       }
       return name;
     }
+    // A bare name of a module this program leaves out is looked up as a package, as in a Node
+    // build without it; crypto and the inspector throw their own errors first.
+    if (!realmResolving) { const code = builtins.absent?.(specifier); if (code !== undefined && code !== 'ERR_UNKNOWN_BUILTIN_MODULE') throw error(code); }
     return !realmResolving && builtins.listed(specifier) && builtins.has(specifier) ? specifier : null;
   }
   // A ShadowRealm resolves as Node's defaultResolve in a realm that may load no

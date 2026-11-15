@@ -448,6 +448,19 @@ unsafe effect fn configure<'m>(engine: &mut Engine<'m, Services>, context: *mut 
   run unsafe function(&mut engine, context, native, b"pgRows", 39)
   run unsafe function(&mut engine, context, native, b"hideFrames", 40)
   run unsafe function(&mut engine, context, native, b"bufferOperation", 41)
+  run unsafe function(&mut engine, context, native, b"builtinService", 42)
+  // The services this runtime has (docs/composable-runtime.md): the bootstrap registers only
+  // their built-ins. Every one is here until each becomes a capability the embedder chooses.
+  let present = [b"Platform", b"ModuleResolver", b"Files", b"Network", b"Processes", b"SystemInfo", b"Workers", b"Crypto", b"Tls",
+    b"Compression", b"Http", b"Http2", b"Wasm", b"Database", b"TypeStripping", b"Inspector", b"NativeAddons", b"HostApi"]
+  let services = run unsafe common.array(&mut engine, memory, context)
+  let mut named: usize = 0
+  while named < present.length {
+    let serviceName = run unsafe host.string(&mut engine, context, present[named])
+    run unsafe common.defineIndex(&mut engine, context, services, usize.toU32(named), serviceName)
+    named = named + 1
+  }
+  run unsafe common.define(&mut engine, context, native, b"services", services, 7)
   let started = engine.services.started
   let engineStarted = engine.services.engineStarted
   run unsafe common.define(&mut engine, context, native, b"runtimeStartTime", ValueBits.number(i64.toF64(started) / 1000000.0), 7)

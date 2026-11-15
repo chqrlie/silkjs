@@ -1,7 +1,7 @@
 //! The capability graph's task, run from this directory:
 //!
 //!   silk task graph                      # writes ../../docs/capability-graph.md
-//!   silk task graph --check              # fails on a new edge across services, or a stale report
+//!   silk task graph --check              # fails on an edge across services that is not in the list
 //!   silk task graph --sizes ../../build  # first records that build's linked sizes
 import silk.cli.command { Command, CommandLine, Opt }
 import silk.cli.task { Task, TaskError, TaskSet }

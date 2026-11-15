@@ -475,6 +475,17 @@ rules are data in `tools/capabilities.toml`, which `tools/embed.py` also reads t
 CI (`.github/workflows/capability-graph.yml`) runs `--check`, which fails on a new crossing. Service
 boundaries are a first cut by name and are not fixed yet.
 
+**Step 2, first part.** Every built-in carries its service (`builtinService`, from
+`tools/capabilities.toml` through `tools/embed.py`), and the native side lists the services this
+runtime has (`native.services`, every one for now). The bootstrap registers only the built-ins of
+present services, so `builtinModules`, `isBuiltin` and the web globals follow presence. Requiring a
+missing one fails as in a Node build without it: `ERR_UNKNOWN_BUILTIN_MODULE` for `node:X`, a
+package lookup for a bare name, `ERR_NO_CRYPTO` for crypto and TLS, and
+`ERR_INSPECTOR_NOT_AVAILABLE` for the inspector. `process.features` and that capability's command
+line options follow presence too. With every service present the executable behaves as before.
+Still to come in step 2: one index per service rather than one tagged index, `globalThis.crypto`
+split between core randomness and `subtle`, and amaro behind `TypeStripping`.
+
 **Step 1, the spike.** Neither route in "The one dependency of this shape" works on the pinned
 toolchain (0.1.0-dev.74) as written:
 

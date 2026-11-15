@@ -1097,10 +1097,10 @@ impl EngineServices for Services {
     if id == 19 { return run unsafe callSites.capture(&mut engine, context, argv) }
     if id == 26 { return unsafe script_metadata.get(unsafe common.argument(argv, 0)) }
     if id == 29 { return ValueBits.number(usize.toF64(embedded.builtinCount())) }
-    if id == 30 || id == 31 {
+    if id == 30 || id == 31 || id == 42 {
       let index = run unsafe integer(&mut engine, context, unsafe common.argument(argv, 0))
       if index < 0 || i32.toUsize(index) >= embedded.builtinCount() { return ValueBits.Undefined }
-      let bytes = if id == 30 { embedded.builtinName(i32.toUsize(index)) } else { embedded.builtinSource(i32.toUsize(index)) }
+      let bytes = if id == 30 { embedded.builtinName(i32.toUsize(index)) } else if id == 42 { embedded.builtinService(i32.toUsize(index)) } else { embedded.builtinSource(i32.toUsize(index)) }
       return run unsafe string(&mut engine, context, bytes)
     }
     if id == 28 {

@@ -77,7 +77,16 @@ function internalRequire(request, parent = '') {
   catch (error) { moduleDelete(request); throw error; }
   return module.exports;
 }
-for (let index = 0, count = native.builtinCount(); index < count; index++) define(native.builtinName(index), index);
+// The services this program has (docs/composable-runtime.md): a built-in of another service is
+// not registered, so it is not in builtinModules and requiring it fails as in a Node build
+// without it. The core's built-ins and the executable's own are always there.
+const presentServices = new Set(native.services);
+presentServices.add('Core'); presentServices.add('Executable');
+const absentBuiltins = new Map();
+for (let index = 0, count = native.builtinCount(); index < count; index++) {
+  const name = native.builtinName(index), service = native.builtinService(index);
+  if (presentServices.has(service)) define(name, index); else absentBuiltins.set(name, service);
+}
 // tools/build.py runs the freshly linked executable once this way to get the
 // built-ins' bytecode, which it then links in. Nothing else of the runtime is up yet.
 if (native.argv.length === 2 && native.argv[1] === '--silk-write-builtin-cache') rawStd.exit(native.writeBuiltinCache() ? 0 : 1);
@@ -111,6 +120,18 @@ host.builtinLoaded = moduleHas;
 // This bootstrap is one, as Node's internal/bootstrap modules are.
 const hasFactory = Map.prototype.has.bind(factories);
 host.builtinExists = id => id === 'internal/bootstrap/silk' || hasFactory(id);
+// Whether a service is part of this program, for code that offers a feature only with it.
+host.hasService = service => presentServices.has(service);
+// The error a Node build without the module throws for it, or undefined when it is there or is
+// no built-in at all: crypto's modules throw ERR_NO_CRYPTO and the inspector's
+// ERR_INSPECTOR_NOT_AVAILABLE, as in Node built --without-ssl or --without-inspector.
+host.absentBuiltin = name => {
+  const service = absentBuiltins.get(name);
+  if (service === undefined || name.startsWith('internal/')) return undefined;
+  if (service === 'Crypto' || service === 'Tls') return 'ERR_NO_CRYPTO';
+  if (service === 'Inspector' && (name === 'inspector' || name === 'inspector/promises')) return 'ERR_INSPECTOR_NOT_AVAILABLE';
+  return 'ERR_UNKNOWN_BUILTIN_MODULE';
+};
 // Source maps are off until something loads the module to switch them on, so
 // registering a source before that only matters when coverage wants every map.
 host.registerSource = (filename, source, metadata) => {
@@ -134,9 +155,9 @@ host.testCoverageStart = () => native.testCoverageNative(0);
 host.testCoverageTake = () => native.testCoverageNative(1);
 host.testCoverageStop = () => native.testCoverageNative(2);
 host.processFeatures = {
-  debug: native.debugBuild, uv: true, ipv6: true, inspector: true,
+  debug: native.debugBuild, uv: true, ipv6: true, inspector: presentServices.has('Inspector'),
   openssl_is_boringssl: false, quic: false,
-  tls: true, tls_alpn: true, tls_sni: true, tls_ocsp: false,
+  tls: presentServices.has('Tls'), tls_alpn: presentServices.has('Tls'), tls_sni: presentServices.has('Tls'), tls_ocsp: false,
   cached_builtins: false,
   get require_module() { return !host.requireModuleDisabled; },
   get typescript() { return host.typeScriptMode; }
@@ -1102,8 +1123,10 @@ webGlobals.defineLazy(globalThis, 'console', () => ({ console: internalRequire('
 // Register the trusted dispatcher before preloads or any other guest code can
 // connect to this isolate (including through a parent Worker inspector).
 const inspectorBackend = internalRequire('internal/inspector');
-webGlobals.defineLazy(globalThis, 'crypto', () => ({ crypto: internalRequire('crypto').webcrypto }), true);
-for (const name of ['Crypto', 'SubtleCrypto', 'CryptoKey']) {
+// Without the Crypto service there is no webcrypto. (The design keeps getRandomValues and
+// randomUUID in the core over the platform's entropy; that split comes with the Crypto service.)
+if (presentServices.has('Crypto')) webGlobals.defineLazy(globalThis, 'crypto', () => ({ crypto: internalRequire('crypto').webcrypto }), true);
+if (presentServices.has('Crypto')) for (const name of ['Crypto', 'SubtleCrypto', 'CryptoKey']) {
   Object.defineProperty(globalThis, name, {
     get() {
       const value = internalRequire('internal/crypto/webcrypto')[name];
@@ -1140,6 +1163,7 @@ function exposedInternal(name) {
 const runtimeModules = { __proto__: null, 'silk:serve': 'internal/web/serve' };
 const publicBuiltins = {
   has: name => runtimeModules[name] !== undefined || publicBuiltin(name),
+  absent: host.absentBuiltin,
   get: name => internalRequire(runtimeModules[name] ?? name),
   runtime: name => typeof name === 'string' && runtimeModules[name] !== undefined,
   // Whether names() lists name, without building the list.
@@ -1543,14 +1567,14 @@ function installRuntimeOptions(args, entrypoints = [], preloadEntrypoints = true
   host.initialExecArgv = process.execArgv.slice();
   host.workerRuntimeArgs = args.slice();
   if (host.exposeGC) Object.defineProperty(globalThis, 'gc', { value: host.makeGC(), writable: true, enumerable: true });
-  if (host.experimentalEventSource) Object.defineProperty(globalThis, 'EventSource', {
+  if (host.experimentalEventSource && hasFactory('internal/web/eventsource')) Object.defineProperty(globalThis, 'EventSource', {
     value: internalRequire('internal/web/eventsource').EventSource, writable: true, configurable: true,
   });
   if (host.experimentalWebSocket === false) {
     delete globalThis.WebSocket;
     delete globalThis.CloseEvent;
   }
-  if (host.experimentalWebStorage) internalRequire('internal/web/storage').install(globalThis, { localStorageFile: host.localStorageFile, inspect: !!host.experimentalStorageInspection });
+  if (host.experimentalWebStorage && hasFactory('internal/web/storage')) internalRequire('internal/web/storage').install(globalThis, { localStorageFile: host.localStorageFile, inspect: !!host.experimentalStorageInspection });
   if (host.experimentalStreamIter) { internalRequire('fs/promises'); internalRequire('internal/fs/iter').install(); }
   // http is in the heap image, whose global agent was made without this process's options.
   // node_options.cc: NODE_USE_ENV_PROXY=1 sets it, and the flags override that.
@@ -1657,6 +1681,24 @@ function installCommonJSInputGlobals(filename, id) {
   globalThis.require = loader.requireFor(filename, module);
   globalThis.module = module; globalThis.exports = module.exports;
   globalThis.__filename = id; globalThis.__dirname = '.';
+}
+// The options each capability brings: the name itself, or the name followed by `-` and more.
+const capabilityOptions = [
+  ['Inspector', ['--inspect', '--cpu-prof', '--heap-prof', '--experimental-network-inspection',
+    '--experimental-worker-inspection', '--experimental-storage-inspection']],
+  ['TypeStripping', ['--experimental-strip-types', '--experimental-transform-types']],
+  ['Wasm', ['--experimental-wasm-modules', '--experimental-wasi-unstable-preview1']],
+  ['Database', ['--experimental-sqlite', '--experimental-webstorage', '--localstorage-file']],
+  ['Crypto', ['--openssl-config', '--openssl-legacy-provider', '--openssl-shared-config', '--use-openssl-ca',
+    '--use-bundled-ca', '--use-system-ca', '--force-fips', '--enable-fips', '--secure-heap']],
+  ['Tls', ['--tls-cipher-list', '--tls-keylog', '--tls-max', '--tls-min']],
+];
+function absentOption(name) {
+  for (const [service, options] of capabilityOptions) {
+    if (presentServices.has(service)) continue;
+    for (const option of options) if (name === option || name.startsWith(option + '-')) return true;
+  }
+  return false;
 }
 function cliError(messages) {
   if (typeof messages === 'string') messages = [messages];
@@ -1773,6 +1815,9 @@ function run(restored = false) {
   applyEnvironmentOptions();
   for (const entry of host.cliOptionEntries) {
     const { name, value } = entry;
+    // An option of a capability this program leaves out is unknown, as --inspect is in a Node built
+    // --without-inspector.
+    if (absentOption(name)) return cliError('bad option: ' + entry.raw);
     switch (name) {
       case '--watch': watchMode = value; continue;
       case '--run': runName = value; continue;

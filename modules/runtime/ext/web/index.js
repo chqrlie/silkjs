@@ -48,7 +48,10 @@ function defineLazy(target, name, load, enumerable) {
 const eagerGroups = new Set(['internal/encoding', 'internal/url']);
 
 function install(target) {
+  // A global of a module this program leaves out (docs/composable-runtime.md) is not defined.
+  const builtinExists = require('internal/host').builtinExists ?? (() => true);
   for (const [id, names] of groups) {
+    if (!builtinExists(id)) continue;
     if (eagerGroups.has(id)) {
       const exports = require(id);
       for (const name of names) {

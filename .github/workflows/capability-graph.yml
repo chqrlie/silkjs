@@ -1,7 +1,8 @@
 name: Capability graph
 # The composable runtime's guard (modules/runtime/docs/composable-runtime.md): a built-in that
-# requires, or calls a native of, another service without a declared need fails here, and the
-# checked-in report must match the sources. The task reads sources only; the runtime is not built.
+# requires, or calls a native of, another service without a declared need fails here, until the
+# edge is resolved or listed in docs/capability-crossings.txt. The task reads sources only; the
+# runtime is not built.
 on:
   push:
     branches: [main]

@@ -12,8 +12,8 @@ declarations, the libc and library surface each service reaches today. Requires 
 
 | Service | Built-ins | JavaScript KiB | Load-time requires | Lazy requires | Silk files | Silk KiB | `extern "C"` |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Core | 326 | 3,465.1 | 953 | 349 | 35 | 664.1 | 80 |
-| ModuleResolver | 15 | 180.7 | 22 | 20 | 0 | 0.0 | 0 |
+| Core | 326 | 3,468.4 | 953 | 349 | 35 | 670.4 | 80 |
+| ModuleResolver | 15 | 181.3 | 22 | 20 | 0 | 0.0 | 0 |
 | Files | 18 | 238.9 | 76 | 40 | 4 | 55.1 | 49 |
 | Network | 45 | 1,421.1 | 278 | 61 | 4 | 253.4 | 107 |
 | Processes | 10 | 88.4 | 50 | 14 | 3 | 68.5 | 60 |
@@ -30,7 +30,7 @@ declarations, the libc and library surface each service reaches today. Requires 
 | Inspector | 24 | 165.0 | 40 | 47 | 18 | 234.1 | 33 |
 | NativeAddons | 1 | 10.6 | 0 | 7 | 4 | 222.1 | 206 |
 | Executable | 47 | 577.1 | 323 | 35 | 5 | 37.1 | 21 |
-| **Total** | 561 | 11,119.3 | 2061 | 677 | 99 | 2,350.3 | 1494 |
+| **Total** | 561 | 11,123.2 | 2061 | 677 | 99 | 2,356.7 | 1494 |
 
 ## Linked size
 
@@ -89,8 +89,8 @@ build without the capability would drop, at most.
 | `internal/deps/acorn/acorn/dist/acorn` | Core | 240.6 |
 | `internal/tls/roots` | Tls | 177.4 |
 | `internal/web/vendor/text-encoding/data/gb18030.cp` | Core | 139.8 |
-| `internal/bootstrap/silk` | Core | 130.5 |
-| `internal/loader/loader` | ModuleResolver | 121.6 |
+| `internal/bootstrap/silk` | Core | 133.5 |
+| `internal/loader/loader` | ModuleResolver | 122.2 |
 | `internal/http2/core` | Http2 | 118.5 |
 | `internal/webstreams/readablestream` | Core | 116.6 |
 | `internal/web/vendor/text-encoding/data/euc-kr.cp` | Core | 112.8 |
@@ -406,7 +406,7 @@ Load-time edges block an empty service outright; lazy ones fail only on the path
 
 | Service | Natives |
 | --- | --- |
-| Core | `asyncHookFatal`, `bufferCodec`, `bufferOperation`, `builtinCount`, `builtinName`, `builtinSource`, `captureCallSites`, `checkSyntax`, `compileBuiltin`, `compileFunction`, `createInterceptor`, `defineLazyDataProperty`, `detectModuleSyntax`, `drainJobs`, `enqueueMicrotask`, `evaluateModule`, `getAsyncContext`, `getScriptMetadata`, `heapStatistics`, `hideFrames`, `immediateAttention`, `immediateCount`, `immediateCreate`, `immediateEnqueue`, `immediateEntry`, `immediateHooks`, `immediateRefs`, `immediateRun`, `immediateSettle`, `immediateSetup`, `immediateTurns`, `installPermissionGuard`, `isInterceptor`, `loopIdleTime`, `loopMetrics`, `markPromiseAsHandled`, `markUntransferable`, `mathSpecial`, `moduleHasTopLevelAwait`, `now`, `nowNanoseconds`, `pgRows`, `privateSymbol`, `promiseResult`, `promiseState`, `requireModule`, `runTicks`, `setAsyncContext`, `setAsyncHooksEnabled`, `setCompileCacheCallbacks`, `setFunctionSource`, `setImmediate`, `stalledTopLevelAwaits`, `urlCanParse`, `urlDomainToASCII`, `urlDomainToUnicode`, `urlFormParse`, `urlFormSerialize`, `urlIdnaToASCII`, `urlParse`, `urlUpdate`, `utilErrorMap`, `utilErrorMessage`, `writeBuiltinCache` |
+| Core | `asyncHookFatal`, `bufferCodec`, `bufferOperation`, `builtinCount`, `builtinName`, `builtinService`, `builtinSource`, `captureCallSites`, `checkSyntax`, `compileBuiltin`, `compileFunction`, `createInterceptor`, `defineLazyDataProperty`, `detectModuleSyntax`, `drainJobs`, `enqueueMicrotask`, `evaluateModule`, `getAsyncContext`, `getScriptMetadata`, `heapStatistics`, `hideFrames`, `immediateAttention`, `immediateCount`, `immediateCreate`, `immediateEnqueue`, `immediateEntry`, `immediateHooks`, `immediateRefs`, `immediateRun`, `immediateSettle`, `immediateSetup`, `immediateTurns`, `installPermissionGuard`, `isInterceptor`, `loopIdleTime`, `loopMetrics`, `markPromiseAsHandled`, `markUntransferable`, `mathSpecial`, `moduleHasTopLevelAwait`, `now`, `nowNanoseconds`, `pgRows`, `privateSymbol`, `promiseResult`, `promiseState`, `requireModule`, `runTicks`, `setAsyncContext`, `setAsyncHooksEnabled`, `setCompileCacheCallbacks`, `setFunctionSource`, `setImmediate`, `stalledTopLevelAwaits`, `urlCanParse`, `urlDomainToASCII`, `urlDomainToUnicode`, `urlFormParse`, `urlFormSerialize`, `urlIdnaToASCII`, `urlParse`, `urlUpdate`, `utilErrorMap`, `utilErrorMessage`, `writeBuiltinCache` |
 | Platform | `rawOS`, `rawStd` |
 | Files | `fsConstants`, `fsSync`, `fsTracking`, `hasPendingIO`, `pollIO`, `resourceSnapshot`, `submit`, `watch`, `watchControl` |
 | Network | `httpChunk`, `httpRespond`, `httpRespondText`, `net`, `secure`, `wsSend` |
