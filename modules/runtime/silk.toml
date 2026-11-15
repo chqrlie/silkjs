@@ -22,6 +22,10 @@ zlib = { path = "../native/zlib", package = "silkjs-zlib" }
 zstd = { path = "../native/zstd", package = "silkjs-zstd" }
 brotli = { path = "../native/brotli", package = "silkjs-brotli" }
 
+# The benchmark tasks (bench/README.md) are written with the package of ../benchkit.
+[profiles.tasks.dependencies]
+benchkit = { path = "../benchkit" }
+
 # The runtime's own C, and WAMR: vendor/wamr is WAMR with vendor/wamr/patches applied
 # (tools/vendor_wamr.py writes it). builtin_sources.c embeds the built-in JavaScript (tools/embed.py).
 # tools/build.py links the executable with the built-ins' bytecode and a build identity besides.
