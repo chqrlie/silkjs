@@ -1,7 +1,17 @@
-# lib-silkjs
+# SilkJS
 
-SilkJS, a native [Silk](https://github.com/silk-lang/silk) port of QuickJS, and a Node-compatible
-runtime built on it.
+SilkJS is JavaScript written in [Silk](https://github.com/silk-lang/silk). It comes as two
+products, split the way Node and V8 are:
+
+- **SilkJS** is the runtime: the engine plus an event loop, Node builtins, `fetch` and a package
+  manager. It owns the `silkjs` command.
+- **SilkJS Engine** is the embeddable JavaScript engine, a native Silk port of QuickJS, with its
+  embedding API. It has no event loop and no Node or web APIs.
+
+[Silk UI](https://github.com/silk-lang/lib-ui) embeds either one to run JavaScript apps. The
+packages are being renamed to match: `silkjs` becomes `silkjs-engine` and `silkjsruntime` becomes
+`silkjs-runtime`, and the `silkjs` command moves from the engine to the runtime. Until then the
+table below shows today's names.
 
 | Module | Package | What it is |
 | --- | --- | --- |
