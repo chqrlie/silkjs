@@ -106,6 +106,15 @@ in the input over the number of chunks). That cost more than the codec. Now:
   (`LEASE_MINIMUM`), and copies smaller ones. A lease calls the engine's `refresh`, which walks
   every live view (O(views)), so a stream of 1 KiB writes with thousands of live buffers spent its
   time there.
+- An async zlib write of at most 4 KiB of input into at most 64 KiB of output runs on the main
+  thread (`internal/compression/handle.js`), and its callback comes on a later turn of the loop
+  (an Immediate) inside the handle's `ZLIB` resource. The thread pool's round trip cost more
+  than such a write: 35 to 45 microseconds per hop on the measuring host, against a few
+  microseconds of codec work for 1 KiB. The bounds keep main-thread time to a few hundred
+  microseconds at worst. Larger writes, Brotli and Zstandard go to the thread pool, as in Node,
+  and so does every write while an async hook is installed, so that hooks see the resources
+  Node creates (no extra Immediate). Compat case `zlib-small-async-write-context` checks the
+  async context, the error path and that the callback is still asynchronous.
 - Each handle has one `AsyncResource('ZLIB')`, as Node's handle does, instead of one per call.
 - `zlib.crc32` (op 9) reads its input in place.
 - `params()` on a gzip stream changes nothing, as in Node: its `ZlibContext::SetParams` calls
