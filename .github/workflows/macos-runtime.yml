@@ -137,4 +137,4 @@ jobs:
           brew install wrk
           chmod +x "$RUNNER_TEMP"/bin/*/silkjs
           ls -la "$RUNNER_TEMP"/bin/*/silkjs
-          python3 tools/ci_bench.py "$RUNNER_TEMP/bin/silkjs-f3d5ea8affce5bc169df95191b55ab47e3db2740/silkjs" "$RUNNER_TEMP/bin/silkjs-branch/silkjs" --rounds 8 | tee "$RUNNER_TEMP/bench.txt"
+          python3 tools/ci_bench.py "$RUNNER_TEMP/bin/silkjs-f3d5ea8affce5bc169df95191b55ab47e3db2740/silkjs" "$RUNNER_TEMP/bin/silkjs-branch/silkjs" --rounds 12 | tee "$RUNNER_TEMP/bench.txt"

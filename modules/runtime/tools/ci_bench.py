@@ -6,7 +6,8 @@ Usage: python3 tools/ci_bench.py BASELINE CANDIDATE [--rounds N]
 
 Each round runs every benchmark once with each executable, the order of the two alternating from
 round to round, so drift on the runner falls on both alike. Printed per benchmark: the median of
-each and the candidate's change. Benchmarks, from bench/scripts where one exists:
+each, the candidate's change, the rounds in which the candidate did worse than the baseline
+of that round, and both ranges. Benchmarks, from bench/scripts where one exists:
 
 - node_http, serve: a server under `wrk -t1 -c8 -d5s`: requests per second, and the server's
   peak resident memory and CPU microseconds per request (from wait4's rusage).
@@ -134,7 +135,7 @@ def main():
         for name, runtime in order:
             samples[name].append(bench_once(runtime, work))
         print(f'round {index + 1} of {rounds} done', flush=True)
-    print(f'\n{"benchmark":<14} {"metric":<16} {"baseline":>12} {"candidate":>12} {"change":>8}  better')
+    print(f'\n{"benchmark":<14} {"metric":<16} {"baseline":>12} {"candidate":>12} {"change":>8}  better     rounds candidate worse   ranges')
     worse = []
     for bench in samples['baseline'][0]:
         for metric in samples['baseline'][0][bench]:
@@ -143,7 +144,11 @@ def main():
             change = (b - a) / a * 100 if a else 0.0
             larger = metric in LARGER_IS_BETTER
             better = 'candidate' if (b > a) == larger and b != a else ('baseline' if b != a else 'same')
-            print(f'{bench:<14} {metric:<16} {a:>12.2f} {b:>12.2f} {change:>+7.1f}%  {better}')
+            base = [r[bench][metric] for r in samples['baseline']]
+            cand = [r[bench][metric] for r in samples['candidate']]
+            losses = sum(1 for x, y in zip(base, cand) if (y < x if larger else y > x))
+            print(f'{bench:<14} {metric:<16} {a:>12.2f} {b:>12.2f} {change:>+7.1f}%  {better:<10} {losses:>2} of {len(base):<2}               '
+                  f'{min(base):.2f}..{max(base):.2f} / {min(cand):.2f}..{max(cand):.2f}')
             if better == 'baseline' and abs(change) > 5:
                 worse.append(f'{bench} {metric} {change:+.1f}%')
     print('\ncandidate more than 5% worse:', ', '.join(worse) if worse else 'none')

@@ -247,6 +247,7 @@ pub type CallocFunction = extern "C" fn(usize, usize) -> ?*mut u8
 pub type FreeFunction = extern "C" fn(?*mut u8) -> ()
 
 fn mallocWord() -> *mut u64 { return Intrinsic.processWord() }
+fn timebaseWord() -> *mut u64 { return Intrinsic.processWord() }
 fn reallocWord() -> *mut u64 { return Intrinsic.processWord() }
 fn callocWord() -> *mut u64 { return Intrinsic.processWord() }
 fn freeWord() -> *mut u64 { return Intrinsic.processWord() }
@@ -531,10 +532,17 @@ pub unsafe fn uv_translate_sys_error(code: i32) -> i32 {
 /// clock cannot be read. Darwin: mach_continuous_time() in the Mach timebase, as libuv.
 pub unsafe fn uv_hrtime() -> u64 {
   static if Intrinsic.targetOperatingSystem() == "darwin" {
-    let mut base: [u32; 2] = [0; 2]
-    // libuv reads the timebase once and aborts if it cannot; the call does not fail in practice.
-    if unsafe mach_timebase_info(Pointer.fromMutRef<[u32; 2]>(&mut base)) != 0 || base[1] == 0 { return 0 }
-    return u64.wrappingMultiply(unsafe mach_continuous_time(), u32.toU64(base[0])) / u32.toU64(base[1])
+    // libuv reads the timebase once (uv_once) and aborts if it cannot; it is kept here in a process
+    // word as numerator << 32 | denominator, 0 until the first call.
+    let word = timebaseWord()
+    let mut cached = unsafe Atomic.load<u64>(word, MemoryOrder.Relaxed)
+    if cached == 0 {
+      let mut base: [u32; 2] = [0; 2]
+      if unsafe mach_timebase_info(Pointer.fromMutRef<[u32; 2]>(&mut base)) != 0 || base[1] == 0 { return 0 }
+      cached = u64.shiftLeft(u32.toU64(base[0]), 32) | u32.toU64(base[1])
+      unsafe Atomic.store<u64>(word, cached, MemoryOrder.Relaxed)
+    }
+    return u64.wrappingMultiply(unsafe mach_continuous_time(), u64.shiftRight(cached, 32)) / (cached & 4294967295)
   } else {
     let mut now = Timespec { seconds: 0, nanoseconds: 0 }
     if unsafe clock_gettime(1, Pointer.fromMutRef<Timespec>(&mut now)) != 0 { return 0 }
