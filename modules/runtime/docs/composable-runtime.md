@@ -661,9 +661,13 @@ path, the component versions). `Amaro` and `EmptyTypeStripping`: what step 2 mad
 service is now the embedder's choice, and `checkCombination` checks that amaro has WebAssembly to
 run on.
 
-What is left of step 6 is `Workers`, which holds `process.env` and the thread identities every
-runtime has, and `Inspector`, which reaches into the console, diagnostics channels and tracing at
-load. Each needs that part moved to the core before it can be empty.
+**Step 6, third part: Workers.** `ThreadWorkers` and `EmptyWorkers`. `worker_threads`, message
+ports, `process.env` and the thread identities stand on the worker natives, which every runtime
+has, so they stay; without worker threads `new Worker()` fails with `ERR_WORKER_INIT_FAILED` and
+the native start of a thread is not compiled.
+
+What is left of step 6 is `Inspector`, which reaches into the console, diagnostics channels and
+tracing at load: those need moving to the core before it can be empty.
 
 ## Risks and decisions taken
 

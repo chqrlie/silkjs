@@ -1141,6 +1141,8 @@ unsafe effect fn invoke<'m, C: Composition>(engine: &mut Engine<'m, host.Service
     let id = unsafe transport.newEndpoint(guard.getMut(), endpoint, state.id, 0, move name, true)
     return ValueBits.number(u32.toF64(id))
   }
+  // Starting a thread is the Workers capability's; without it the start is not compiled.
+  static if Composition.workersPresent() {
   if equal(op, b"startWorker") {
     let mut allocator = state.group.resources.clone()
     let metadata = run unsafe host.text(&mut engine, context, args.values[0]) |> Effect.provideMut<Allocator>(&mut allocator)
@@ -1153,6 +1155,7 @@ unsafe effect fn invoke<'m, C: Composition>(engine: &mut Engine<'m, host.Service
     // resourceLimits.maxOldGenerationSizeMb and maxYoungGenerationSizeMb, in bytes, or undefined.
     let limits = HeapLimits { heap: limitBytes(args.values[4]), young: limitBytes(args.values[5]) }
     return ValueBits.number(u32.toF64(run unsafe spawn(&state, move metadata, number(args.values[1]), f64.toUsize(stack), move limits, nativeThreadName(args.values[3]))))
+  }
   }
   let guard = state.group.registry.get().lock() let registry = guard.get() let mut mutable = ()
   if equal(op, b"workerStatus") {

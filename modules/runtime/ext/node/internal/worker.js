@@ -275,6 +275,8 @@ class WorkerHandle {
 }
 class Worker extends EventEmitter {
   constructor(filename, options) {
+    // Without worker threads (Workers.empty) a runtime cannot start one.
+    if (!host.workerThreads) throw new (require('internal/errors').codes.ERR_WORKER_INIT_FAILED)('worker threads are not part of this runtime');
     require('internal/v8/startup_snapshot').throwIfBuildingSnapshot('Creating workers');
     super();
     const config = workerOptions(filename, options);

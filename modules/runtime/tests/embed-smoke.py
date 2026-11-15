@@ -35,6 +35,7 @@ def expected(wasm, files):
         *(['fs function', 'read hello from memory', 'dir greeting.txt,out.txt 6 false'] if files else
           ['fs ERR_UNKNOWN_BUILTIN_MODULE undefined false']),
         'crypto ' + ('there' if files else 'ERR_NO_CRYPTO'),
+        'worker ' + ('started' if files else 'ERR_WORKER_INIT_FAILED'),
         'cjs helpers',
         'missing ERR_MODULE_NOT_FOUND',
         'tick 1',

@@ -12,14 +12,14 @@ declarations, the libc and library surface each service reaches today. Requires 
 
 | Service | Built-ins | JavaScript KiB | Load-time requires | Lazy requires | Silk files | Silk KiB | `extern "C"` |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Core | 327 | 3,477.3 | 944 | 354 | 41 | 739.1 | 80 |
+| Core | 327 | 3,477.3 | 944 | 354 | 41 | 740.8 | 80 |
 | Platform | 0 | 0.0 | 0 | 0 | 2 | 10.8 | 0 |
 | ModuleResolver | 15 | 181.7 | 22 | 20 | 2 | 6.9 | 0 |
 | Files | 18 | 238.9 | 76 | 40 | 5 | 81.2 | 49 |
 | Network | 45 | 1,423.8 | 275 | 64 | 4 | 253.6 | 107 |
 | Processes | 10 | 88.4 | 50 | 14 | 3 | 68.5 | 60 |
 | SystemInfo | 2 | 8.5 | 5 | 2 | 2 | 38.9 | 61 |
-| Workers | 6 | 47.6 | 15 | 20 | 4 | 117.0 | 24 |
+| Workers | 6 | 47.8 | 15 | 21 | 4 | 117.1 | 24 |
 | Crypto | 28 | 453.6 | 159 | 55 | 3 | 162.5 | 280 |
 | Tls | 12 | 315.8 | 44 | 9 | 3 | 102.5 | 213 |
 | Compression | 7 | 61.0 | 25 | 1 | 2 | 39.1 | 48 |
@@ -31,7 +31,7 @@ declarations, the libc and library surface each service reaches today. Requires 
 | Inspector | 24 | 165.0 | 40 | 47 | 18 | 234.1 | 33 |
 | NativeAddons | 1 | 10.6 | 0 | 7 | 4 | 221.7 | 205 |
 | Executable | 47 | 577.1 | 323 | 35 | 6 | 39.0 | 21 |
-| **Total** | 562 | 11,132.6 | 2050 | 685 | 111 | 2,473.9 | 1474 |
+| **Total** | 562 | 11,132.8 | 2050 | 686 | 111 | 2,475.7 | 1474 |
 
 ## Linked size
 

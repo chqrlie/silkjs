@@ -7,7 +7,7 @@
 //!
 //! ```silk
 //! // The process's environment and files, no WebAssembly, no functions of the host's.
-//! let capabilities = Capabilities { platform: OsPlatform {}, modules: NodeResolution {}, files: OsFiles {}, compression: NativeCompression {}, http2: Nghttp2 {}, crypto: OpenSslCrypto {}, tls: OpenSslTls {}, database: SqliteDatabase {}, addons: DlopenAddons {}, processes: OsProcesses {}, network: OsNetwork {}, http: Llhttp {}, systemInfo: OsSystemInfo {}, typeStripping: Amaro {}, wasm: EmptyWasm {}, hostApi: EmptyHostApi {} }
+//! let capabilities = Capabilities { platform: OsPlatform {}, modules: NodeResolution {}, files: OsFiles {}, compression: NativeCompression {}, http2: Nghttp2 {}, crypto: OpenSslCrypto {}, tls: OpenSslTls {}, database: SqliteDatabase {}, addons: DlopenAddons {}, processes: OsProcesses {}, network: OsNetwork {}, http: Llhttp {}, systemInfo: OsSystemInfo {}, typeStripping: Amaro {}, workers: ThreadWorkers {}, wasm: EmptyWasm {}, hostApi: EmptyHostApi {} }
 //! return run embed.start(options, &mut app, move capabilities)
 //!
 //! struct App {}

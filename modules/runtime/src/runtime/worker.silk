@@ -583,6 +583,8 @@ unsafe effect fn configure<'m, C: Composition>(engine: &mut Engine<'m, Services<
   if snapshot == SNAPSHOT_BUILD { run unsafe common.define(&mut engine, context, native, b"snapshotBuild", ValueBits.Bool { value: true }, 7) }
   // An embedded runtime does not own the process (bootstrap.js rawStd.exit).
   if hosted { run unsafe common.define(&mut engine, context, native, b"embedded", ValueBits.Bool { value: true }, 7) }
+  // Whether new Worker() can start a thread (the Workers capability).
+  static if Composition.workersPresent() { run unsafe common.define(&mut engine, context, native, b"workerThreads", ValueBits.Bool { value: true }, 7) }
   // Whether fs is the operating system's, unrooted, whose paths the engine's os module takes itself.
   static if Composition.filesDirect() { run unsafe common.define(&mut engine, context, native, b"filesDirect", ValueBits.Bool { value: true }, 7) }
   at = 0
