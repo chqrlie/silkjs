@@ -684,12 +684,14 @@ pub unsafe fn uv_loop_fork(memory: *mut u8) -> i32 {
     if added != 0 { return added }
   }
   drop l
-  // Descriptor polls go back in the new queue with the events they waited for.
+  // Descriptor watchers go back in the new queue with the events they waited for, and signal
+  // handles forget what the parent caught (libuv's uv__io_fork and uv__signal_loop_fork).
   let walk = () let l2 = unsafe Pointer.borrow<(), Loop>(&walk, loop)
   let mut handle = l2.first drop l2
   while !Pointer.isNull<Handle>(handle) {
     let mut second = () let h = unsafe Pointer.borrowMut<(), Handle>(&mut second, unsafe nn(handle))
-    if h.kind == UV_POLL && h.registered != 0 {
+    if h.kind == UV_SIGNAL { h.caughtCount = 0 h.dispatchedCount = 0 }
+    if (h.kind == UV_POLL || (h.flags & IO) != 0) && h.registered != 0 {
       let status2 = unsafe queueSet(queue, h.fd, usize.toU64(Pointer.address<Handle>(handle)), 0, h.registered)
       if status2 != 0 { return status2 }
     }
@@ -1945,7 +1947,7 @@ pub unsafe fn timerStart(memory: *mut u8, callback: ?extern "C" fn(*mut u8) -> (
   let _stopped = unsafe uv_timer_stop(memory)
   let h2 = unsafe Pointer.borrowMut<(), Handle>(&mut anchor, handle)
   let mut second = () let l = unsafe Pointer.borrowMut<(), Loop>(&mut second, h2.loop)
-  let mut due = l.time + timeout
+  let mut due = u64.wrappingAdd(l.time, timeout)
   if due < timeout { due = 18446744073709551615 }
   h2.fired = unsafe Intrinsic.pointerRequalify<?extern "C" fn(*mut u8) -> (), extern "C" fn(*mut u8) -> ()>(callback)
   h2.repeat = repeat h2.due = due h2.order = l.timerCount h2.flags = h2.flags | HAS_CALLBACK

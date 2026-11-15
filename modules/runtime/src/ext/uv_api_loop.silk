@@ -237,21 +237,25 @@ pub unsafe export "C" fn handleGetLoop(handle: *const u8) -> ?*mut u8 as "uv_han
 pub unsafe export "C" fn requestGetType(request: *const u8) -> i32 as "uv_req_get_type" { return unsafe readInt(request, 8) }
 pub unsafe export "C" fn requestGetData(request: *const u8) -> ?*mut u8 as "uv_req_get_data" { return unsafe addressPointer(unsafe readWord(request, 0)) }
 pub unsafe export "C" fn requestSetData(request: *mut u8, data: ?*mut u8) -> () as "uv_req_set_data" { unsafe writeWord(request, 0, Pointer.address<u8>(data)) }
-pub unsafe export "C" fn isActive(handle: *const u8) -> i32 as "uv_is_active" { return unsafe uvl.uv_is_active(unsafe abi.innerOf(handle)) }
-pub unsafe export "C" fn isClosing(handle: *const u8) -> i32 as "uv_is_closing" { return unsafe uvl.uv_is_closing(unsafe abi.innerOf(handle)) }
-pub unsafe export "C" fn reference(handle: *mut u8) -> () as "uv_ref" { unsafe uvl.uv_ref(unsafe abi.innerOf(handle)) }
-pub unsafe export "C" fn unreference(handle: *mut u8) -> () as "uv_unref" { unsafe uvl.uv_unref(unsafe abi.innerOf(handle)) }
-pub unsafe export "C" fn hasReference(handle: *const u8) -> i32 as "uv_has_ref" { return unsafe uvl.uv_has_ref(unsafe abi.innerOf(handle)) }
+pub unsafe export "C" fn isActive(handle: *const u8) -> i32 as "uv_is_active" { let live = unsafe abi.liveInner(handle) if Pointer.isNull<u8>(live) { return 0 } return unsafe uvl.uv_is_active(unsafe nn(live)) }
+pub unsafe export "C" fn isClosing(handle: *const u8) -> i32 as "uv_is_closing" { let live = unsafe abi.liveInner(handle) if Pointer.isNull<u8>(live) { return (if unsafe abi.recordFlags(handle) != 0 { 1 } else { 0 }) } return unsafe uvl.uv_is_closing(unsafe nn(live)) }
+pub unsafe export "C" fn reference(handle: *mut u8) -> () as "uv_ref" { let live = unsafe abi.liveInner(handle) if Pointer.isNull<u8>(live) { return } unsafe uvl.uv_ref(unsafe nn(live)) }
+pub unsafe export "C" fn unreference(handle: *mut u8) -> () as "uv_unref" { let live = unsafe abi.liveInner(handle) if Pointer.isNull<u8>(live) { return } unsafe uvl.uv_unref(unsafe nn(live)) }
+pub unsafe export "C" fn hasReference(handle: *const u8) -> i32 as "uv_has_ref" { let live = unsafe abi.liveInner(handle) if Pointer.isNull<u8>(live) { return 0 } return unsafe uvl.uv_has_ref(unsafe nn(live)) }
 /// libuv's uv_fileno: the descriptor of a TCP, pipe, TTY, UDP or poll handle.
 pub unsafe export "C" fn fileno(handle: *const u8, fd: *mut i32) -> i32 as "uv_fileno" {
   let kind = unsafe kindOf(handle)
   if !isStream(kind) && kind != abi.UV_POLL { return -22 }
-  return unsafe uvl.uv_fileno(unsafe abi.innerOf(handle), fd)
+  let live = unsafe abi.liveInner(handle)
+  if Pointer.isNull<u8>(live) { return -9 }
+  return unsafe uvl.uv_fileno(unsafe nn(live), fd)
 }
 /// libuv's uv_close: the type's closing steps now, and `callback(handle)` in the closing phase.
 @deferredCallbacks("callback")
 pub unsafe export "C" fn closeHandle(handle: *mut u8, callback: Given) -> () as "uv_close" {
-  let inner = unsafe abi.innerOf(handle)
+  let live = unsafe abi.liveInner(handle)
+  if Pointer.isNull<u8>(live) { return }
+  let inner = unsafe nn(live)
   if unsafe uvl.uv_is_closing(inner) != 0 { return }
   let kind = unsafe kindOf(handle)
   if isStream(kind) { unsafe stream.streamClose(handle) }
@@ -283,7 +287,7 @@ unsafe fn mirrorTimer(outer: *mut u8) -> () {
   let inner = unsafe abi.innerOf(outer)
   unsafe writeWord(outer, 136, u64.toUsize(unsafe uvl.uv_timer_get_repeat(inner)))
   let loop = unsafe uvl.handleLoop(inner)
-  unsafe writeWord(outer, 128, u64.toUsize(unsafe uvl.uv_now(loop) + unsafe uvl.uv_timer_get_due_in(inner)))
+  unsafe writeWord(outer, 128, u64.toUsize(u64.wrappingAdd(unsafe uvl.uv_now(loop), unsafe uvl.uv_timer_get_due_in(inner))))
 }
 
 // ---- Timers -----------------------------------------------------------------------------------
@@ -302,22 +306,26 @@ pub unsafe export "C" fn timerInit(loop: *mut u8, handle: *mut u8) -> i32 as "uv
 }
 @deferredCallbacks("callback")
 pub unsafe export "C" fn timerStart(handle: *mut u8, callback: Given, timeout: u64, repeat: u64) -> i32 as "uv_timer_start" {
-  let inner = unsafe abi.innerOf(handle)
+  let live = unsafe abi.liveInner(handle)
+  if Pointer.isNull<u8>(live) { return -22 }
+  let inner = unsafe nn(live)
   if Intrinsic.pointerIsNull<Given>(callback) || unsafe uvl.uv_is_closing(inner) != 0 { return -22 }
   unsafe setCallback(handle, callback)
   let status = unsafe uvl.timerStart(inner, silkUvApiTimer, timeout, repeat)
   unsafe mirrorTimer(handle)
   return status
 }
-pub unsafe export "C" fn timerStop(handle: *mut u8) -> i32 as "uv_timer_stop" { return unsafe uvl.uv_timer_stop(unsafe abi.innerOf(handle)) }
+pub unsafe export "C" fn timerStop(handle: *mut u8) -> i32 as "uv_timer_stop" { let live = unsafe abi.liveInner(handle) if Pointer.isNull<u8>(live) { return 0 } return unsafe uvl.uv_timer_stop(unsafe nn(live)) }
 pub unsafe export "C" fn timerAgain(handle: *mut u8) -> i32 as "uv_timer_again" {
-  let status = unsafe uvl.uv_timer_again(unsafe abi.innerOf(handle))
+  let live = unsafe abi.liveInner(handle)
+  if Pointer.isNull<u8>(live) { return -22 }
+  let status = unsafe uvl.uv_timer_again(unsafe nn(live))
   unsafe mirrorTimer(handle)
   return status
 }
-pub unsafe export "C" fn timerSetRepeat(handle: *mut u8, repeat: u64) -> () as "uv_timer_set_repeat" { unsafe uvl.uv_timer_set_repeat(unsafe abi.innerOf(handle), repeat) unsafe writeWord(handle, 136, u64.toUsize(repeat)) }
-pub unsafe export "C" fn timerGetRepeat(handle: *const u8) -> u64 as "uv_timer_get_repeat" { return unsafe uvl.uv_timer_get_repeat(unsafe abi.innerOf(handle)) }
-pub unsafe export "C" fn timerGetDueIn(handle: *const u8) -> u64 as "uv_timer_get_due_in" { return unsafe uvl.uv_timer_get_due_in(unsafe abi.innerOf(handle)) }
+pub unsafe export "C" fn timerSetRepeat(handle: *mut u8, repeat: u64) -> () as "uv_timer_set_repeat" { let live = unsafe abi.liveInner(handle) if Pointer.isNull<u8>(live) { return } unsafe uvl.uv_timer_set_repeat(unsafe nn(live), repeat) unsafe writeWord(handle, 136, u64.toUsize(repeat)) }
+pub unsafe export "C" fn timerGetRepeat(handle: *const u8) -> u64 as "uv_timer_get_repeat" { let live = unsafe abi.liveInner(handle) if Pointer.isNull<u8>(live) { return usize.toU64(unsafe readWord(handle, 136)) } return unsafe uvl.uv_timer_get_repeat(unsafe nn(live)) }
+pub unsafe export "C" fn timerGetDueIn(handle: *const u8) -> u64 as "uv_timer_get_due_in" { let live = unsafe abi.liveInner(handle) if Pointer.isNull<u8>(live) { return 0 } return unsafe uvl.uv_timer_get_due_in(unsafe nn(live)) }
 
 // ---- Idle, prepare, check ---------------------------------------------------------------------
 unsafe fn phaseInit(loop: *mut u8, handle: *mut u8, kind: i32) -> i32 {
@@ -328,7 +336,9 @@ unsafe fn phaseInit(loop: *mut u8, handle: *mut u8, kind: i32) -> i32 {
   return 0
 }
 unsafe fn phaseStart(handle: *mut u8, callback: Given) -> i32 {
-  let inner = unsafe abi.innerOf(handle)
+  let live = unsafe abi.liveInner(handle)
+  if Pointer.isNull<u8>(live) { return -22 }
+  let inner = unsafe nn(live)
   if unsafe uvl.uv_is_active(inner) != 0 { return 0 }
   if Intrinsic.pointerIsNull<Given>(callback) { return -22 }
   unsafe setCallback(handle, callback)
@@ -343,9 +353,9 @@ pub unsafe export "C" fn idleStart(handle: *mut u8, callback: Given) -> i32 as "
 pub unsafe export "C" fn prepareStart(handle: *mut u8, callback: Given) -> i32 as "uv_prepare_start" { return unsafe phaseStart(handle, callback) }
 @deferredCallbacks("callback")
 pub unsafe export "C" fn checkStart(handle: *mut u8, callback: Given) -> i32 as "uv_check_start" { return unsafe phaseStart(handle, callback) }
-pub unsafe export "C" fn idleStop(handle: *mut u8) -> i32 as "uv_idle_stop" { return unsafe uvl.phaseStopMemory(unsafe abi.innerOf(handle)) }
-pub unsafe export "C" fn prepareStop(handle: *mut u8) -> i32 as "uv_prepare_stop" { return unsafe uvl.phaseStopMemory(unsafe abi.innerOf(handle)) }
-pub unsafe export "C" fn checkStop(handle: *mut u8) -> i32 as "uv_check_stop" { return unsafe uvl.phaseStopMemory(unsafe abi.innerOf(handle)) }
+pub unsafe export "C" fn idleStop(handle: *mut u8) -> i32 as "uv_idle_stop" { let live = unsafe abi.liveInner(handle) if Pointer.isNull<u8>(live) { return 0 } return unsafe uvl.phaseStopMemory(unsafe nn(live)) }
+pub unsafe export "C" fn prepareStop(handle: *mut u8) -> i32 as "uv_prepare_stop" { let live = unsafe abi.liveInner(handle) if Pointer.isNull<u8>(live) { return 0 } return unsafe uvl.phaseStopMemory(unsafe nn(live)) }
+pub unsafe export "C" fn checkStop(handle: *mut u8) -> i32 as "uv_check_stop" { let live = unsafe abi.liveInner(handle) if Pointer.isNull<u8>(live) { return 0 } return unsafe uvl.phaseStopMemory(unsafe nn(live)) }
 
 // ---- Async ------------------------------------------------------------------------------------
 @deferredCallbacks("callback")
@@ -357,7 +367,7 @@ pub unsafe export "C" fn asyncInit(loop: *mut u8, handle: *mut u8, callback: Giv
   unsafe abi.bind(handle, unsafe nn(inner))
   return status
 }
-pub unsafe export "C" fn asyncSend(handle: *mut u8) -> i32 as "uv_async_send" { return unsafe uvl.uv_async_send(unsafe abi.innerOf(handle)) }
+pub unsafe export "C" fn asyncSend(handle: *mut u8) -> i32 as "uv_async_send" { let live = unsafe abi.liveInner(handle) if Pointer.isNull<u8>(live) { return 0 } return unsafe uvl.uv_async_send(unsafe nn(live)) }
 
 // ---- Poll -------------------------------------------------------------------------------------
 export "C" fn silkUvApiPolled(inner: *mut u8, status: i32, events: i32) -> () {
@@ -367,15 +377,16 @@ export "C" fn silkUvApiPolled(inner: *mut u8, status: i32, events: i32) -> () {
   let present = unsafe Intrinsic.pointerRequalify<?extern "C" fn(*mut u8, i32, i32) -> (), extern "C" fn(*mut u8, i32, i32) -> ()>(callback)
   unsafe present(outer, status, events)
 }
-// libuv's uv__fd_exists: a live poll or descriptor handle of the loop already watches `fd`.
-struct FdSearch { fd: i32, found: bool }
+// libuv's uv__fd_exists: a handle of the loop (other than `skip`) has a started watcher on `fd`.
+struct FdSearch { fd: i32, skip: usize, found: bool }
 export "C" fn silkUvApiFdSearch(handle: *mut u8, raw: *mut u8) -> () {
   let mut anchor = () let search = unsafe Pointer.borrowMut<(), FdSearch>(&mut anchor, unsafe Intrinsic.pointerReinterpret<*mut u8, *mut FdSearch>(raw))
   let mut fd: i32 = -1
+  if Pointer.address<u8>(handle) == search.skip || unsafe uvl.ioWatched(handle) == 0 { return }
   if unsafe uvl.uv_fileno(handle, Pointer.fromMutRef<i32>(&mut fd)) == 0 && fd == search.fd { search.found = true }
 }
-unsafe fn fdExists(loop: *mut u8, fd: i32) -> bool {
-  let mut search = FdSearch { fd: fd, found: false }
+unsafe fn fdExists(loop: *mut u8, fd: i32, skip: usize) -> bool {
+  let mut search = FdSearch { fd: fd, skip: skip, found: false }
   unsafe uvl.walkAll(loop, silkUvApiFdSearch, unsafe Intrinsic.pointerReinterpret<*mut FdSearch, *mut u8>(Pointer.fromMutRef<FdSearch>(&mut search)))
   return search.found
 }
@@ -423,7 +434,7 @@ static if Intrinsic.targetOperatingSystem() == "darwin" {
 /// libuv's uv_poll_init: UV_EEXIST when the loop already watches `fd`, the backend's refusal of
 /// the descriptor, and then nonblocking mode.
 pub unsafe export "C" fn pollInit(loop: *mut u8, handle: *mut u8, fd: i32) -> i32 as "uv_poll_init" {
-  if unsafe fdExists(loop, fd) { return -17 }
+  if unsafe fdExists(loop, fd, 0) { return -17 }
   let checked = unsafe checkDescriptor(loop, fd)
   if checked != 0 { return checked }
   let flags = unsafe fcntl(fd, F_GETFL)
@@ -439,13 +450,17 @@ pub unsafe export "C" fn pollInit(loop: *mut u8, handle: *mut u8, fd: i32) -> i3
 pub unsafe export "C" fn pollInitSocket(loop: *mut u8, handle: *mut u8, socket: i32) -> i32 as "uv_poll_init_socket" { return unsafe pollInit(loop, handle, socket) }
 @deferredCallbacks("callback")
 pub unsafe export "C" fn pollStart(handle: *mut u8, events: i32, callback: ?extern "C" fn(*mut u8, i32, i32) -> ()) -> i32 as "uv_poll_start" {
-  let inner = unsafe abi.innerOf(handle)
+  let live = unsafe abi.liveInner(handle)
+  if Pointer.isNull<u8>(live) { return -22 }
+  let inner = unsafe nn(live)
+  let mut fd: i32 = -1
+  if unsafe uvl.uv_fileno(inner, Pointer.fromMutRef<i32>(&mut fd)) == 0 && unsafe fdExists(unsafe uvl.handleLoop(inner), fd, Pointer.address<u8>(inner)) { return -17 }
   let _stopped = unsafe uvl.uv_poll_stop(inner)
   if events == 0 { return 0 }
   unsafe Pointer.write<?extern "C" fn(*mut u8, i32, i32) -> ()>(unsafe Intrinsic.pointerReinterpret<*mut u8, *mut ?extern "C" fn(*mut u8, i32, i32) -> ()>(unsafe at(handle, CALLBACK_OFFSET)), callback)
   return unsafe uvl.uv_poll_start(inner, events, silkUvApiPolled)
 }
-pub unsafe export "C" fn pollStop(handle: *mut u8) -> i32 as "uv_poll_stop" { return unsafe uvl.uv_poll_stop(unsafe abi.innerOf(handle)) }
+pub unsafe export "C" fn pollStop(handle: *mut u8) -> i32 as "uv_poll_stop" { let live = unsafe abi.liveInner(handle) if Pointer.isNull<u8>(live) { return 0 } return unsafe uvl.uv_poll_stop(unsafe nn(live)) }
 
 // ---- Signals ----------------------------------------------------------------------------------
 export "C" fn silkUvApiSignal(inner: *mut u8, signum: i32) -> () {
@@ -465,7 +480,9 @@ pub unsafe export "C" fn signalInit(loop: *mut u8, handle: *mut u8) -> i32 as "u
   return 0
 }
 unsafe fn signalStart(handle: *mut u8, callback: ?extern "C" fn(*mut u8, i32) -> (), signum: i32, oneshot: bool) -> i32 {
-  let inner = unsafe abi.innerOf(handle)
+  let live = unsafe abi.liveInner(handle)
+  if Pointer.isNull<u8>(live) { return -22 }
+  let inner = unsafe nn(live)
   unsafe Pointer.write<?extern "C" fn(*mut u8, i32) -> ()>(unsafe Intrinsic.pointerReinterpret<*mut u8, *mut ?extern "C" fn(*mut u8, i32) -> ()>(unsafe at(handle, CALLBACK_OFFSET)), callback)
   let status = if oneshot { unsafe uvl.uv_signal_start_oneshot(inner, silkUvApiSignal, signum) } else { unsafe uvl.uv_signal_start(inner, silkUvApiSignal, signum) }
   unsafe writeInt(handle, 104, unsafe uvl.signalNumber(inner))
@@ -476,7 +493,9 @@ pub unsafe export "C" fn signalStartRepeating(handle: *mut u8, callback: ?extern
 @deferredCallbacks("callback")
 pub unsafe export "C" fn signalStartOneshot(handle: *mut u8, callback: ?extern "C" fn(*mut u8, i32) -> (), signum: i32) -> i32 as "uv_signal_start_oneshot" { return unsafe signalStart(handle, callback, signum, true) }
 pub unsafe export "C" fn signalStop(handle: *mut u8) -> i32 as "uv_signal_stop" {
-  let status = unsafe uvl.uv_signal_stop(unsafe abi.innerOf(handle))
+  let live = unsafe abi.liveInner(handle)
+  if Pointer.isNull<u8>(live) { return 0 }
+  let status = unsafe uvl.uv_signal_stop(unsafe nn(live))
   unsafe writeInt(handle, 104, 0)
   return status
 }
@@ -585,7 +604,7 @@ pub unsafe export "C" fn spawn(loop: *mut u8, handle: *mut u8, options: *const O
   unsafe free(translated) unsafe free(pairs)
   return status
 }
-pub unsafe export "C" fn processKill(handle: *mut u8, signum: i32) -> i32 as "uv_process_kill" { return unsafe uvl.uv_process_kill(unsafe abi.innerOf(handle), signum) }
+pub unsafe export "C" fn processKill(handle: *mut u8, signum: i32) -> i32 as "uv_process_kill" { let live = unsafe abi.liveInner(handle) if Pointer.isNull<u8>(live) { return -3 } return unsafe uvl.uv_process_kill(unsafe nn(live), signum) }
 pub unsafe export "C" fn processGetPid(handle: *const u8) -> i32 as "uv_process_get_pid" { return unsafe readInt(handle, 104) }
 
 // ---- File-system events and polls -------------------------------------------------------------
@@ -608,7 +627,9 @@ pub unsafe export "C" fn fsEventInit(loop: *mut u8, handle: *mut u8) -> i32 as "
 /// libuv's uv_fs_event_start; the record's public `path` is the watched path while active.
 @deferredCallbacks("callback")
 pub unsafe export "C" fn fsEventStart(handle: *mut u8, callback: ?extern "C" fn(*mut u8, ?*const u8, i32, i32) -> (), path: *const u8, flags: u32) -> i32 as "uv_fs_event_start" {
-  let inner = unsafe abi.innerOf(handle)
+  let live = unsafe abi.liveInner(handle)
+  if Pointer.isNull<u8>(live) { return -22 }
+  let inner = unsafe nn(live)
   if unsafe uvl.uv_is_active(inner) != 0 { return -22 }
   unsafe Pointer.write<?extern "C" fn(*mut u8, ?*const u8, i32, i32) -> ()>(unsafe Intrinsic.pointerReinterpret<*mut u8, *mut ?extern "C" fn(*mut u8, ?*const u8, i32, i32) -> ()>(unsafe at(handle, 104)), callback)
   let status = unsafe uvl.uv_fs_event_start(inner, silkUvApiEvent, path, flags)
@@ -616,7 +637,9 @@ pub unsafe export "C" fn fsEventStart(handle: *mut u8, callback: ?extern "C" fn(
   return status
 }
 pub unsafe export "C" fn fsEventStop(handle: *mut u8) -> i32 as "uv_fs_event_stop" {
-  let status = unsafe uvl.uv_fs_event_stop(unsafe abi.innerOf(handle))
+  let live = unsafe abi.liveInner(handle)
+  if Pointer.isNull<u8>(live) { return 0 }
+  let status = unsafe uvl.uv_fs_event_stop(unsafe nn(live))
   unsafe writeWord(handle, 96, 0)
   return status
 }
@@ -636,7 +659,7 @@ unsafe fn copyPath(path: ?*const u8, buffer: ?*mut u8, size: ?*mut usize) -> i32
   unsafe Pointer.write<usize>(unsafe Intrinsic.pointerRequalify<?*mut usize, *mut usize>(size), length)
   return 0
 }
-pub unsafe export "C" fn fsEventGetPath(handle: *mut u8, buffer: ?*mut u8, size: ?*mut usize) -> i32 as "uv_fs_event_getpath" { return unsafe copyPath(unsafe uvl.fsEventPath(unsafe abi.innerOf(handle)), buffer, size) }
+pub unsafe export "C" fn fsEventGetPath(handle: *mut u8, buffer: ?*mut u8, size: ?*mut usize) -> i32 as "uv_fs_event_getpath" { let live = unsafe abi.liveInner(handle) if Pointer.isNull<u8>(live) { return unsafe copyPath(Pointer.null<u8>(), buffer, size) } return unsafe copyPath(unsafe uvl.fsEventPath(unsafe nn(live)), buffer, size) }
 export "C" fn silkUvApiStat(inner: *mut u8, status: i32, previous: *const UvStat, current: *const UvStat) -> () {
   let outer = unsafe abi.outerOf(inner)
   let callback = unsafe Pointer.read<?extern "C" fn(*mut u8, i32, *const UvStat, *const UvStat) -> ()>(unsafe Intrinsic.pointerReinterpret<*mut u8, *mut ?extern "C" fn(*mut u8, i32, *const UvStat, *const UvStat) -> ()>(unsafe at(outer, 40)))
@@ -657,13 +680,15 @@ pub unsafe export "C" fn fsPollInit(loop: *mut u8, handle: *mut u8) -> i32 as "u
 /// field at 96 is libuv's private poll_ctx, which stays null.
 @deferredCallbacks("callback")
 pub unsafe export "C" fn fsPollStart(handle: *mut u8, callback: ?extern "C" fn(*mut u8, i32, *const UvStat, *const UvStat) -> (), path: *const u8, interval: u32) -> i32 as "uv_fs_poll_start" {
-  let inner = unsafe abi.innerOf(handle)
+  let live = unsafe abi.liveInner(handle)
+  if Pointer.isNull<u8>(live) { return -22 }
+  let inner = unsafe nn(live)
   if unsafe uvl.uv_is_active(inner) != 0 { return 0 }
   unsafe Pointer.write<?extern "C" fn(*mut u8, i32, *const UvStat, *const UvStat) -> ()>(unsafe Intrinsic.pointerReinterpret<*mut u8, *mut ?extern "C" fn(*mut u8, i32, *const UvStat, *const UvStat) -> ()>(unsafe at(handle, 40)), callback)
   return unsafe uvl.uv_fs_poll_start(inner, silkUvApiStat, path, interval)
 }
-pub unsafe export "C" fn fsPollStop(handle: *mut u8) -> i32 as "uv_fs_poll_stop" { return unsafe uvl.uv_fs_poll_stop(unsafe abi.innerOf(handle)) }
-pub unsafe export "C" fn fsPollGetPath(handle: *mut u8, buffer: ?*mut u8, size: ?*mut usize) -> i32 as "uv_fs_poll_getpath" { return unsafe copyPath(unsafe uvl.fsPollPath(unsafe abi.innerOf(handle)), buffer, size) }
+pub unsafe export "C" fn fsPollStop(handle: *mut u8) -> i32 as "uv_fs_poll_stop" { let live = unsafe abi.liveInner(handle) if Pointer.isNull<u8>(live) { return 0 } return unsafe uvl.uv_fs_poll_stop(unsafe nn(live)) }
+pub unsafe export "C" fn fsPollGetPath(handle: *mut u8, buffer: ?*mut u8, size: ?*mut usize) -> i32 as "uv_fs_poll_getpath" { let live = unsafe abi.liveInner(handle) if Pointer.isNull<u8>(live) { return unsafe copyPath(Pointer.null<u8>(), buffer, size) } return unsafe copyPath(unsafe uvl.fsPollPath(unsafe nn(live)), buffer, size) }
 
 // Generated by tools/keep_exports.py; do not edit below.
 /// Takes each C export as a value, so that Silk emits it (see tools/keep_exports.py).

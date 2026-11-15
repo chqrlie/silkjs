@@ -65,6 +65,19 @@ pub unsafe fn innerOf(outer: *const u8) -> *mut u8 {
   let anchor = () let h = unsafe Pointer.borrow<(), Head>(&anchor, unsafe Intrinsic.pointerReinterpret<*const u8, *const Head>(outer))
   return unsafe nn(h.inner)
 }
+/// The inner handle of a record, or null when the record was never initialized or is closed.
+pub unsafe fn liveInner(outer: *const u8) -> ?*mut u8 {
+  let anchor = () let h = unsafe Pointer.borrow<(), Head>(&anchor, unsafe Intrinsic.pointerReinterpret<*const u8, *const Head>(outer))
+  return h.inner
+}
+// Head.flags: the record's own closing state, which outlives its inner handle.
+pub const RECORD_CLOSING: u32 = 1
+pub const RECORD_CLOSED: u32 = 2
+/// libuv's uv_is_closing of a record without an inner handle: closing or closed.
+pub unsafe fn recordFlags(outer: *const u8) -> u32 {
+  let anchor = () let h = unsafe Pointer.borrow<(), Head>(&anchor, unsafe Intrinsic.pointerReinterpret<*const u8, *const Head>(outer))
+  return h.flags
+}
 /// The addon's record of a loop handle that works for one.
 pub unsafe fn outerOf(inner: *const u8) -> *mut u8 { return unsafe nn(unsafe uvl.uv_handle_get_data(inner)) }
 /// Writes libuv's public head of `outer` (keeping `data`, as libuv does) and allocates its inner
@@ -93,6 +106,9 @@ export "C" fn silkUvApiInnerClosed(inner: *mut u8) -> () {
   let anchor = () let h = unsafe Pointer.borrow<(), Head>(&anchor, unsafe head(outer))
   let finish = h.finish let closed = h.closed drop h
   if !Intrinsic.pointerIsNull<?extern "C" fn(*mut u8) -> ()>(finish) { let present = unsafe Intrinsic.pointerRequalify<?extern "C" fn(*mut u8) -> (), extern "C" fn(*mut u8) -> ()>(finish) unsafe present(outer) }
+  // The record outlives its inner handle: later uv_is_closing and friends read its own flags.
+  let mut second = () let g = unsafe Pointer.borrowMut<(), Head>(&mut second, unsafe head(outer))
+  g.inner = Pointer.null<u8>() g.flags = RECORD_CLOSING | RECORD_CLOSED drop g
   unsafe free(inner)
   if !Intrinsic.pointerIsNull<?extern "C" fn(*mut u8) -> ()>(closed) { let present = unsafe Intrinsic.pointerRequalify<?extern "C" fn(*mut u8) -> (), extern "C" fn(*mut u8) -> ()>(closed) unsafe present(outer) }
 }
@@ -100,7 +116,8 @@ export "C" fn silkUvApiInnerClosed(inner: *mut u8) -> () {
 /// module's own closing steps (stopping reads, closing a descriptor) come before this call.
 pub unsafe fn closeRecord(outer: *mut u8, callback: ?extern "C" fn(*mut u8) -> ()) -> () {
   let mut anchor = () let h = unsafe Pointer.borrowMut<(), Head>(&mut anchor, unsafe head(outer))
-  h.closed = callback let inner = unsafe nn(h.inner) drop h
+  if Pointer.isNull<u8>(h.inner) { return }
+  h.closed = callback h.flags = RECORD_CLOSING let inner = unsafe nn(h.inner) drop h
   unsafe uvl.uv_close(inner, silkUvApiInnerClosed)
 }
 
