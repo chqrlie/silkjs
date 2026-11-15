@@ -1,0 +1,84 @@
+name: macOS runtime
+# Builds the runtime on an Apple Silicon runner and runs it: the differential cases against Node 24
+# and the fixtures in modules/runtime/tests. The cross-check workflow only compiles for macOS; this
+# one is the run that tells whether the Darwin code paths (the kqueue loop, signals, child
+# processes, file-system events, the operating system queries) behave.
+on:
+  push:
+    branches: [feature/replace-libuv]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: macos-runtime-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  runtime:
+    runs-on: macos-15
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install the pinned Silk and its Clang
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          export SILK_RELEASE="v$(sed -n 's/^silk-version = "\(.*\)"/\1/p' silk.toml)"
+          curl --fail --location https://raw.githubusercontent.com/silk-lang/silk/8214c402307b/install.sh --output "$RUNNER_TEMP/install-silk.sh"
+          sh "$RUNNER_TEMP/install-silk.sh"
+          echo "$HOME/.silk/bin" >> "$GITHUB_PATH"
+          mkdir -p "$RUNNER_TEMP/sl"
+          curl --fail --location https://github.com/silk-lang/silk/releases/download/llvm-23.1.5-silk.1/silk-llvm-23.1.5-silk.1-aarch64-apple-darwin.tar.gz | tar xz -C "$RUNNER_TEMP/sl" --strip-components 1
+          ls "$RUNNER_TEMP/sl/bin" | head
+          cd "$RUNNER_TEMP/sl/bin" && for n in clang clang++ ld.lld lld ld64.lld llvm-ar llvm-nm; do test -e $n || ln -sf llvm $n; done
+          echo "SILK_CLANG=$RUNNER_TEMP/sl/bin/clang" >> "$GITHUB_ENV"
+          echo "$RUNNER_TEMP/sl/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/sl/bin/clang" --version
+          xcrun --show-sdk-path
+          sysctl hw.memsize hw.ncpu
+      - name: Build the runtime
+        working-directory: modules/runtime
+        run: |
+          (time python3 tools/build.py --release --output "$RUNNER_TEMP/silkjs") 2>&1 | tail -40
+          "$RUNNER_TEMP/silkjs" -p 'process.versions.uv + " " + process.platform + " " + process.arch'
+      - name: Differential cases against Node 24
+        working-directory: modules/runtime
+        run: |
+          unset NODE_OPTIONS
+          SILKJS_RUNTIME="$RUNNER_TEMP/silkjs" NODE_REFERENCE="$(which node)" node tests/compat.mjs 2>&1 | tee "$RUNNER_TEMP/compat.log" | tail -40
+      - name: Fixtures
+        if: always()
+        working-directory: modules/runtime
+        run: |
+          unset NODE_OPTIONS
+          export SILKJS_RUNTIME="$RUNNER_TEMP/silkjs" NODE_REFERENCE="$(which node)" CC=clang
+          : > "$RUNNER_TEMP/fixtures.txt"
+          for t in tests/*-smoke.cjs tests/*-smoke.mjs tests/eventsource-dispatcher.cjs tests/wasm-fixtures.cjs tests/wasm-interruptions.cjs tests/wasm-memory-range.cjs tests/fixtures/wasi/smoke.cjs; do
+            [ -f "$t" ] || continue
+            timeout 300 "$RUNNER_TEMP/silkjs" "$t" > "$RUNNER_TEMP/fx.out" 2>&1; s=$?
+            echo "$s $t $(tail -1 "$RUNNER_TEMP/fx.out" | cut -c1-160)" | tee -a "$RUNNER_TEMP/fixtures.txt"
+          done
+          for t in tests/*.py; do
+            timeout 300 python3 "$t" "$RUNNER_TEMP/silkjs" > "$RUNNER_TEMP/fx.out" 2>&1; s=$?
+            echo "$s $t $(tail -1 "$RUNNER_TEMP/fx.out" | cut -c1-160)" | tee -a "$RUNNER_TEMP/fixtures.txt"
+          done
+      - name: Loop behavior against Node 24
+        if: always()
+        working-directory: modules/runtime
+        run: |
+          unset NODE_OPTIONS
+          if [ -f tests/loop-behavior.mjs ]; then
+            SILKJS_RUNTIME="$RUNNER_TEMP/silkjs" node tests/loop-behavior.mjs 2>&1 | tee "$RUNNER_TEMP/loop-behavior.log" | tail -60
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-runtime-logs
+          path: |
+            ${{ runner.temp }}/*.log
+            ${{ runner.temp }}/*.txt
