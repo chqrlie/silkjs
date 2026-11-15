@@ -32,6 +32,8 @@ import silkjs.js_buffer_storage as buffers
 import silkjs.js_promise as promise
 import libs.core.host as host
 import ext.compression_abi as c
+import ext.zlib_stream as zs
+import ext.zlib_stream { Call, Deflater, Inflater }
 import ext.resource_snapshot as resources
 
 pub struct State { first: ?*mut Handle, jobs: ?*mut Job, next: i32, closing: bool }
@@ -54,14 +56,44 @@ struct Job {
   handle: ?*mut Handle, stream: ?*mut CodecState, op: i32, numbers: [i32; 8], data: [?*mut u8; 8], lengths: [usize; 8],
   output: ?*mut u8, capacity: usize, written: usize, consumed: usize,
   status: i32, finished: bool, again: bool, pledgedSize: u64,
-  // A static C string naming the codec failure (zlib msg or ZSTD_getErrorName).
-  message: ?*mut u8
+  // A static C string naming the codec failure (ZSTD_getErrorName), or the number of zlib's
+  // message for it (ext.zlib_stream.message).
+  message: ?*mut u8, zlibMessage: u32
 }
 unsafe fn nonnull<T>(p: ?*mut T) -> *mut T { return unsafe Intrinsic.pointerRequalify<?*mut T, *mut T>(p) }
 unsafe fn raw<T>(p: *mut T) -> *mut u8 { return unsafe Intrinsic.pointerReinterpret<*mut T, *mut u8>(p) }
 fn nil() -> ?*mut u8 { return Pointer.null<u8>() }
 fn equal(a: &[u8], b: &[u8]) -> bool { if a.length != b.length { return false } let mut i: usize = 0 while i < a.length { if a[i] != b[i] { return false } i = i + 1 } return true }
 unsafe fn at(p: ?*mut u8, n: usize) -> *mut u8 { return unsafe buffers.dataAt(p, usize.toU64(n)) }
+// The zlib kinds (1 to 7) keep a Silk stream in `codec`: a Deflater for the odd kinds, an Inflater
+// for the others. Its storage is calloc'd here, and the stream owns what it allocates.
+fn deflates(kind: i32) -> bool { return kind == 1 || kind == 3 || kind == 5 }
+unsafe fn deflater(h: &CodecState) -> *mut Deflater { return unsafe Intrinsic.pointerReinterpret<*mut u8, *mut Deflater>(unsafe nonnull(h.codec)) }
+unsafe fn inflater(h: &CodecState) -> *mut Inflater { return unsafe Intrinsic.pointerReinterpret<*mut u8, *mut Inflater>(unsafe nonnull(h.codec)) }
+// `length` bytes at `p`, which can be null when there are none.
+unsafe fn span<'a>(anchor: &'a (), p: ?*mut u8, length: usize) -> &'a [u8] {
+  if length == 0 || Pointer.isNull<u8>(p) { return unsafe Pointer.borrowMany<(), u8>(anchor, unsafe Pointer.assumeMany<u8>(Pointer.fromRef<u8>(&NO_BYTES[0])), 0) }
+  return unsafe Pointer.borrowMany<(), u8>(anchor, unsafe Pointer.assumeMany<u8>(unsafe Intrinsic.pointerRequalify<?*mut u8, *const u8>(p)), length)
+}
+const NO_BYTES: [u8; 1] = [0]
+// Loads the handle's dictionary where Node's binding does: for deflate and raw deflate when the
+// stream starts, for raw inflate too, and for the inflate kinds that can meet a zlib header,
+// which zlib asks for with Z_NEED_DICT and the Silk decoder wants before the first input.
+unsafe fn loadDictionary(h: &mut CodecState) -> i32 {
+  if h.dictionaryLength == 0 { return 0 }
+  let held = () let dictionary = unsafe span(&held, h.dictionary, h.dictionaryLength)
+  let mut anchor = ()
+  if h.kind == 1 || h.kind == 5 { let stream = unsafe Pointer.borrowMut<(), Deflater>(&mut anchor, unsafe deflater(&h.*)) return Deflater.setDictionary(&mut stream, dictionary) }
+  if h.kind == 2 || h.kind == 6 || h.kind == 7 { let stream = unsafe Pointer.borrowMut<(), Inflater>(&mut anchor, unsafe inflater(&h.*)) return Inflater.setDictionary(&mut stream, dictionary) }
+  return 0
+}
+unsafe fn resetZlib(h: &mut CodecState) -> i32 {
+  let mut anchor = () let mut status: i32 = 0
+  if deflates(h.kind) { let stream = unsafe Pointer.borrowMut<(), Deflater>(&mut anchor, unsafe deflater(&h.*)) status = Deflater.reset(&mut stream) drop stream }
+  else { let stream = unsafe Pointer.borrowMut<(), Inflater>(&mut anchor, unsafe inflater(&h.*)) status = Inflater.reset(&mut stream) drop stream }
+  if status != 0 { return status }
+  return unsafe loadDictionary(&mut h)
+}
 unsafe fn word(p: ?*mut u8, offset: usize) -> i32 {
   let mut value: u32 = 0 let mut i: u32 = 0
   while i < 4 { value = u32.bitOr(value, u32.shiftLeft(u8.toU32(unsafe Pointer.read<u8>(unsafe at(p, offset + u32.toUsize(i)))), i * 8)) i = i + 1 }
@@ -92,7 +124,10 @@ unsafe fn locate(s: *mut State, id: i32) -> ?*mut Handle {
 }
 unsafe fn destroyCodec(h: &mut CodecState) -> () {
   if Pointer.isNull<u8>(h.codec) { return () }
-  if h.kind <= 7 { let z = unsafe Intrinsic.pointerReinterpret<*mut u8, *mut c.ZStream>(unsafe nonnull(h.codec)) let mut ignored: i32 = 0 if h.kind == 1 || h.kind == 3 || h.kind == 5 { ignored = unsafe c.deflateEnd(z) } else { ignored = unsafe c.inflateEnd(z) } unsafe c.free(h.codec) }
+  if h.kind <= 7 {
+    if deflates(h.kind) { let owned = unsafe Pointer.take<Deflater>(unsafe deflater(&h.*)) drop owned } else { let owned = unsafe Pointer.take<Inflater>(unsafe inflater(&h.*)) drop owned }
+    unsafe c.free(h.codec)
+  }
   if h.kind == 8 { unsafe c.BrotliEncoderDestroyInstance(h.codec) unsafe c.BrotliEncoderDestroyPreparedDictionary(h.preparedDictionary) h.preparedDictionary = nil() }
   if h.kind == 9 { unsafe c.BrotliDecoderDestroyInstance(h.codec) }
   if h.kind == 10 { let _ignored = unsafe c.ZSTD_freeCStream(h.codec) }
@@ -127,22 +162,45 @@ unsafe fn parameters(h: &mut CodecState) -> i32 {
   }
   return 0
 }
+unsafe effect fn initializeZlib(h: &mut CodecState, numbers: &[i32; 8]) -> i32 ? &mut Allocator {
+  let kind = h.kind
+  if h.dictionaryLength > 4294967295 { return -2 }
+  let mut window = numbers[1] if kind == 3 || kind == 4 { window = window + 16 } if kind == 5 || kind == 6 { window = 0 - window } if kind == 7 { window = window + 32 }
+  if deflates(kind) {
+    let made = run Effect.result(Deflater.make(numbers[2], window, numbers[3], numbers[4]))
+    match move made {
+      Result<Result<Deflater, i32>, OutOfMemoryError>.Success { value } => {
+        match move value {
+          Result<Deflater, i32>.Success { value: stream } => {
+            h.codec = unsafe c.calloc(1, Layout.of<Deflater>().bytes) if Pointer.isNull<u8>(h.codec) { return -4 }
+            unsafe Pointer.put<Deflater>(unsafe deflater(&h.*), move stream)
+          }
+          Result<Deflater, i32>.Failure { error } => { return error }
+        }
+      }
+      Result<Result<Deflater, i32>, OutOfMemoryError>.Failure {..} => { return -4 }
+    }
+  } else {
+    let made = run Effect.result(Inflater.make(window))
+    match move made {
+      Result<Result<Inflater, i32>, OutOfMemoryError>.Success { value } => {
+        match move value {
+          Result<Inflater, i32>.Success { value: stream } => {
+            h.codec = unsafe c.calloc(1, Layout.of<Inflater>().bytes) if Pointer.isNull<u8>(h.codec) { return -4 }
+            unsafe Pointer.put<Inflater>(unsafe inflater(&h.*), move stream)
+          }
+          Result<Inflater, i32>.Failure { error } => { return error }
+        }
+      }
+      Result<Result<Inflater, i32>, OutOfMemoryError>.Failure {..} => { return -4 }
+    }
+  }
+  return unsafe loadDictionary(&mut h)
+}
 unsafe fn initialize(h: &mut CodecState, numbers: &[i32; 8]) -> i32 {
   let kind = h.kind
-  if kind <= 7 {
-    if h.dictionaryLength > 4294967295 { return -2 }
-    h.codec = unsafe c.calloc(1, Layout.of<c.ZStream>().bytes) if Pointer.isNull<u8>(h.codec) { return -4 }
-    let z = unsafe Intrinsic.pointerReinterpret<*mut u8, *mut c.ZStream>(unsafe nonnull(h.codec))
-    let mut window = numbers[1] if kind == 3 || kind == 4 { window = window + 16 } if kind == 5 || kind == 6 { window = -window } if kind == 7 { window = window + 32 }
-    let mut status: i32 = 0
-    if kind == 1 || kind == 3 || kind == 5 { status = unsafe c.deflateInit2_(z, numbers[2], 8, window, numbers[3], numbers[4], unsafe c.zlibVersion(), usize.toI32(Layout.of<c.ZStream>().bytes)) }
-    else { status = unsafe c.inflateInit2_(z, window, unsafe c.zlibVersion(), usize.toI32(Layout.of<c.ZStream>().bytes)) }
-    if status == 0 && h.dictionaryLength != 0 {
-      if kind == 1 || kind == 5 { status = unsafe c.deflateSetDictionary(z, h.dictionary, usize.toU32(h.dictionaryLength)) }
-      if kind == 6 { status = unsafe c.inflateSetDictionary(z, h.dictionary, usize.toU32(h.dictionaryLength)) }
-    }
-    return status
-  }
+  // The zlib kinds are made by initializeZlib, which can allocate.
+  if kind <= 7 { return -2 }
   if kind == 8 { h.codec = unsafe c.BrotliEncoderCreateInstance(nil(), nil(), nil()) }
   if kind == 9 { h.codec = unsafe c.BrotliDecoderCreateInstance(nil(), nil(), nil()) }
   if kind == 10 { h.codec = unsafe c.ZSTD_createCStream() }
@@ -164,32 +222,32 @@ unsafe fn process(j: &mut Job, h: &mut CodecState) -> () {
   let output = unsafe at(j.output, 20) let capacity = j.capacity
   if h.ignoring { j.finished = true return () }
   if kind <= 7 {
-    let compress = kind == 1 || kind == 3 || kind == 5
-    let z = unsafe Intrinsic.pointerReinterpret<*mut u8, *mut c.ZStream>(unsafe nonnull(h.codec))
+    let compress = deflates(kind)
     if h.ended {
       if h.strict && length != 0 { j.status = -3000 return () }
       if !h.gzip || length == 0 { j.finished = true return () }
       if unsafe Pointer.read<u8>(unsafe at(input, 0)) == 0 { h.ignoring = true j.finished = true return () }
-      j.status = unsafe c.inflateReset(z) h.ended = false if j.status != 0 { return () }
+      j.status = unsafe resetZlib(&mut h) h.ended = false if j.status != 0 { return () }
     }
     if kind == 7 && h.headerLength < 2 {
       let mut n: usize = 0 while n < length && h.headerLength < 2 { h.header = u32.bitOr(h.header, u32.shiftLeft(u8.toU32(unsafe Pointer.read<u8>(unsafe at(input, n))), h.headerLength * 8)) h.headerLength = h.headerLength + 1 n = n + 1 }
       if h.headerLength == 2 { h.gzip = h.header == 35615 }
     }
-    let mut anchor = () let stream = unsafe Pointer.borrowMut<(), c.ZStream>(&mut anchor, z)
-    stream.nextIn = input stream.availIn = usize.toU32(length) stream.nextOut = output stream.availOut = usize.toU32(capacity) drop stream
-    let mut status: i32 = 0
-    if j.op == 4 { status = unsafe c.deflateParams(z, j.numbers[2], j.numbers[3]) }
-    else { if compress { status = unsafe c.deflate(z, flush) } else { status = unsafe c.inflate(z, flush) } }
-    if status == 2 && h.dictionaryLength != 0 {
-      status = unsafe c.inflateSetDictionary(z, h.dictionary, usize.toU32(h.dictionaryLength))
-      if status == 0 { status = unsafe c.inflate(z, flush) } else { if status == -3 { status = -3001 } }
+    let held = () let source = unsafe span(&held, input, length)
+    let mut other = () let target = unsafe Pointer.borrowManyMut<(), u8>(&mut other, unsafe Pointer.assumeManyMut<u8>(output), capacity)
+    let mut anchor = ()
+    let mut status: i32 = 0 let mut text: u32 = 0
+    if j.op == 4 {
+      let stream = unsafe Pointer.borrowMut<(), Deflater>(&mut anchor, unsafe deflater(&h.*))
+      status = Deflater.params(&mut stream, j.numbers[2], j.numbers[3])
+    } else {
+      let mut call = Call { status: 0, consumed: 0, written: 0, message: 0 }
+      if compress { let stream = unsafe Pointer.borrowMut<(), Deflater>(&mut anchor, unsafe deflater(&h.*)) call = Deflater.deflate(&mut stream, source, &mut target, flush) }
+      else { let stream = unsafe Pointer.borrowMut<(), Inflater>(&mut anchor, unsafe inflater(&h.*)) call = Inflater.inflate(&mut stream, source, &mut target, flush) }
+      status = call.status text = call.message
+      j.consumed = call.consumed j.written = call.written
     }
-    let stream2 = unsafe Pointer.borrowMut<(), c.ZStream>(&mut anchor, z)
-    j.consumed = length - u32.toUsize(stream2.availIn) j.written = capacity - u32.toUsize(stream2.availOut)
-    j.again = stream2.availOut == 0
-    let message = stream2.message
-    stream2.nextIn = nil() stream2.nextOut = nil() drop stream2
+    j.again = j.written == capacity
     if status == 1 {
       h.ended = true j.finished = true
       if h.gzip && j.consumed < length {
@@ -199,7 +257,7 @@ unsafe fn process(j: &mut Job, h: &mut CodecState) -> () {
       } else { j.again = false }
     }
     else { if status != 0 && status != -5 { j.status = status } else { if flush == 4 && j.op != 4 && !j.again { j.status = -5 } } }
-    if j.status != 0 && j.status != -3001 && j.status != -3000 { j.message = message }
+    if j.status != 0 && j.status != -3001 && j.status != -3000 && j.status == status { j.zlibMessage = text }
     return ()
   }
   if h.ended && (kind == 8 || kind == 9 || length == 0) { j.finished = true return () }
@@ -260,9 +318,7 @@ unsafe fn execute(j: &mut Job) -> () {
     h.pledged = false h.frameInput = 0
     unsafe c.free(h.input) h.input = nil() h.inputLength = 0 h.inputOffset = 0
     if h.kind <= 7 {
-      let z = unsafe Intrinsic.pointerReinterpret<*mut u8, *mut c.ZStream>(unsafe nonnull(h.codec))
-      if h.kind == 1 || h.kind == 3 || h.kind == 5 { j.status = unsafe c.deflateReset(z) if j.status == 0 && h.dictionaryLength != 0 { j.status = unsafe c.deflateSetDictionary(z, h.dictionary, usize.toU32(h.dictionaryLength)) } }
-      else { j.status = unsafe c.inflateReset(z) if j.status == 0 && h.kind == 6 && h.dictionaryLength != 0 { j.status = unsafe c.inflateSetDictionary(z, h.dictionary, usize.toU32(h.dictionaryLength)) } }
+      j.status = unsafe resetZlib(&mut h)
     } else {
       if h.kind == 8 || h.kind == 9 { unsafe destroyCodec(&mut h) j.status = unsafe initialize(&mut h, &j.numbers) }
       if h.kind == 10 && unsafe c.ZSTD_isError(unsafe c.ZSTD_CCtx_reset(h.codec, 1)) != 0 { j.status = -2 }
@@ -288,7 +344,7 @@ unsafe fn execute(j: &mut Job) -> () {
 }
 effect fn newJob() -> *mut Job ! OutOfMemoryError {
   let j = unsafe Intrinsic.pointerReinterpret<*mut u8, *mut Job>(run allocate(Layout.of<Job>().bytes))
-  unsafe Pointer.put<Job>(j, Job { next: Pointer.null<Job>(), work: pool.job(silkCompressionWork, silkCompressionAfterWork, unsafe raw(j), pool.KIND_ZLIB), callback: ValueBits.Undefined, done: false, handle: Pointer.null<Handle>(), stream: Pointer.null<CodecState>(), op: 0, numbers: [0; 8], data: [nil(); 8], lengths: [0; 8], output: nil(), capacity: 0, written: 0, consumed: 0, status: 0, finished: false, again: false, pledgedSize: 0, message: nil() }) return j
+  unsafe Pointer.put<Job>(j, Job { next: Pointer.null<Job>(), work: pool.job(silkCompressionWork, silkCompressionAfterWork, unsafe raw(j), pool.KIND_ZLIB), callback: ValueBits.Undefined, done: false, handle: Pointer.null<Handle>(), stream: Pointer.null<CodecState>(), op: 0, numbers: [0; 8], data: [nil(); 8], lengths: [0; 8], output: nil(), capacity: 0, written: 0, consumed: 0, status: 0, finished: false, again: false, pledgedSize: 0, message: nil(), zlibMessage: 0 }) return j
 }
 unsafe fn destroyJob(p: *mut Job) -> () { let j = unsafe Pointer.take<Job>(p) let mut i: usize = 0 while i < 8 { unsafe c.free(j.data[i]) i = i + 1 } unsafe c.free(j.output) unsafe c.free(unsafe raw(p)) }
 unsafe effect fn prepare<'m, S: EngineServices>(engine: &mut Engine<'m, S>, context: *mut HeapHeader, state: *mut State, j: &mut Job, argv: &FrameSlots) -> () ! OutOfMemoryError | JsException ? &mut Allocator {
@@ -333,6 +389,12 @@ unsafe effect fn prepare<'m, S: EngineServices>(engine: &mut Engine<'m, S>, cont
   j.capacity = capacity j.output = run allocate(capacity + 20 + 256)
 }
 unsafe fn appendMessage(j: &Job) -> usize {
+  if j.zlibMessage != 0 {
+    let text = zs.message(j.zlibMessage)
+    let mut n: usize = 0
+    while n < text.length && n < 255 { unsafe Pointer.put<u8>(unsafe at(j.output, 20 + j.written + n), text[n]) n = n + 1 }
+    return n
+  }
   if Pointer.isNull<u8>(j.message) { return 0 }
   let mut n: usize = 0
   while n < 255 {
@@ -369,7 +431,10 @@ unsafe effect fn synchronous<'m, S: EngineServices>(engine: &mut Engine<'m, S>, 
     unsafe Pointer.put<Handle>(pointer, Handle { next: s.first, id: id, busy: false, disposed: false, stream: stream })
     unsafe Pointer.put<CodecState>(stream, CodecState { kind: j.numbers[0], codec: nil(), dictionary: j.data[5], dictionaryLength: j.lengths[5], params: j.data[6], paramsLength: j.lengths[6], preparedDictionary: nil(), ended: false, gzip: j.numbers[0] == 4, header: 0, headerLength: 0, afterFrame: false, ignoring: false, strict: j.numbers[7] != 0, input: nil(), inputLength: 0, inputOffset: 0, pledged: false, pledgeInitial: false, pledgedSize: 0, frameInput: 0 })
     s.first = pointer drop s j.data[5] = nil() j.data[6] = nil()
-    let h = unsafe Pointer.borrowMut<(), CodecState>(&mut anchor, stream) let status = unsafe initialize(&mut h, &j.numbers) drop h
+    let h = unsafe Pointer.borrowMut<(), CodecState>(&mut anchor, stream)
+    let mut status: i32 = 0
+    if h.kind >= 1 && h.kind <= 7 { status = run unsafe initializeZlib(&mut h, &j.numbers) } else { status = unsafe initialize(&mut h, &j.numbers) }
+    drop h
     if status != 0 { unsafe releaseHandle(state, id) return ValueBits.Int { value: status } }
     return ValueBits.Int { value: id }
   }
