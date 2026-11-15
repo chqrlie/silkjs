@@ -5,7 +5,6 @@ import ext.crypto_native
 import ext.dns_native
 import ext.fs_async
 import ext.heap_image
-import ext.http_parser_native
 import ext.inspector_evaluate
 import ext.napi_async
 import ext.napi_core
@@ -25,7 +24,6 @@ pub fn all() -> () {
   dns_native.keepExports()
   fs_async.keepExports()
   heap_image.keepExports()
-  http_parser_native.keepExports()
   inspector_evaluate.keepExports()
   napi_async.keepExports()
   napi_core.keepExports()

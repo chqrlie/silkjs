@@ -2,7 +2,7 @@
 //! Ordinary native inputs remain zero-copy. Active read leases force a later
 //! cross-runtime transfer to copy, so resumed C reads cannot race a receiver.
 import silk.mem.allocator { Allocator, OutOfMemoryError }
-import ext.diagnostics_fatal { RuntimeHeap }
+import silkjsruntime.ext.diagnostics_fatal { RuntimeHeap }
 import silkjs.js_owned_value { lendFor }
 import silkjs.js_realm { lendRealm }
 import silk.core.effect { Effect }
@@ -26,9 +26,9 @@ import silkjs.js_exceptions { JsException }
 import silkjs.js_coercion_host { CoercionHooks }
 import silkjs.js_string_types { StringLengthError }
 import silkjs.js_strings { Strings }
-import libs.core.owners { Scope }
-import libs.core.owners as owners
-import libs.core.common as common
+import silkjsruntime.libs.core.owners { Scope }
+import silkjsruntime.libs.core.owners as owners
+import silkjsruntime.libs.core.common as common
 import silkjs.js_std_support as text
 import silkjs.js_buffer_storage as buffers
 import silkjs.js_class_data as classes
@@ -38,8 +38,8 @@ import silkjs.js_runtime as runtime
 import silkjs.js_exceptions as exceptions
 import silkjs.js_promise as promise
 import silkjs.js_weakref_intrinsics_storage as weak
-import libs.core.capabilities { Composition }
-import libs.core.host as host
+import silkjsruntime.libs.core.capabilities { Composition }
+import silkjsruntime.libs.core.host as host
 import ext.http_parser_abi as c
 
 pub struct State {

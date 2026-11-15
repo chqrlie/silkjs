@@ -20,7 +20,8 @@ ROOT = Path(__file__).resolve().parents[1]
 # The libraries of capabilities in packages of their own are linked only into the second: these
 # are a symbol of each, which the first must not define.
 LIBRARIES = {'WAMR': 'wasm_runtime_full_init', 'zlib': 'deflate', 'brotli': 'BrotliEncoderCreateInstance',
-             'zstd': 'ZSTD_createCStream', 'nghttp2': 'nghttp2_session_client_new'}
+             'zstd': 'ZSTD_createCStream', 'nghttp2': 'nghttp2_session_client_new',
+             'llhttp': 'llhttp_init'}
 PROGRAMS = [
     ('embed-smoke', ROOT / 'smoke', 'src/main.silk', 'undefined', False),
     ('embed-smoke-wamr', ROOT / 'cli', 'src/embed_smoke_wamr.silk', 'object', True),

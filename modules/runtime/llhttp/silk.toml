@@ -1,0 +1,20 @@
+[package]
+name = "silkjsruntime-llhttp"
+description = "The HTTP/1 parser of the SilkJS runtime, over llhttp: the real implementation of its Http capability"
+version = "0.1.0"
+silk-version = "0.1.0-dev.78+e02346fdb3aa"
+kind = "library"
+# `llhttp` is Llhttp.
+exports = ["llhttp"]
+
+[dependencies]
+silkjs = { path = "../../engine" }
+silkjsruntime = { path = ".." }
+
+# llhttp 9.4.3 (vendor/, THIRD_PARTY_NOTICES) and the bridge that calls back into Silk,
+# compiled into a program only when it depends on this package.
+[native]
+sources = [
+  { c = ["vendor/src/llhttp.c", "vendor/src/http.c", "src/ext/http_parser_bridge.c"], include = ["vendor/include"], flags = ["-std=gnu11", "-O2", "-w"] },
+  { c = "vendor/src/api.c", include = ["vendor/include"], flags = ["-std=gnu11", "-O2", "-w", "-Dllhttp__on_message_begin=silk_llhttp_base_on_message_begin", "-Dllhttp__on_header_value_complete=silk_llhttp_base_on_header_value_complete", "-Dllhttp__on_headers_complete=silk_llhttp_base_on_headers_complete", "-Dllhttp__on_message_complete=silk_llhttp_base_on_message_complete", "-Dllhttp__on_chunk_header=silk_llhttp_base_on_chunk_header", "-Dllhttp__on_chunk_complete=silk_llhttp_base_on_chunk_complete"] },
+]

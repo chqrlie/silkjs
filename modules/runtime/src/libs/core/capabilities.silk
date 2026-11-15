@@ -353,18 +353,34 @@ impl Network for EmptyNetwork { static fn present() -> bool { return false } }
 
 /// HTTP/1: the parser `node:http` and `fetch` stand on, over llhttp. Native id 11000 is this
 /// capability's. A library service, as `Compression` is.
+///
+/// The real implementation is `Llhttp` of ./llhttp (silkjsruntime-llhttp), which brings llhttp.
 pub interface Http {
   /// A constant of the implementation type: whether the HTTP/1 parser is there.
   static fn present() -> bool
+  /// The instance a new worker thread starts with, made from its parent's: nothing opened yet.
+  fn forWorker(self: &Self) -> Self
+  /// Opens this runtime's native state, before the bootstrap runs.
+  effect fn open(self: &mut Self, allocator: *mut RuntimeHeap) -> () ! OutOfMemoryError
+  /// Native function 11000 (`httpParserNative`).
+  unsafe effect fn call<'m, C: Composition>(self: &Self, engine: &mut Engine<'m, Services<C>>, context: *mut HeapHeader, argc: i32, argv: &FrameSlots) -> ValueBits
+    ! OutOfMemoryError | JsException ? &mut Allocator
+  /// Releases the parsers and the state.
+  unsafe fn close<'m, C: Composition>(self: &mut Self, engine: &mut Engine<'m, Services<C>>, context: *mut HeapHeader) -> ()
 }
-/// llhttp.
-pub struct Llhttp {}
-impl Copy for Llhttp {}
-impl Http for Llhttp { static fn present() -> bool { return true } }
 /// No HTTP/1 parser.
 pub struct EmptyHttp {}
 impl Copy for EmptyHttp {}
-impl Http for EmptyHttp { static fn present() -> bool { return false } }
+impl Http for EmptyHttp {
+  static fn present() -> bool { return false }
+  fn forWorker(self: &Self) -> Self { return EmptyHttp {} }
+  effect fn open(self: &mut Self, allocator: *mut RuntimeHeap) -> () ! OutOfMemoryError {}
+  unsafe effect fn call<'m, C: Composition>(self: &Self, engine: &mut Engine<'m, Services<C>>, context: *mut HeapHeader, argc: i32, argv: &FrameSlots) -> ValueBits
+    ! OutOfMemoryError | JsException ? &mut Allocator {
+    Intrinsic.trap("the HTTP/1 parser is not there")
+  }
+  unsafe fn close<'m, C: Composition>(self: &mut Self, engine: &mut Engine<'m, Services<C>>, context: *mut HeapHeader) -> () {}
+}
 
 /// System information: `node:os`. Its native (2300) also answers the process's own facts (its
 /// executable's path, the component versions), which every runtime has, so it stays; without
@@ -463,7 +479,7 @@ pub interface ModuleResolver {
 /// a capability the program does not want is given its empty implementation.
 ///
 /// ```silk
-/// let capabilities = Capabilities { platform: OsPlatform {}, modules: NodeResolution {}, files: OsFiles {}, compression: NativeCompression.make(), http2: Nghttp2.make(), crypto: OpenSslCrypto {}, tls: OpenSslTls {}, database: SqliteDatabase {}, addons: DlopenAddons {}, processes: OsProcesses {}, network: OsNetwork {}, http: Llhttp {}, systemInfo: OsSystemInfo {}, typeStripping: Amaro {}, workers: ThreadWorkers {}, inspector: NodeInspector {}, wasm: EmptyWasm {}, hostApi: EmptyHostApi {} }
+/// let capabilities = Capabilities { platform: OsPlatform {}, modules: NodeResolution {}, files: OsFiles {}, compression: NativeCompression.make(), http2: Nghttp2.make(), crypto: OpenSslCrypto {}, tls: OpenSslTls {}, database: SqliteDatabase {}, addons: DlopenAddons {}, processes: OsProcesses {}, network: OsNetwork {}, http: Llhttp.make(), systemInfo: OsSystemInfo {}, typeStripping: Amaro {}, workers: ThreadWorkers {}, inspector: NodeInspector {}, wasm: EmptyWasm {}, hostApi: EmptyHostApi {} }
 /// ```
 pub struct Capabilities<P, M, F, Z, H, K, T, D, N, R, E, L, S, Y, X, I, W, A> {
   pub platform: P,
@@ -553,6 +569,10 @@ pub interface Composition {
   unsafe fn wasmFinalize<'m>(engine: &mut Engine<'m, Services<Self>>, rt: *mut HeapHeader, object: *mut HeapHeader) -> ()
   unsafe fn wasmOpenHandles<'m>(engine: &Engine<'m, Services<Self>>) -> usize
   effect fn compressionOpen<'m>(engine: &mut Engine<'m, Services<Self>>) -> () ! OutOfMemoryError
+  effect fn httpOpen<'m>(engine: &mut Engine<'m, Services<Self>>, allocator: *mut RuntimeHeap) -> () ! OutOfMemoryError
+  unsafe effect fn httpCall<'m>(engine: &mut Engine<'m, Services<Self>>, context: *mut HeapHeader, argc: i32, argv: &FrameSlots) -> ValueBits
+    ! OutOfMemoryError | JsException ? &mut Allocator
+  unsafe fn httpClose<'m>(engine: &mut Engine<'m, Services<Self>>, context: *mut HeapHeader) -> ()
   effect fn http2Open<'m>(engine: &mut Engine<'m, Services<Self>>) -> () ! OutOfMemoryError
   unsafe effect fn http2Call<'m>(engine: &mut Engine<'m, Services<Self>>, context: *mut HeapHeader, argc: i32, argv: &FrameSlots) -> ValueBits
     ! OutOfMemoryError | JsException ? &mut Allocator
@@ -610,7 +630,7 @@ impl<P: Platform + Copy, M: ModuleResolver + Copy, F: Files + Copy, Z: Compressi
   static fn filesDirect() -> bool { return directFiles<F>() }
   unsafe fn filesExecute(self: &Self, call: &Call, out: &mut Outcome) -> () { unsafe self.files.execute(&call, &mut out) }
   fn forWorker(self: &Self) -> Self {
-    return Capabilities<P, M, F, Z, H, K, T, D, N, R, E, L, S, Y, X, I, W, A> { platform: self.platform.forWorker(), modules: self.modules.forWorker(), files: self.files.forWorker(), compression: self.compression.forWorker(), http2: self.http2.forWorker(), crypto: self.crypto, tls: self.tls, database: self.database, addons: self.addons, processes: self.processes, network: self.network, http: self.http, systemInfo: self.systemInfo, typeStripping: self.typeStripping, workers: self.workers, inspector: self.inspector, wasm: self.wasm.forWorker(), hostApi: self.hostApi.forWorker() }
+    return Capabilities<P, M, F, Z, H, K, T, D, N, R, E, L, S, Y, X, I, W, A> { platform: self.platform.forWorker(), modules: self.modules.forWorker(), files: self.files.forWorker(), compression: self.compression.forWorker(), http2: self.http2.forWorker(), crypto: self.crypto, tls: self.tls, database: self.database, addons: self.addons, processes: self.processes, network: self.network, http: self.http.forWorker(), systemInfo: self.systemInfo, typeStripping: self.typeStripping, workers: self.workers, inspector: self.inspector, wasm: self.wasm.forWorker(), hostApi: self.hostApi.forWorker() }
   }
   effect fn platformGetenv<'m>(engine: &Engine<'m, Services<Self>>, name: &[u8], into: &mut List<u8>) -> bool ! OutOfMemoryError ? &mut Allocator {
     let platform = engine.services.capabilities.platform return run platform.getenv(name, &mut into.*)
@@ -684,6 +704,16 @@ impl<P: Platform + Copy, M: ModuleResolver + Copy, F: Files + Copy, Z: Compressi
   unsafe fn http2OpenHandles<'m>(engine: &Engine<'m, Services<Self>>) -> usize { let http2 = engine.services.capabilities.http2 return unsafe http2.openHandles() }
   unsafe fn http2Close<'m>(engine: &mut Engine<'m, Services<Self>>) -> () {
     let mut http2 = engine.services.capabilities.http2 unsafe http2.close() engine.services.capabilities.http2 = http2
+  }
+  effect fn httpOpen<'m>(engine: &mut Engine<'m, Services<Self>>, allocator: *mut RuntimeHeap) -> () ! OutOfMemoryError {
+    run engine.services.capabilities.http.open(allocator)
+  }
+  unsafe effect fn httpCall<'m>(engine: &mut Engine<'m, Services<Self>>, context: *mut HeapHeader, argc: i32, argv: &FrameSlots) -> ValueBits
+    ! OutOfMemoryError | JsException ? &mut Allocator {
+    let http = engine.services.capabilities.http return run unsafe http.call(&mut engine, context, argc, argv)
+  }
+  unsafe fn httpClose<'m>(engine: &mut Engine<'m, Services<Self>>, context: *mut HeapHeader) -> () {
+    let mut http = engine.services.capabilities.http unsafe http.close(&mut engine, context) engine.services.capabilities.http = http
   }
   effect fn compressionOpen<'m>(engine: &mut Engine<'m, Services<Self>>) -> () ! OutOfMemoryError {
     run engine.services.capabilities.compression.open()

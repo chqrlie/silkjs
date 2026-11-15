@@ -324,7 +324,7 @@ paths = ["/native/openssl/"]
 [[library]]
 name = "llhttp"
 service = "Http"
-paths = ["/vendor/llhttp/", "http_parser_bridge.c"]
+paths = ["llhttp/vendor/", "http_parser_bridge.c"]
 [[library]]
 name = "inspector transport"
 service = "Inspector"

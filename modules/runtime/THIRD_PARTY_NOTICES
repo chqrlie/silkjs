@@ -39,10 +39,10 @@ Node.js compatibility modules and Node-API declarations (MIT)
   SonicBoom copyright and MIT notice. These acknowledgments remain applicable.
 
 llhttp 9.4.3 (MIT)
-  vendor/llhttp/{include,src}/ contains the generated C/header distribution
+  llhttp/vendor/{include,src}/ contains the generated C/header distribution
   from nodejs/node commit 338f67f57129b4fd15311fab612ceaa18963acb7.
-  Exact source URL and per-file SHA-256: vendor/llhttp/source.json.
-  License: vendor/llhttp/LICENSE.
+  Exact source URL and per-file SHA-256: llhttp/vendor/source.json.
+  License: llhttp/vendor/LICENSE.
   https://github.com/nodejs/node/tree/338f67f57129b4fd15311fab612ceaa18963acb7/deps/llhttp
   The build supplies callback symbol renames and a separate runtime bridge;
   the checked-in upstream parser remains covered by its original license.
@@ -239,7 +239,7 @@ maintained libraries.
 
 The externally maintained libraries used by Node.js are:
 
-vendor/llhttp/LICENSE
+llhttp/vendor/LICENSE
 ---------------------
 MIT License
 

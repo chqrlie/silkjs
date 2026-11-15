@@ -67,7 +67,6 @@ import ext.inspector_native
 import libs.core.intl as intl
 import libs.core.capabilities { Composition, checkCombination }
 import libs.core.capabilities as capabilities
-import ext.http_parser_native
 import ext.trace_native
 import ext.sea_native
 import runtime.embedded
@@ -641,7 +640,7 @@ unsafe effect fn execute<'m, D: Driver, C: Composition>(engine: &mut Engine<'m, 
     if restored { unsafe Composition.wasmAdoptClasses(&mut engine, unsafe runtime.contextRuntime(context), (unsafe Pointer.read<ImageRoots>(unsafe rootsAt(image))).wasmClasses) }
     else { run unsafe Composition.wasmInstall(&mut engine, unsafe runtime.contextRuntime(context), &process.namespace) }
   }
-  static if Composition.httpPresent() { engine.services.httpParser = run http_parser_native.open(allocator) }
+  run Composition.httpOpen(&mut engine, allocator)
   engine.services.tracing = run trace_native.open(allocator)
   match Pointer.nonNullMut<trace_native.State>(engine.services.tracing) {
     Option<*mut trace_native.State>.Some { value: tracing } => { unsafe fs_async.setTracing(io, unsafe Intrinsic.pointerReinterpret<*mut trace_native.State, *mut u8>(tracing)) }
@@ -845,15 +844,7 @@ unsafe effect fn realm<'m, D: Driver, C: Composition>(engine: &mut Engine<'m, Se
         _ => ()
       }
       }
-      static if Composition.httpPresent() {
-      match Pointer.nonNullMut<http_parser_native.State>(engine.services.httpParser) {
-        Option<*mut http_parser_native.State>.Some { value: parser } => {
-          unsafe http_parser_native.close(&mut engine, context, parser)
-          engine.services.httpParser = Pointer.null<http_parser_native.State>()
-        }
-        _ => ()
-      }
-      }
+      unsafe Composition.httpClose(&mut engine, context)
       unsafe Composition.wasmCloseWasi(&mut engine, context)
       unsafe Composition.wasmClose(&mut engine, context)
       unsafe Composition.compressionClose(&mut engine, context, io)

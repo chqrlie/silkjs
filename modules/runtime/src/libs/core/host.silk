@@ -78,7 +78,6 @@ import ext.sqlite_native
 import ext.module_native
 import ext.platform_native
 import ext.napi_native
-import ext.http_parser_native
 import ext.trace_native
 import ext.sea_native
 import ext.util_native
@@ -133,7 +132,6 @@ pub struct Services<C> {
   pub tls: ?*mut tls_native.State,
   pub sqlite: ?*mut sqlite_native.State,
   pub napi: ?*mut napi_native.State,
-  pub httpParser: ?*mut http_parser_native.State,
   pub tracing: ?*mut trace_native.State,
   pub inspector: ?*mut inspector_native.State,
   pub sea: ?*mut sea_native.State,
@@ -169,7 +167,7 @@ impl<C> Services<C> {
     network: Pointer.null<net_native.State>(), tls: Pointer.null<tls_native.State>(),
     sqlite: Pointer.null<sqlite_native.State>(),
     napi: Pointer.null<napi_native.State>(),
-    httpParser: Pointer.null<http_parser_native.State>(),
+   
     tracing: Pointer.null<trace_native.State>(), sea: Pointer.null<sea_native.State>(),
     inspector: Pointer.null<inspector_native.State>(),
     storageClass: 0, debugBuiltins: false, stopCleanup: false, capabilities: move capabilities,
@@ -273,10 +271,6 @@ unsafe fn napiState<'m, C: Composition>(engine: &Engine<'m, Services<C>>) -> *mu
 // Wasm completions wait for the poll phase; without WebAssembly there are none.
 unsafe fn wasmReady<'m, C: Composition>(engine: &Engine<'m, Services<C>>) -> bool {
   static if capabilities.hasWasm<C>() { return unsafe Composition.wasmReady(&engine.*) } else { return false }
-}
-unsafe fn httpParserState<'m, C: Composition>(engine: &Engine<'m, Services<C>>) -> *mut http_parser_native.State {
-  if Pointer.isNull<http_parser_native.State>(engine.services.httpParser) { Intrinsic.trap("HTTP parser provider is not initialized") }
-  return unsafe Intrinsic.pointerRequalify<?*mut http_parser_native.State, *mut http_parser_native.State>(engine.services.httpParser)
 }
 unsafe fn traceState<'m, C: Composition>(engine: &Engine<'m, Services<C>>) -> *mut trace_native.State {
   if Pointer.isNull<trace_native.State>(engine.services.tracing) { Intrinsic.trap("Trace provider is not initialized") }
@@ -834,8 +828,7 @@ impl<C: Composition> EngineServices for Services<C> {
     }
     static if capabilities.hasHttp<C>() {
     if id == 11000 {
-      let parser = unsafe httpParserState(&engine.*)
-      return run unsafe http_parser_native.dispatch(&mut engine, context, parser, argc, argv)
+      return run unsafe Composition.httpCall(&mut engine, context, argc, argv)
     }
     }
     if id == 12000 {
