@@ -46,3 +46,33 @@ jobs:
             silk task symbols --binary ../../build/embed-smoke/embed-smoke --prefix "$prefix" --absent
             silk task symbols --binary ../../build/embed-smoke-wamr/embed-smoke-wamr --prefix "$prefix"
           done
+  silk-compression:
+    # Step 8's first swap: the executable with SilkCompression (over silk.compress, no C library)
+    # in place of NativeCompression must decode, flush and fail as Node does.
+    runs-on: ubuntu-26.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install Clang 22
+        run: |
+          test -x /usr/bin/clang-22 || (sudo apt-get update && sudo apt-get install -y clang-22 lld-22)
+          echo "SILK_CLANG=/usr/bin/clang-22" >> "$GITHUB_ENV"
+      - name: Install the pinned Silk
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          export SILK_RELEASE="v$(sed -n 's/^silk-version = "\(.*\)"/\1/p' silk.toml)"
+          curl --fail --location https://raw.githubusercontent.com/silk-lang/silk/8214c402307b/install.sh --output "$RUNNER_TEMP/install-silk.sh"
+          sh "$RUNNER_TEMP/install-silk.sh"
+          echo "$HOME/.silk/bin" >> "$GITHUB_PATH"
+      - name: Build the executable with SilkCompression
+        working-directory: modules/runtime/cli
+        run: |
+          mkdir -p ../build/silkcompress
+          SILKJS_CLANG_BUILD=../build/silkcompress silk build src/main_silkcompress.silk -o ../build/silkcompress/silkjsruntime --debug true --clang ../tools/clang.py
+      - name: Compression differential against Node
+        working-directory: modules/runtime
+        run: node tests/compression-differential.mjs build/silkcompress/silkjsruntime

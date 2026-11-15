@@ -938,7 +938,8 @@ function componentVersions() {
   const sqlite = presentServices.has('Database') ? native.sqliteNative('version', []) : undefined;
   const versions = {
     node: nodeVersion, acorn: '8.18.0', amaro: '1.1.11',
-    brotli: `${brotli >>> 24}.${(brotli >>> 12) & 0xfff}.${brotli & 0xfff}`,
+    // A packed number from the brotli library; an implementation without it names itself.
+    brotli: typeof brotli === 'number' ? `${brotli >>> 24}.${(brotli >>> 12) & 0xfff}.${brotli & 0xfff}` : brotli,
     llhttp: '9.4.3', napi: '10', nghttp2, openssl, quickjs: '2026-06-04', silkjsruntime: '0.1.0', sqlite,
     uv, uvwasi: '0.0.23', zlib, zstd,
   };

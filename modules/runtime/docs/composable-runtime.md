@@ -740,10 +740,30 @@ expected output and its symbol checks (`silk task symbols`). The executable is t
   executable only. Moving that into a build step any embedding program can run, with the
   implementation types in the image identity, is the remaining half of the step.
 
-**Step 8** has its seams now: each library is private to one package and reached only through its
-capability's operations, so replacing llhttp with `silk.http`, zlib, zstd and brotli with
-`silk.compress`, or OpenSSL with `silk.crypto` and `silk.tls` is a new implementation package of
-the same capability, chosen by the embedder, and none of them has started.
+**Step 8, first swap: compression.** `SilkCompression` (./silkcompress) is `Compression` over
+`silk.compress`, with no C library: the same handle and job protocol as `NativeCompression`, and
+the encoders and decoders of the standard library in place of zlib, brotli and zstd. It has
+deflate, zlib, gzip, their inverses and unzip with every flush, dictionaries and `params`,
+multi-member gzip with zero padding and strict trailing-junk checks, brotli with its quality and
+window, and Zstandard with its level, window, checksum, content size and pledged size; it fails
+at creation for what `silk.compress` lacks (brotli and Zstandard dictionaries, brotli's large
+window, Zstandard's worker threads). Its errors are zlib's, brotli's and zstd's codes and
+messages, in zlib's order of checks.
+
+`cli/src/main_silkcompress.silk` is the executable with it in place of `NativeCompression`, and
+`tests/compression-differential.mjs` runs the same cases (`tests/compression-cases.cjs`: one-shot
+and streamed, every format, levels, strategies, windows, flushes, `params`, reset, dictionaries,
+corrupt, truncated and trailing input, async work, `CompressionStream`) under Node and a runtime.
+Both executables agree with Node on all 94; compressed bytes may differ from zlib's but always
+decode under Node, and a brotli format error keeps its code family and message but not always
+its number, which depends on where the decoder notices the fault. The compatibility suite passes
+with it as well. On 8 MB, debug builds, gzip and Zstandard run as fast as the C libraries and
+brotli compresses about 2.6 times slower and decompresses faster. The CI job `silk-compression`
+(`.github/workflows/embedding.yml`) builds that executable and runs the differential.
+
+The other swaps follow the same path: llhttp with `silk.http`'s parser, nghttp2 with its HTTP/2,
+OpenSSL with `silk.crypto` and `silk.tls`, each a new implementation package of the same
+capability, chosen by the embedder.
 
 ## Risks and decisions taken
 

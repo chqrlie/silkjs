@@ -1,0 +1,8 @@
+//! The executable with SilkCompression (./silkcompress, over silk.compress) in place of
+//! NativeCompression: the same program with no zlib, brotli or zstd, to test the swap of step 8
+//! (docs/composable-runtime.md). Build: silk build src/main_silkcompress.silk.
+import silk.system.host_input { HostInput }
+import silkcompress.silk_compression { SilkCompression }
+import main as executable
+
+pub effect fn main() -> i32 ? &mut HostInput { return run executable.mainWith(SilkCompression.make()) }
