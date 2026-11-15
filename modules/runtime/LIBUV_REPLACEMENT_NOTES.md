@@ -100,17 +100,17 @@ the runtime from this branch and, as the baseline, from `main` at f3d5ea8 (libuv
 the differential cases and the fixtures with each; `macos-libuv-suite.yml` runs libuv's own suite
 against real libuv and against the exports, with `tools/libuv_diagnostic.c` beside it.
 
-Fixtures and differential cases: run of branch commit 29938a7; libuv's suite: run of cf9a9a5 (the
-fixes below came between them; a full run of the final commit is queued).
+All rows: one run of branch commit d53e515 and of `main` f3d5ea8 on the same runner (both jobs
+of one workflow run), plus libuv's suite in that run and in the quick workflow's run of the same commit.
 
 | Check on macOS | main f3d5ea8 | this branch |
 | --- | --- | --- |
 | Build | passes | passes |
 | Differential cases against Node 24 (`tests/compat.mjs`) | 75 passed, 0 failed | 75 passed, 0 failed |
-| Fixtures | 77 of 96 | 79 of 98: the same 77, and the two new ones (`fs-watch-darwin-smoke.cjs` with FSEvents, `spawn-smoke.cjs` with posix_spawn, both equal to Node). Every fixture the two share has the same result |
+| Fixtures | 78 of 96 | 80 of 98: the same 78, and the two new ones (`fs-watch-darwin-smoke.cjs` with FSEvents, `spawn-smoke.cjs` with posix_spawn, both equal to Node). Every fixture the two share has the same result |
 | libuv 1.51's own suite | real libuv: 436 of 441 | Silk exports: 436 of 441; the same five fail with both (`tcp_connect6_link_local`, four UDP multicast tests: the runner's network) |
 
-The 19 fixtures that fail on macOS fail on `main` there too (among them `sea-smoke.py`, the
+The 18 fixtures that fail on macOS fail on `main` there too (among them `sea-smoke.py`, the
 Node-API smokes, `embed-smoke.py` within the old five-minute limit).
 
 libuv's suite found these differences on macOS that Linux could not show, all fixed:
@@ -127,9 +127,11 @@ still happen at once (`poll_oob`). And the loop's clock was `CLOCK_MONOTONIC`, m
 on macOS, where libuv's is `mach_continuous_time`, the clock of `uv_hrtime`: a timer could fire
 early as `uv_hrtime` measures it (`timer_early_check`).
 
-The runtime's own descriptor watchers do not take the deferred change list: with them on it, the
-full run of e55510b timed out in `cluster-transport-smoke.cjs` and `heap-image-smoke.cjs`, which
-passed in the run before that change; 271451f registers them at once again.
+Only the uv_poll handles of addons take the deferred change list (`uv_poll_start_deferred`, behind
+the exported `uv_poll_start`). The runtime's own descriptor watchers and poll handles (process IPC)
+register at once: with them on it, the runs of e55510b and 271451f timed out in
+`cluster-transport-smoke.cjs` and `heap-image-smoke.cjs`, which pass on `main` and pass again on
+d53e515.
 
 Not covered by any run: Linux arm64 (type-checked only), the select() thread libuv starts for
 descriptors kqueue refuses (`/dev/tty`; not done), and a fork after FSEvents started.
@@ -264,6 +266,5 @@ Reading it:
 
 ## Next
 
-- A passing run of the macOS workflow, FSEvents and posix_spawn included.
 - Rename `modules/native/libuv` (it holds only uvwasi now).
 - Put the standalone loop harness in the repository as a test package.
