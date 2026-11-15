@@ -16,15 +16,70 @@
 #include <sys/socket.h>
 #include <time.h>
 #include <unistd.h>
-/* The OpenSSL functions this file calls, declared here so that it builds without OpenSSL's
- * headers, which only the silkjs-openssl package names (modules/native/openssl). */
-typedef struct evp_md_st EVP_MD;
-typedef struct engine_st ENGINE;
-#define EVP_MAX_MD_SIZE 64
-int EVP_Digest(const void *data, size_t count, unsigned char *md, unsigned int *size, const EVP_MD *type, ENGINE *impl);
-const EVP_MD *EVP_sha1(void);
-int EVP_EncodeBlock(unsigned char *t, const unsigned char *f, int n);
-int RAND_bytes(unsigned char *buf, int num);
+#include <stdint.h>
+#if defined(__APPLE__)
+#include <stdlib.h>
+#else
+#include <sys/random.h>
+#endif
+/* SHA-1 and base64 for the WebSocket handshake (RFC 6455 4.2.2), and the system's random bytes
+ * for the session id: this file needs no crypto library, so a runtime without OpenSSL (Crypto
+ * and Tls empty) still has the inspector's server. */
+static uint32_t sha1_rotate(uint32_t value, int bits) { return (value << bits) | (value >> (32 - bits)); }
+static void sha1_block(uint32_t state[5], const unsigned char *block) {
+  uint32_t w[80];
+  for (int i = 0; i < 16; i++) w[i] = (uint32_t)block[i * 4] << 24 | (uint32_t)block[i * 4 + 1] << 16 | (uint32_t)block[i * 4 + 2] << 8 | block[i * 4 + 3];
+  for (int i = 16; i < 80; i++) w[i] = sha1_rotate(w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16], 1);
+  uint32_t a = state[0], b = state[1], c = state[2], d = state[3], e = state[4];
+  for (int i = 0; i < 80; i++) {
+    uint32_t f, k;
+    if (i < 20) { f = (b & c) | (~b & d); k = 0x5A827999; }
+    else if (i < 40) { f = b ^ c ^ d; k = 0x6ED9EBA1; }
+    else if (i < 60) { f = (b & c) | (b & d) | (c & d); k = 0x8F1BBCDC; }
+    else { f = b ^ c ^ d; k = 0xCA62C1D6; }
+    uint32_t next = sha1_rotate(a, 5) + f + e + k + w[i];
+    e = d; d = c; c = sha1_rotate(b, 30); b = a; a = next;
+  }
+  state[0] += a; state[1] += b; state[2] += c; state[3] += d; state[4] += e;
+}
+static void sha1(const unsigned char *data, size_t length, unsigned char digest[20]) {
+  uint32_t state[5] = { 0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476, 0xC3D2E1F0 };
+  unsigned char block[64]; size_t at = 0;
+  while (length - at >= 64) { sha1_block(state, data + at); at += 64; }
+  size_t rest = length - at; memcpy(block, data + at, rest); block[rest++] = 0x80;
+  if (rest > 56) { memset(block + rest, 0, 64 - rest); sha1_block(state, block); rest = 0; }
+  memset(block + rest, 0, 56 - rest);
+  uint64_t bits = (uint64_t)length * 8;
+  for (int i = 0; i < 8; i++) block[56 + i] = (unsigned char)(bits >> (56 - 8 * i));
+  sha1_block(state, block);
+  for (int i = 0; i < 5; i++) { digest[i * 4] = state[i] >> 24; digest[i * 4 + 1] = state[i] >> 16; digest[i * 4 + 2] = state[i] >> 8; digest[i * 4 + 3] = state[i]; }
+}
+/* Standard base64 with padding, then a NUL. */
+static void base64(unsigned char *out, const unsigned char *in, size_t length) {
+  static const char alphabet[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  size_t at = 0;
+  for (size_t i = 0; i < length; i += 3) {
+    uint32_t chunk = (uint32_t)in[i] << 16 | (i + 1 < length ? (uint32_t)in[i + 1] << 8 : 0) | (i + 2 < length ? in[i + 2] : 0);
+    out[at++] = alphabet[chunk >> 18 & 63]; out[at++] = alphabet[chunk >> 12 & 63];
+    out[at++] = i + 1 < length ? alphabet[chunk >> 6 & 63] : '=';
+    out[at++] = i + 2 < length ? alphabet[chunk & 63] : '=';
+  }
+  out[at] = 0;
+}
+static int random_bytes(unsigned char *out, size_t length) {
+#if defined(__APPLE__)
+  arc4random_buf(out, length);
+  return 1;
+#else
+  size_t at = 0;
+  while (at < length) {
+    ssize_t n = getrandom(out + at, length - at, 0);
+    if (n < 0) { if (errno == EINTR) continue; return 0; }
+    at += (size_t)n;
+  }
+  return 1;
+#endif
+}
 
 #define MAX_CLIENTS 64
 #define HTTP_LIMIT 8192
@@ -365,11 +420,11 @@ static void http_input(silk_inspector *s, client *c) {
     }
     if (!strncmp(path, "/json/activate/", 15) && !strcmp(path + 15, s->uuid)) { http_reply(c, 200, "OK", "Target activated"); return; }
     if (path[0] != '/' || strcmp(path + 1, s->uuid) || !upgrade || strcasecmp(upgrade, "websocket") || !connection || !token(connection, "upgrade") || !key || !valid_key(key) || !ws_version || strcmp(ws_version, "13")) { http_reply(c, 400, "Bad Request", "WebSockets request was expected\r\n"); return; }
-    unsigned char digest[EVP_MAX_MD_SIZE], accept[64]; unsigned digest_length = 0;
+    unsigned char digest[20], accept[64];
     size_t key_length = strlen(key);
     char challenge[KEY_LIMIT + 36]; memcpy(challenge, key, key_length); memcpy(challenge + key_length, "258EAFA5-E914-47DA-95CA-C5AB0DC85B11", 36);
-    if (!EVP_Digest(challenge, key_length + 36, digest, &digest_length, EVP_sha1(), NULL) || digest_length != 20) { http_reply(c, 500, "Internal Server Error", "{}"); return; }
-    EVP_EncodeBlock(accept, digest, 20);
+    sha1((const unsigned char *)challenge, key_length + 36, digest);
+    base64(accept, digest, 20);
     silk_inspector_packet *opened = packet(SILK_INSPECTOR_OPEN, c->id, NULL, 0);
     silk_inspector_packet *closed = packet(SILK_INSPECTOR_CLOSE, c->id, NULL, 0);
     if (!opened || !closed) { free(opened); free(closed); http_reply(c, 503, "Service Unavailable", "{}"); return; }
@@ -548,7 +603,7 @@ int silk_inspector_start(silk_inspector *s, const unsigned char *host, size_t le
     if (inet_pton(AF_INET, address, &v4->sin_addr) == 1) { family = AF_INET; v4->sin_family = AF_INET; v4->sin_port = htons(port); address_length = sizeof(*v4); }
     else if (inet_pton(AF_INET6, address, &v6->sin6_addr) == 1) { family = AF_INET6; v6->sin6_family = AF_INET6; v6->sin6_port = htons(port); address_length = sizeof(*v6); }
     else return EINVAL;
-    unsigned char random[16]; if (RAND_bytes(random, sizeof(random)) != 1) return EIO;
+    unsigned char random[16]; if (!random_bytes(random, sizeof(random))) return EIO;
     random[6] = (random[6] & 15) | 64; random[8] = (random[8] & 63) | 128;
     snprintf(s->uuid, sizeof(s->uuid), "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x", random[0], random[1], random[2], random[3], random[4], random[5], random[6], random[7], random[8], random[9], random[10], random[11], random[12], random[13], random[14], random[15]);
     int fd = socket(family, SOCK_STREAM, 0); if (fd < 0) return errno;

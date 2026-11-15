@@ -1,0 +1,48 @@
+name: Embedding
+# The composable runtime's matrix (modules/runtime/docs/composable-runtime.md, step 7): the same
+# embedding host built twice, once from the core alone (every optional capability empty, no file
+# system) and once with every capability's package (WAMR, compression, HTTP/2, HTTP/1, SQLite,
+# OpenSSL, and files in memory). Each must print what the test expects, and nm must find each
+# capability's library only in the program that depends on its package.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - 'modules/runtime/**'
+      - 'modules/native/**'
+      - 'modules/engine/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: embedding-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  smoke:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Clang 22
+        run: |
+          test -x /usr/bin/clang-22 || (sudo apt-get update && sudo apt-get install -y clang-22 lld-22)
+          echo "SILK_CLANG=/usr/bin/clang-22" >> "$GITHUB_ENV"
+      - name: Install the pinned Silk
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          export SILK_RELEASE="v$(sed -n 's/^silk-version = "\(.*\)"/\1/p' silk.toml)"
+          curl --fail --location https://raw.githubusercontent.com/silk-lang/silk/8214c402307b/install.sh --output "$RUNNER_TEMP/install-silk.sh"
+          sh "$RUNNER_TEMP/install-silk.sh"
+          echo "$HOME/.silk/bin" >> "$GITHUB_PATH"
+      - name: Build and run both embedding programs
+        working-directory: modules/runtime
+        run: python3 tests/embed-smoke.py
+      - name: The program of the core alone links no capability library
+        working-directory: modules/runtime/tools/capabilities
+        run: |
+          for prefix in wasm_runtime_ BrotliEncoder ZSTD_ nghttp2_ llhttp_ sqlite3_ SSL_CTX_; do
+            silk task symbols --binary ../../build/embed-smoke/embed-smoke --prefix "$prefix" --absent
+            silk task symbols --binary ../../build/embed-smoke-wamr/embed-smoke-wamr --prefix "$prefix"
+          done
