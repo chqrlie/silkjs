@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run: python3 tests/inspector-startup-smoke.py build/silkjsruntime
+"""Run: python3 tests/inspector-startup-smoke.py build/silkjs
 
 Only the supplied runtime executes guest code. The Python client controls the
 production inspector transport and checks startup ordering with a real file.
@@ -18,7 +18,7 @@ from urllib.parse import urlsplit
 spec = importlib.util.spec_from_file_location("inspector_transport", Path(__file__).with_name("inspector-transport-smoke.py"))
 transport = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(transport)
-runtime = str(Path(sys.argv[1] if len(sys.argv) > 1 else "build/silkjsruntime").resolve())
+runtime = str(Path(sys.argv[1] if len(sys.argv) > 1 else "build/silkjs").resolve())
 base_env = {key: value for key, value in os.environ.items() if key != "NODE_OPTIONS"}
 
 

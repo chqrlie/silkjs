@@ -1,7 +1,7 @@
 # pm
 
 The package manager of the runtime. It is written in Silk on the Silk standard library and is
-part of the runtime executable: `silkjsruntime install`, `add`, `remove`, `update` and `ci` run
+part of the runtime executable: `silkjs install`, `add`, `remove`, `update` and `ci` run
 [`cli.execute`](src/cli.silk) before the JavaScript engine starts. This package also builds a
 small `pm` executable with the same commands, for developing it without building the runtime.
 

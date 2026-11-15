@@ -12,7 +12,7 @@ import sys
 import termios
 import time
 
-executable = str(pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else 'build/silkjsruntime').resolve())
+executable = str(pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else 'build/silkjs').resolve())
 master, slave = pty.openpty()
 environment = dict(os.environ, NODE_REPL_HISTORY='', TERM='xterm', NO_COLOR='1')
 environment.pop('FORCE_COLOR', None)

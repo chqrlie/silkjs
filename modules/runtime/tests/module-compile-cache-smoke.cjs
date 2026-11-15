@@ -73,7 +73,7 @@ async function main() {
   assert.ok(entries(directory).length >= 4);
   const cjsWitness = witness(directory, 'CJS_COLD_MARKER', 'CJS_WARM_MARKER');
   const esmWitness = witness(directory, 'ESM_COLD_MARKER', 'ESM_WARM_MARKER');
-  const silk = run(['-p', "'silkjsruntime' in process.versions"]) === 'true';
+  const silk = run(['-p', "'silkjs' in process.versions"]) === 'true';
   if (silk) {
     assert.ok(cjsWitness && esmWitness, 'both bytecode kinds must be persisted');
     const warm = JSON.parse(run(['main.cjs']));
