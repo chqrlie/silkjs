@@ -1271,7 +1271,8 @@ fn longestMatch(state: &mut Encoder, start: usize) -> usize {
   let chains = List<u16>.asSlice(&state.prev)
   if scan + MAX_MATCH >= window.length || chains.length <= state.windowMask || start >= scan
     || start == 0
-    || state.prevLength > MAX_MATCH {
+    || state.prevLength > MAX_MATCH
+    || state.prevLength == 0 {
     return longestMatchChecked(&mut state, start)
   }
   let mut current = start
@@ -1295,41 +1296,45 @@ fn longestMatch(state: &mut Encoder, start: usize) -> usize {
     // Both tables hold elements, so their pointers are not null.
     let bytes = Intrinsic.pointerRequalify<?[*]const u8, [*]const u8>(Pointer.fromSlice<u8>(window))
     let links = Intrinsic.pointerRequalify<?[*]const u16, [*]const u16>(Pointer.fromSlice<u16>(chains))
-    let first = Pointer.read<u8>(Pointer.at<u8>(bytes, scan))
-    let second = Pointer.read<u8>(Pointer.at<u8>(bytes, scan + 1))
+    // The first two bytes and the two at the end of the best match so far, each pair in one
+    // load: a candidate must match them all to be longer.
+    let opening = pair(bytes, scan)
     // `best` is at most 258 and a candidate is at least 1 and before `scan`, so the reads at
-    // `best` and `best - 1` from a candidate or from `scan` are in the window.
-    let mut end = Pointer.read<u8>(Pointer.at<u8>(bytes, scan + best))
-    let mut beforeEnd = Pointer.read<u8>(Pointer.at<u8>(bytes, scan + best - 1))
+    // `best - 1` and `best` from a candidate or from `scan` are in the window.
+    let mut end = pair(bytes, scan + best - 1)
+    let mut endAt = best - 1
+    // A link goes on when it is after `limit` and before `scan`: one unsigned compare. The test
+    // of `scan` keeps a damaged table from reading past the window.
+    let span = scan - limit - 1
+    let lowest = limit + 1
+    // The arithmetic below cannot wrap: positions are below `scan`, lengths at most 258, and
+    // `scan + 258` is inside the window.
     while true {
       let candidate = current
-      if Pointer.read<u8>(Pointer.at<u8>(bytes, candidate + best)) == end
-        && Pointer.read<u8>(Pointer.at<u8>(bytes, candidate + best - 1)) == beforeEnd
-        && Pointer.read<u8>(Pointer.at<u8>(bytes, candidate)) == first
-        && Pointer.read<u8>(Pointer.at<u8>(bytes, candidate + 1)) == second {
+      if pair(bytes, usize.wrappingAdd(candidate, endAt)) == end && pair(bytes, candidate) == opening {
         // Eight bytes at a time while eight more stay inside the 258, then one at a time.
         let mut length: usize = 2
         let mut differs = false
-        while length + 8 <= MAX_MATCH {
+        while length <= MAX_MATCH - 8 {
           let left = Pointer.readUnaligned<u64>(
-            Intrinsic.pointerReinterpret<*const u8, *const align(1) u64>(Pointer.at<u8>(bytes, candidate + length)),
+            Intrinsic.pointerReinterpret<*const u8, *const align(1) u64>(Pointer.at<u8>(bytes, usize.wrappingAdd(candidate, length))),
           )
           let right = Pointer.readUnaligned<u64>(
-            Intrinsic.pointerReinterpret<*const u8, *const align(1) u64>(Pointer.at<u8>(bytes, scan + length)),
+            Intrinsic.pointerReinterpret<*const u8, *const align(1) u64>(Pointer.at<u8>(bytes, usize.wrappingAdd(scan, length))),
           )
           let changed = left ^ right
           if changed != 0 {
-            length = length + u32.toUsize(sameBytes(changed))
+            length = usize.wrappingAdd(length, u32.toUsize(sameBytes(changed)))
             differs = true
             break
           }
-          length = length + 8
+          length = usize.wrappingAdd(length, 8)
         }
         if differs == false {
           while length < MAX_MATCH
-            && Pointer.read<u8>(Pointer.at<u8>(bytes, candidate + length))
-              == Pointer.read<u8>(Pointer.at<u8>(bytes, scan + length)) {
-            length = length + 1
+            && Pointer.read<u8>(Pointer.at<u8>(bytes, usize.wrappingAdd(candidate, length)))
+              == Pointer.read<u8>(Pointer.at<u8>(bytes, usize.wrappingAdd(scan, length))) {
+            length = usize.wrappingAdd(length, 1)
           }
         }
         if length > best {
@@ -1338,16 +1343,15 @@ fn longestMatch(state: &mut Encoder, start: usize) -> usize {
           if length >= nice {
             break
           }
-          end = Pointer.read<u8>(Pointer.at<u8>(bytes, scan + best))
-          beforeEnd = Pointer.read<u8>(Pointer.at<u8>(bytes, scan + best - 1))
+          endAt = usize.wrappingSubtract(best, 1)
+          end = pair(bytes, usize.wrappingAdd(scan, endAt))
         }
       }
       current = u16.toUsize(Pointer.read<u16>(Pointer.at<u16>(links, current & mask)))
-      // A link is 0 or a position before this one; the test keeps a damaged table from going on.
-      if current <= limit || current >= scan {
+      if usize.wrappingSubtract(current, lowest) >= span {
         break
       }
-      chain = chain - 1
+      chain = u32.wrappingSubtract(chain, 1)
       if chain == 0 {
         break
       }
@@ -1358,6 +1362,14 @@ fn longestMatch(state: &mut Encoder, start: usize) -> usize {
     return best
   }
   return state.lookahead
+}
+
+// The two bytes at `bytes[at..]` as one word. The caller proves that they are in the buffer.
+@inlineAlways
+unsafe fn pair(bytes: [*]const u8, at: usize) -> u16 {
+  unsafe {
+    return Pointer.readUnaligned<u16>(Intrinsic.pointerReinterpret<*const u8, *const align(1) u16>(Pointer.at<u8>(bytes, at)))
+  }
 }
 
 // The number of equal low bytes of two words whose XOR is `changed`, which is not 0. The words

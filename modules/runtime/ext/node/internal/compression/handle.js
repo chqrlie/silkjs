@@ -296,7 +296,9 @@ class ZstdDecompress extends ZstdHandle {
 
 function crc32(data, value) {
   if (typeof data === 'string') data = Buffer.from(data);
-  return call('crc32', [snapshot(data, 0, range(data).length, 'data'), value]);
+  const bytes = range(data);
+  // The CRC-32 reads the caller's bytes where they are.
+  return call('checksum', [undefined, value, bytes.buffer, bytes.offset, bytes.length]);
 }
 
 module.exports = { Zlib, BrotliEncoder, BrotliDecoder, ZstdCompress, ZstdDecompress, crc32 };
