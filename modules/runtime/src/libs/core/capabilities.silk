@@ -364,6 +364,24 @@ pub struct EmptyWorkers {}
 impl Copy for EmptyWorkers {}
 impl Workers for EmptyWorkers { static fn present() -> bool { return false } }
 
+/// The inspector: `node:inspector`, `--inspect` and its kind, and the debugger, profiler and
+/// network views over them. Native ids 15000 to 15032 are this capability's. Tracing, the heap and
+/// CPU profiles the `v8` module takes, and coverage stay the core's. Without it
+/// `require('inspector')` fails with `ERR_INSPECTOR_NOT_AVAILABLE` and the inspector options are
+/// bad options, as in a Node build without the inspector. It needs `Network` (`checkCombination`).
+pub interface Inspector {
+  /// A constant of the implementation type: whether the inspector is there.
+  static fn present() -> bool
+}
+/// Node's inspector protocol, over the engine.
+pub struct NodeInspector {}
+impl Copy for NodeInspector {}
+impl Inspector for NodeInspector { static fn present() -> bool { return true } }
+/// No inspector.
+pub struct EmptyInspector {}
+impl Copy for EmptyInspector {}
+impl Inspector for EmptyInspector { static fn present() -> bool { return false } }
+
 /// The file type bits ([`ModuleResolver.kind`]) of a regular file.
 pub const MODULE_FILE: i32 = 0o100000
 /// The file type bits of a directory.
@@ -394,9 +412,9 @@ pub interface ModuleResolver {
 /// a capability the program does not want is given its empty implementation.
 ///
 /// ```silk
-/// let capabilities = Capabilities { platform: OsPlatform {}, modules: NodeResolution {}, files: OsFiles {}, compression: NativeCompression {}, http2: Nghttp2 {}, crypto: OpenSslCrypto {}, tls: OpenSslTls {}, database: SqliteDatabase {}, addons: DlopenAddons {}, processes: OsProcesses {}, network: OsNetwork {}, http: Llhttp {}, systemInfo: OsSystemInfo {}, typeStripping: Amaro {}, workers: ThreadWorkers {}, wasm: EmptyWasm {}, hostApi: EmptyHostApi {} }
+/// let capabilities = Capabilities { platform: OsPlatform {}, modules: NodeResolution {}, files: OsFiles {}, compression: NativeCompression {}, http2: Nghttp2 {}, crypto: OpenSslCrypto {}, tls: OpenSslTls {}, database: SqliteDatabase {}, addons: DlopenAddons {}, processes: OsProcesses {}, network: OsNetwork {}, http: Llhttp {}, systemInfo: OsSystemInfo {}, typeStripping: Amaro {}, workers: ThreadWorkers {}, inspector: NodeInspector {}, wasm: EmptyWasm {}, hostApi: EmptyHostApi {} }
 /// ```
-pub struct Capabilities<P, M, F, Z, H, K, T, D, N, R, E, L, S, Y, X, W, A> {
+pub struct Capabilities<P, M, F, Z, H, K, T, D, N, R, E, L, S, Y, X, I, W, A> {
   pub platform: P,
   pub modules: M,
   pub files: F,
@@ -412,6 +430,7 @@ pub struct Capabilities<P, M, F, Z, H, K, T, D, N, R, E, L, S, Y, X, W, A> {
   pub systemInfo: S,
   pub typeStripping: Y,
   pub workers: X,
+  pub inspector: I,
   pub wasm: W,
   pub hostApi: A,
 }
@@ -448,6 +467,8 @@ pub interface Composition {
   static fn typeStrippingPresent() -> bool
   /// `Workers.present` of the program's worker threads.
   static fn workersPresent() -> bool
+  /// `Inspector.present` of the program's inspector.
+  static fn inspectorPresent() -> bool
   /// `Files.native` of the program's file system.
   static fn filesNative() -> bool
   /// `Files.direct` of the program's file system.
@@ -502,10 +523,12 @@ static fn presentHttp<L: Http>() -> bool { return Http.present() }
 static fn presentSystemInfo<S: SystemInfo>() -> bool { return SystemInfo.present() }
 static fn presentTypeStripping<Y: TypeStripping>() -> bool { return TypeStripping.present() }
 static fn presentWorkers<X: Workers>() -> bool { return Workers.present() }
+static fn presentInspector<I: Inspector>() -> bool { return Inspector.present() }
 
 impl<P: Platform + Copy, M: ModuleResolver + Copy, F: Files + Copy, Z: Compression + Copy, H: Http2 + Copy, K: Crypto + Copy, T: Tls + Copy, D: Database + Copy,
   N: NativeAddons + Copy, R: Processes + Copy, E: Network + Copy, L: Http + Copy, S: SystemInfo + Copy, Y: TypeStripping + Copy,
-  X: Workers + Copy, W: Wasm + Copy, A: HostApi + Copy> Composition for Capabilities<P, M, F, Z, H, K, T, D, N, R, E, L, S, Y, X, W, A> {
+  X: Workers + Copy, I: Inspector + Copy, W: Wasm + Copy, A: HostApi + Copy> Composition for Capabilities<P, M, F, Z, H, K, T, D, N, R, E, L, S, Y, X, I, W, A> {
+  static fn inspectorPresent() -> bool { return presentInspector<I>() }
   static fn workersPresent() -> bool { return presentWorkers<X>() }
   static fn systemInfoPresent() -> bool { return presentSystemInfo<S>() }
   static fn typeStrippingPresent() -> bool { return presentTypeStripping<Y>() }
@@ -524,7 +547,7 @@ impl<P: Platform + Copy, M: ModuleResolver + Copy, F: Files + Copy, Z: Compressi
   static fn filesDirect() -> bool { return directFiles<F>() }
   unsafe fn filesExecute(self: &Self, call: &Call, out: &mut Outcome) -> () { unsafe self.files.execute(&call, &mut out) }
   fn forWorker(self: &Self) -> Self {
-    return Capabilities<P, M, F, Z, H, K, T, D, N, R, E, L, S, Y, X, W, A> { platform: self.platform.forWorker(), modules: self.modules.forWorker(), files: self.files.forWorker(), compression: self.compression, http2: self.http2, crypto: self.crypto, tls: self.tls, database: self.database, addons: self.addons, processes: self.processes, network: self.network, http: self.http, systemInfo: self.systemInfo, typeStripping: self.typeStripping, workers: self.workers, wasm: self.wasm.forWorker(), hostApi: self.hostApi.forWorker() }
+    return Capabilities<P, M, F, Z, H, K, T, D, N, R, E, L, S, Y, X, I, W, A> { platform: self.platform.forWorker(), modules: self.modules.forWorker(), files: self.files.forWorker(), compression: self.compression, http2: self.http2, crypto: self.crypto, tls: self.tls, database: self.database, addons: self.addons, processes: self.processes, network: self.network, http: self.http, systemInfo: self.systemInfo, typeStripping: self.typeStripping, workers: self.workers, inspector: self.inspector, wasm: self.wasm.forWorker(), hostApi: self.hostApi.forWorker() }
   }
   effect fn platformGetenv<'m>(engine: &Engine<'m, Services<Self>>, name: &[u8], into: &mut List<u8>) -> bool ! OutOfMemoryError ? &mut Allocator {
     let platform = engine.services.capabilities.platform return run platform.getenv(name, &mut into.*)
@@ -618,6 +641,9 @@ pub static fn hasNetwork<C: Composition>() -> bool { return Composition.networkP
 /// Whether the program has the HTTP/1 parser (`Http.present`): a constant, for `static if`.
 pub static fn hasHttp<C: Composition>() -> bool { return Composition.httpPresent() }
 
+/// Whether the program has the inspector (`Inspector.present`): a constant, for `static if`.
+pub static fn hasInspector<C: Composition>() -> bool { return Composition.inspectorPresent() }
+
 /// The capabilities that need others: a combination without what one needs does not build.
 pub fn checkCombination<C: Composition>() -> () {
   static if Composition.tlsPresent() && !Composition.cryptoPresent() {
@@ -634,6 +660,9 @@ pub fn checkCombination<C: Composition>() -> () {
   }
   static if Composition.processesPresent() && !Composition.networkPresent() {
     compileError("Processes needs Network for the pipes of child processes: give Capabilities a network (OsNetwork), or no child processes (EmptyProcesses)")
+  }
+  static if Composition.inspectorPresent() && !Composition.networkPresent() {
+    compileError("Inspector needs Network for its server and the network domain: give Capabilities a network (OsNetwork), or no inspector (EmptyInspector)")
   }
   static if Composition.typeStrippingPresent() && !Composition.wasmPresent() {
     compileError("TypeStripping needs Wasm: amaro runs on WebAssembly; give Capabilities WamrWasm, or no TypeScript (EmptyTypeStripping)")

@@ -638,9 +638,8 @@ not. Standard output and error are then written synchronously, as a file's are (
 still says whether it is a terminal), and standard input is read as a file when there is a file
 system. `tty` is the network's now (a terminal stream is a socket of libuv's, as in Node), and the
 message event classes that worker ports use are the core's. `checkCombination` has the rules the
-graph declares: the network needs Http, and Tls, Http2 and Processes need the network. The
-inspector's own server needs the network as well; the inspector is not a capability yet, so a
-runtime without the network has the in-process inspector only.
+graph declares: the network needs Http, and Tls, Http2 and Processes need the network.  The
+inspector's own server needs the network as well (step 6).
 
 **Step 6, first part: Database, NativeAddons and Processes.** `SqliteDatabase` and
 `EmptyDatabase`, `DlopenAddons` and `EmptyAddons`, `OsProcesses` and `EmptyProcesses`, in the same
@@ -666,8 +665,18 @@ ports, `process.env` and the thread identities stand on the worker natives, whic
 has, so they stay; without worker threads `new Worker()` fails with `ERR_WORKER_INIT_FAILED` and
 the native start of a thread is not compiled.
 
-What is left of step 6 is `Inspector`, which reaches into the console, diagnostics channels and
-tracing at load: those need moving to the core before it can be empty.
+**Step 6, fourth part: Inspector.** `NodeInspector` and `EmptyInspector`. The inspector here is
+the protocol: `node:inspector`, `--inspect` and its kind, the in-process sessions the REPL uses, the
+debugger and the network and storage views. Tracing (`trace_events`), the console's hook and the
+V8 profiles that use the engine directly (heap snapshots, `v8.takeCoverage`, `NODE_V8_COVERAGE`) are
+the core's now, since the console, diagnostics channels, fs and http report to them at load.
+Without the inspector its natives (15000 to 15032) and state are not compiled,
+`require('inspector')` fails with `ERR_INSPECTOR_NOT_AVAILABLE`, `--inspect`, `--cpu-prof` and
+`--heap-prof` are bad options, `process.features.inspector` is false, the REPL has no previews,
+`vm` contexts are not listed, and `console.profile` and `console.context` do nothing, as in a Node
+build `--without-inspector`. The inspector needs the network (`checkCombination`).
+
+With this, every capability of the design is a service with an empty implementation.
 
 ## Risks and decisions taken
 

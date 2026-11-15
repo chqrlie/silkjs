@@ -51,7 +51,12 @@ needs = ["Platform", "ModuleResolver", "Files", "Network", "Processes", "SystemI
 # WebSocket does, so they are there without the network.
 [[builtin]]
 service = "Core"
-names = ["internal/web/websocket/events"]
+# Tracing, the console's hook for an inspector and the V8 profiles (heap snapshots, coverage and
+# --heap-prof) are the core's: they use the engine, not the inspector protocol, and
+# the console, diagnostics channels, fs and http report to them whether or not there is one.
+names = ["internal/web/websocket/events", "internal/trace_events", "internal/inspector_console", "trace_events",
+  "internal/trace_events_binding", "internal/profiler_binding", "internal/heap_prof", "internal/inspector_profiles",
+  "internal/inspector_values", "internal/worker/profiles"]
 [[builtin]]
 service = "TypeStripping"
 names = ["internal/deps/amaro", "internal/modules/typescript"]
@@ -91,8 +96,8 @@ names = ["zlib", "internal/webstreams/compression", "internal/web/compression"]
 prefixes = ["zlib/", "internal/compression/"]
 [[builtin]]
 service = "Inspector"
-names = ["inspector", "trace_events", "internal/profiler_binding", "internal/heap_prof", "internal/worker/profiles"]
-prefixes = ["inspector/", "internal/inspector", "internal/trace_events"]
+names = ["inspector"]
+prefixes = ["inspector/", "internal/inspector"]
 [[builtin]]
 service = "Workers"
 names = ["worker_threads", "internal/worker", "internal/worker/io", "internal/worker/locks", "internal/worker/broadcast",

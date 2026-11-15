@@ -449,7 +449,7 @@ unsafe effect fn configure<'m, C: Composition>(engine: &mut Engine<'m, Services<
   run unsafe function(&mut engine, context, native, b"builtinService", 42)
   // The services this runtime has (docs/composable-runtime.md): the bootstrap registers only
   // their built-ins. Every one is here until each becomes a capability the embedder chooses.
-  // Files, Compression, Http2, Crypto, Tls, Database, NativeAddons, Processes, Network, Http, SystemInfo, TypeStripping and Wasm are the embedder's choice (`Capabilities`); the rest are
+  // Files, Compression, Http2, Crypto, Tls, Database, NativeAddons, Processes, Network, Http, SystemInfo, TypeStripping, Inspector and Wasm are the embedder's choice (`Capabilities`); the rest are
   // still always here.
   let mut wasm: &[u8] = b"" static if capabilities.hasWasm<C>() { wasm = b"Wasm" }
   let mut files: &[u8] = b"" static if capabilities.hasFiles<C>() { files = b"Files" }
@@ -464,8 +464,9 @@ unsafe effect fn configure<'m, C: Composition>(engine: &mut Engine<'m, Services<
   let mut http: &[u8] = b"" static if Composition.httpPresent() { http = b"Http" }
   let mut systemInfo: &[u8] = b"" static if Composition.systemInfoPresent() { systemInfo = b"SystemInfo" }
   let mut typeStripping: &[u8] = b"" static if Composition.typeStrippingPresent() { typeStripping = b"TypeStripping" }
+  let mut inspector: &[u8] = b"" static if Composition.inspectorPresent() { inspector = b"Inspector" }
   let present = [b"Platform", b"ModuleResolver", files, network, processes, systemInfo, b"Workers", crypto, tls,
-    compression, http, http2, wasm, database, typeStripping, b"Inspector", addons, b"HostApi"]
+    compression, http, http2, wasm, database, typeStripping, inspector, addons, b"HostApi"]
   let services = run unsafe common.array(&mut engine, memory, context)
   let mut named: usize = 0
   while named < present.length {
@@ -536,6 +537,7 @@ unsafe effect fn configure<'m, C: Composition>(engine: &mut Engine<'m, Services<
     b"inspectorNative32",
   ]
   at = 0
+  static if !Composition.inspectorPresent() { at = inspectorNames.length }
   while at < inspectorNames.length {
     run unsafe function(&mut engine, context, native, inspectorNames[at], inspector_native.BASE + usize.toU32(at))
     at = at + 1
@@ -628,7 +630,7 @@ unsafe effect fn execute<'m, D: Driver, C: Composition>(engine: &mut Engine<'m, 
   let workers = unsafe Intrinsic.pointerRequalify<?*mut worker_native.State, *mut worker_native.State>(engine.services.workers)
   run unsafe worker_native.attach(workers, io, engine.services.crypto)
   let mailbox = match unsafe worker_native.mailbox(workers) { Option<Mailbox>.Some { value } => value _ => { Intrinsic.trap("worker diagnostics are not attached") } }
-  engine.services.inspector = run inspector_native.create(unsafe fs_async.wakerAddress(io), mailbox)
+  static if Composition.inspectorPresent() { engine.services.inspector = run inspector_native.create(unsafe fs_async.wakerAddress(io), mailbox) }
   static if Composition.networkPresent() { engine.services.network = run net_native.open(io) }
   static if capabilities.hasTls<C>() { engine.services.tls = run tls_native.open(allocator) }
   static if capabilities.hasCompression<C>() { engine.services.compression = run compression_native.open() }

@@ -818,9 +818,11 @@ impl<C: Composition> EngineServices for Services<C> {
     }
     let permission = engine.services.permissionGuard
     run unsafe permission_gate.check(&mut engine, context, permission, id, argv)
+    static if capabilities.hasInspector<C>() {
     if id >= inspector_native.BASE && id < inspector_native.BASE + inspector_native.COUNT {
       let inspector = unsafe inspectorState(&engine.*)
       return run unsafe inspector_native.dispatch(&mut engine, context, inspector, id - inspector_native.BASE, argc, argv)
+    }
     }
     if id == 16000 { return run unsafe coverage_native.dispatch(&mut engine, context, argc, argv) }
     if id >= profile_native.BASE && id < profile_native.BASE + profile_native.COUNT {
@@ -1241,9 +1243,11 @@ impl<C: Composition> EngineServices for Services<C> {
     if id == 1 {
       if argc > 5 && unsafe primitives.toBoolean(unsafe common.argument(argv, 5)) != 0 {
         let compiled = run evaluation.evaluate(&mut engine, memory, unsafe lendRealm(&context, context), source.asSlice(), filename.asSlice(), flags.TYPE_GLOBAL | flags.FLAG_COMPILE_ONLY)
-        let inspector = unsafe inspectorState(&engine.*)
-        let armed = run Effect.result(unsafe inspector_native.markEntry(&mut engine, context, inspector, compiled.view()))
-        if let Result<(), JsException>.Failure { error } = move armed { unsafe gc.release(&mut engine, rt, compiled.intoBits()) fail move error }
+        // The entry the inspector breaks at, when there is an inspector.
+        if let Option<*mut inspector_native.State>.Some { value: inspector } = Pointer.nonNullMut<inspector_native.State>(engine.services.inspector) {
+          let armed = run Effect.result(unsafe inspector_native.markEntry(&mut engine, context, inspector, compiled.view()))
+          if let Result<(), JsException>.Failure { error } = move armed { unsafe gc.release(&mut engine, rt, compiled.intoBits()) fail move error }
+        }
         return (run evaluation.evaluateFunction(&mut engine, memory, unsafe lendRealm(&context, context), move compiled)).intoBits()
       }
       if argc <= 2 { return (run evaluation.evaluate(&mut engine, memory, unsafe lendRealm(&context, context), source.asSlice(), filename.asSlice(), flags.TYPE_GLOBAL)).intoBits() }
@@ -1297,9 +1301,10 @@ impl<C: Composition> EngineServices for Services<C> {
       let metadata = run Effect.result(unsafe modules.setMeta(&mut engine, context, module, callback, filename.asSlice()))
       match move metadata { Result<(), JsException>.Failure { error } => { unsafe gc.release(&mut engine, rt, compiled) fail move error } _ => () }
       if argc > 2 && unsafe primitives.toBoolean(unsafe common.argument(argv, 2)) != 0 {
-        let inspector = unsafe inspectorState(&engine.*)
-        let armed = run Effect.result(unsafe inspector_native.markEntry(&mut engine, context, inspector, compiled))
-        if let Result<(), JsException>.Failure { error } = move armed { unsafe gc.release(&mut engine, rt, compiled) fail move error }
+        if let Option<*mut inspector_native.State>.Some { value: inspector } = Pointer.nonNullMut<inspector_native.State>(engine.services.inspector) {
+          let armed = run Effect.result(unsafe inspector_native.markEntry(&mut engine, context, inspector, compiled))
+          if let Result<(), JsException>.Failure { error } = move armed { unsafe gc.release(&mut engine, rt, compiled) fail move error }
+        }
       }
       return (run evaluation.evaluateFunction(&mut engine, memory, unsafe lendRealm(&context, context), unsafe Value.adoptBits(compiled))).intoBits()
     }

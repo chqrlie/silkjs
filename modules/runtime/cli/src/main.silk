@@ -7,7 +7,7 @@ import silkjs.js_libc_platform as platform
 import silkjsruntime.runtime.worker
 import silkjsruntime.ext.keep_exports
 import napi_exports
-import silkjsruntime.libs.core.capabilities { Capabilities, EmptyHostApi, NativeCompression, Nghttp2, OpenSslCrypto, OpenSslTls, SqliteDatabase, DlopenAddons, OsProcesses, OsNetwork, Llhttp, OsSystemInfo, Amaro, ThreadWorkers }
+import silkjsruntime.libs.core.capabilities { Capabilities, EmptyHostApi, NativeCompression, Nghttp2, OpenSslCrypto, OpenSslTls, SqliteDatabase, DlopenAddons, OsProcesses, OsNetwork, Llhttp, OsSystemInfo, Amaro, ThreadWorkers, NodeInspector }
 import silkjsruntime.libs.core.module_sources { NodeResolution }
 import silkjsruntime.libs.core.platforms { OsPlatform }
 import silkjsruntime.libs.core.files { OsFiles }
@@ -64,7 +64,7 @@ effect fn program() -> i32 ! HostInputError | OutOfMemoryError | Synchronization
   napi_exports.keep()
   let arguments = run HostInput.arguments()
   // The executable has every capability: the real implementation of each, and no host functions.
-  let capabilities = Capabilities { platform: OsPlatform {}, modules: NodeResolution {}, files: OsFiles {}, compression: NativeCompression {}, http2: Nghttp2 {}, crypto: OpenSslCrypto {}, tls: OpenSslTls {}, database: SqliteDatabase {}, addons: DlopenAddons {}, processes: OsProcesses {}, network: OsNetwork {}, http: Llhttp {}, systemInfo: OsSystemInfo {}, typeStripping: Amaro {}, workers: ThreadWorkers {}, wasm: WamrWasm.make(), hostApi: EmptyHostApi {} }
+  let capabilities = Capabilities { platform: OsPlatform {}, modules: NodeResolution {}, files: OsFiles {}, compression: NativeCompression {}, http2: Nghttp2 {}, crypto: OpenSslCrypto {}, tls: OpenSslTls {}, database: SqliteDatabase {}, addons: DlopenAddons {}, processes: OsProcesses {}, network: OsNetwork {}, http: Llhttp {}, systemInfo: OsSystemInfo {}, typeStripping: Amaro {}, workers: ThreadWorkers {}, inspector: NodeInspector {}, wasm: WamrWasm.make(), hostApi: EmptyHostApi {} }
   return run worker.executeProgram(&arguments, move capabilities)
 }
 pub effect fn main() -> i32 ? &mut HostInput {

@@ -183,7 +183,8 @@ const fileHref = path => host.platform !== 'win32' && plainPath.test(path) && !d
 const inspectorNativeOperations = Array.from({ length: 33 }, (_, index) => native['inspectorNative' + index]);
 const reflectApply = Reflect.apply;
 host.inspectorNative = (operation, ...args) => reflectApply(inspectorNativeOperations[operation], undefined, args);
-host.inspectorEntry = wrapper => host.inspectorNative(15, wrapper);
+// The loader marks the main module's entry for --inspect-brk, when there is an inspector.
+host.inspectorEntry = presentServices.has('Inspector') ? wrapper => host.inspectorNative(15, wrapper) : undefined;
 host.typeScriptMode = 'strip';
 // libm lgamma and erfc for the histogram statistics (internal/histogram_native).
 host.lgamma = x => native.mathSpecial(0, x);
@@ -1194,7 +1195,10 @@ webGlobals.install(globalThis);
 webGlobals.defineLazy(globalThis, 'console', () => ({ console: internalRequire('console') }), false);
 // Register the trusted dispatcher before preloads or any other guest code can
 // connect to this isolate (including through a parent Worker inspector).
-const inspectorBackend = internalRequire('internal/inspector');
+// Without the inspector (Inspector.empty) its startup hooks do nothing.
+const inspectorBackend = presentServices.has('Inspector') ? internalRequire('internal/inspector') : {
+  _atExit() {}, _breakFirstLine() { return false; }, _armStartup() {}, _start() {}, _installProcess() {}, _waitForWorker() {},
+};
 // Without the Crypto service there is no webcrypto. (The design keeps getRandomValues and
 // randomUUID in the core over the platform's entropy; that split comes with the Crypto service.)
 if (presentServices.has('Crypto')) webGlobals.defineLazy(globalThis, 'crypto', () => ({ crypto: internalRequire('crypto').webcrypto }), true);
