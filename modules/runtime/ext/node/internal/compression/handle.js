@@ -9,7 +9,8 @@
 
 const { Buffer } = require('buffer');
 const { call, asyncCall } = require('internal/compression/binding');
-const { AsyncResource } = require('async_hooks');
+const { AsyncResource, _hooksActive: hooksActive } = require('async_hooks');
+const host = require('internal/host');
 const constants = require('internal/compression/constants');
 const { codes: { ERR_INVALID_ARG_TYPE, ERR_OUT_OF_RANGE } } = require('internal/streams/support');
 
@@ -28,6 +29,14 @@ const DEFLATE = 1, GZIP = 3, DEFLATERAW = 5;
 // The binding's write op, by number.
 const WRITE = 8;
 const BROTLI_ENCODER = 8, BROTLI_DECODER = 9, ZSTD_COMPRESS = 10;
+// An async zlib write this small runs on the main thread, and its callback comes on a later turn
+// of the loop through the handle's async resource: the thread pool's round trip costs more than
+// the work (a 1 KiB write deflates or inflates in a few microseconds). The bounds keep the time
+// on the main thread to a few hundred microseconds at worst (level 9 on incompressible data, or
+// 64 KiB of inflated output). Larger writes, Brotli and Zstandard go to the thread pool, as in
+// Node. With async hooks installed every write goes there too, so that hooks see the same
+// resources as in Node (an inline write's callback would come from an Immediate).
+const INLINE_INPUT = 4096, INLINE_OUTPUT = 65536;
 
 function initializationFailed(message = 'Initialization failed') {
   const error = new Error(message);
@@ -202,6 +211,12 @@ class CompressionHandle {
       if (!sync) this._callback.call(this);
     };
     if (sync) { args.push(this._words.buffer); done(call(WRITE, args)); return; }
+    if (length <= INLINE_INPUT && outLength <= INLINE_OUTPUT && this._kind < BROTLI_ENCODER && !hooksActive()) {
+      args.push(this._words.buffer);
+      const value = call(WRITE, args);
+      setImmediate(() => host.invokeResource(this._resource, done, undefined, [value], false));
+      return;
+    }
     asyncCall('write', args, (err, value) => {
       if (err) { this._writeInProgress = false; this._error(constants.Z_STREAM_ERROR, err.message); return; }
       done(value);
