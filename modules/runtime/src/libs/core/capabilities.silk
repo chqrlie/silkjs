@@ -163,6 +163,10 @@ pub interface Files {
   /// A constant of the implementation type: whether descriptors are the operating system's, so
   /// the runtime may read one without waiting and close one itself.
   static fn native() -> bool
+  /// A constant of the implementation type: whether a path means the same to this file system as
+  /// to the operating system, so the engine's `os` module may take one itself. Only the operating
+  /// system's own, unrooted, says yes.
+  static fn direct() -> bool
   /// The instance a new worker thread starts with, made from its parent's.
   fn forWorker(self: &Self) -> Self
   /// Runs `call` and writes its result to `out`. It may block, and it runs on any thread.
@@ -215,8 +219,12 @@ pub struct Capabilities<P, M, F, W, A> {
 pub interface Composition {
   /// `Wasm.present` of the program's Wasm implementation.
   static fn wasmPresent() -> bool
+  /// `Files.present` of the program's file system.
+  static fn filesPresent() -> bool
   /// `Files.native` of the program's file system.
   static fn filesNative() -> bool
+  /// `Files.direct` of the program's file system.
+  static fn filesDirect() -> bool
   /// Runs one file system operation, on any thread (`Files.execute`).
   unsafe fn filesExecute(self: &Self, call: &Call, out: &mut Outcome) -> ()
   /// The capabilities a new worker thread starts with, made from its parent's.
@@ -253,10 +261,14 @@ pub interface Composition {
 
 static fn presentOf<W: Wasm>() -> bool { return Wasm.present() }
 static fn nativeFiles<F: Files>() -> bool { return Files.native() }
+static fn directFiles<F: Files>() -> bool { return Files.direct() }
+static fn presentFiles<F: Files>() -> bool { return Files.present() }
 
 impl<P: Platform + Copy, M: ModuleResolver + Copy, F: Files + Copy, W: Wasm + Copy, A: HostApi + Copy> Composition for Capabilities<P, M, F, W, A> {
   static fn wasmPresent() -> bool { return presentOf<W>() }
+  static fn filesPresent() -> bool { return presentFiles<F>() }
   static fn filesNative() -> bool { return nativeFiles<F>() }
+  static fn filesDirect() -> bool { return directFiles<F>() }
   unsafe fn filesExecute(self: &Self, call: &Call, out: &mut Outcome) -> () { unsafe self.files.execute(&call, &mut out) }
   fn forWorker(self: &Self) -> Self {
     return Capabilities<P, M, F, W, A> { platform: self.platform.forWorker(), modules: self.modules.forWorker(), files: self.files.forWorker(), wasm: self.wasm.forWorker(), hostApi: self.hostApi.forWorker() }
@@ -334,6 +346,9 @@ impl<P: Platform + Copy, M: ModuleResolver + Copy, F: Files + Copy, W: Wasm + Co
     let api = engine.services.capabilities.hostApi return run api.call(&mut engine, id, realm, argc, argv)
   }
 }
+
+/// Whether the program has a file system (`Files.present`): a constant, for `static if`.
+pub static fn hasFiles<C: Composition>() -> bool { return Composition.filesPresent() }
 
 /// Whether the program's capabilities include WebAssembly: a constant, for `static if`.
 pub static fn hasWasm<C: Composition>() -> bool { return Composition.wasmPresent() }

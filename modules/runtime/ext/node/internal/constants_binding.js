@@ -3,7 +3,7 @@
 // internalBinding('constants') for --expose-internals tests: the same objects the
 // public modules expose, grouped as Node's src/node_constants.cc groups them.
 const os = require('os').constants;
-const fs = require('fs').constants;
+const fs = require('internal/host').hasService('Files') ? require('fs').constants : {};
 const crypto = require('crypto').constants;
 const zlib = require('zlib').constants;
 

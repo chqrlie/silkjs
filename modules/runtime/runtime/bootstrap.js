@@ -101,8 +101,9 @@ const host = { ...native, rawOS, rawStd };
 // A file system other than the operating system's (MemoryFiles): the engine's os calls on files,
 // which fs and this bootstrap make directly, go through it too as fsSync calls, keeping the os
 // module's conventions (a negative errno, or [value, errno]). Descriptors 0 to 2 stay the process's.
-if (!native.filesNative) {
-  const fsSync = native.fsSync;
+if (!native.filesDirect) {
+  // Without a file system (Files.empty) there is no fsSync: every call fails with ENOSYS.
+  const fsSync = native.fsSync ?? (() => { throw Object.assign(new Error('ENOSYS'), { errno: rawOS.platform === 'darwin' ? -78 : -38 }); });
   const status = (name, args) => {
     try { const result = fsSync(name, args); return result === undefined ? 0 : result; }
     catch (error) { if (typeof error?.errno === 'number') return error.errno; throw error; }
@@ -1138,7 +1139,8 @@ internalRequire('internal/napi').install(host, process);
 const eventGlobals = internalRequire('internal/path_events/event_target');
 for (const name of ['Event', 'CustomEvent', 'EventTarget', 'AbortController', 'AbortSignal', 'DOMException'])
   Object.defineProperty(globalThis, name, { value: eventGlobals[name], writable: true, enumerable: false, configurable: true });
-const asyncFS = internalRequire('internal/fs_async')(native);
+// fs's executor (internal/fs_async), when the program has a file system.
+const asyncFS = presentServices.has('Files') ? internalRequire('internal/fs_async')(native) : null;
 host.submitIO = (operation, args, callback, requestKind) => {
   const scope = resource(requestKind === 1 ? 'FSREQPROMISE' : requestKind === 2 ? 'FILEHANDLECLOSEREQ' : 'FSREQCALLBACK');
   hidePromises(1);

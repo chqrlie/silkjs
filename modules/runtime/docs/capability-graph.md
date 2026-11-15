@@ -12,11 +12,11 @@ declarations, the libc and library surface each service reaches today. Requires 
 
 | Service | Built-ins | JavaScript KiB | Load-time requires | Lazy requires | Silk files | Silk KiB | `extern "C"` |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Core | 326 | 3,471.8 | 953 | 349 | 40 | 710.6 | 80 |
+| Core | 326 | 3,473.3 | 950 | 352 | 41 | 718.3 | 80 |
 | Platform | 0 | 0.0 | 0 | 0 | 2 | 10.8 | 0 |
-| ModuleResolver | 15 | 181.3 | 22 | 20 | 2 | 6.9 | 0 |
-| Files | 18 | 238.9 | 76 | 40 | 5 | 77.2 | 49 |
-| Network | 45 | 1,421.1 | 278 | 61 | 4 | 253.4 | 107 |
+| ModuleResolver | 15 | 181.7 | 22 | 20 | 2 | 6.9 | 0 |
+| Files | 18 | 238.9 | 76 | 40 | 5 | 81.2 | 49 |
+| Network | 45 | 1,421.2 | 277 | 62 | 4 | 253.4 | 107 |
 | Processes | 10 | 88.4 | 50 | 14 | 3 | 68.5 | 60 |
 | SystemInfo | 2 | 11.6 | 4 | 2 | 2 | 38.9 | 61 |
 | Workers | 6 | 47.6 | 15 | 20 | 4 | 117.0 | 24 |
@@ -30,8 +30,8 @@ declarations, the libc and library surface each service reaches today. Requires 
 | TypeStripping | 2 | 3,716.1 | 2 | 4 | 0 | 0.0 | 0 |
 | Inspector | 24 | 165.0 | 40 | 47 | 18 | 234.1 | 33 |
 | NativeAddons | 1 | 10.6 | 0 | 7 | 4 | 221.7 | 205 |
-| Executable | 47 | 577.1 | 323 | 35 | 6 | 38.5 | 21 |
-| **Total** | 561 | 11,127.0 | 2061 | 677 | 110 | 2,440.4 | 1474 |
+| Executable | 47 | 577.1 | 323 | 35 | 6 | 38.6 | 21 |
+| **Total** | 561 | 11,128.9 | 2057 | 681 | 111 | 2,452.2 | 1474 |
 
 ## Linked size
 
@@ -90,8 +90,8 @@ build without the capability would drop, at most.
 | `internal/deps/acorn/acorn/dist/acorn` | Core | 240.6 |
 | `internal/tls/roots` | Tls | 177.4 |
 | `internal/web/vendor/text-encoding/data/gb18030.cp` | Core | 139.8 |
-| `internal/bootstrap/silk` | Core | 136.9 |
-| `internal/loader/loader` | ModuleResolver | 122.3 |
+| `internal/bootstrap/silk` | Core | 137.3 |
+| `internal/loader/loader` | ModuleResolver | 122.4 |
 | `internal/http2/core` | Http2 | 118.5 |
 | `internal/webstreams/readablestream` | Core | 116.6 |
 | `internal/web/vendor/text-encoding/data/euc-kr.cp` | Core | 112.8 |
@@ -111,7 +111,7 @@ Load-time edges block an empty service outright; lazy ones fail only on the path
 | Core | Crypto | 15 | 2 |
 | Core | Database | 1 | 0 |
 | Core | Executable | 14 | 4 |
-| Core | Files | 28 | 9 |
+| Core | Files | 27 | 6 |
 | Core | Http | 1 | 0 |
 | Core | Http2 | 1 | 0 |
 | Core | Inspector | 34 | 4 |
@@ -143,7 +143,7 @@ Load-time edges block an empty service outright; lazy ones fail only on the path
 | Network | Compression | 5 | 2 |
 | Network | Crypto | 6 | 3 |
 | Network | Database | 1 | 0 |
-| Network | Files | 2 | 1 |
+| Network | Files | 2 | 0 |
 | Network | Http2 | 1 | 0 |
 | Network | Inspector | 6 | 5 |
 | Network | Processes | 2 | 0 |
@@ -233,7 +233,6 @@ Load-time edges block an empty service outright; lazy ones fail only on the path
 | `internal/bootstrap/silk` | Core | `internal/worker` | Workers | load |
 | `internal/bootstrap/silk` | Core | `os` | SystemInfo | lazy |
 | `internal/child_process/ipc` | Processes | `_http_common` | Http | lazy |
-| `internal/compile_cache` | Core | `fs` | Files | load |
 | `internal/compile_cache` | Core | `host.compression` | Compression | call |
 | `internal/compile_cache` | Core | `os` | SystemInfo | lazy |
 | `internal/config_file` | Core | `internal/options_table` | Executable | load |
@@ -289,7 +288,7 @@ Load-time edges block an empty service outright; lazy ones fail only on the path
 | `internal/net/binding` | Network | `fs` | Files | lazy |
 | `internal/net/binding` | Network | `internal/trace_events` | Inspector | lazy |
 | `internal/net/binding` | Network | `os` | SystemInfo | load |
-| `internal/net` | Network | `fs` | Files | load |
+| `internal/net` | Network | `fs` | Files | lazy |
 | `internal/options` | Core | `internal/options_table` | Executable | load |
 | `internal/options` | Core | `internal/tls/options` | Tls | lazy |
 | `internal/process/per_thread` | Core | `fs` | Files | lazy |
@@ -326,8 +325,8 @@ Load-time edges block an empty service outright; lazy ones fail only on the path
 | `internal/stdio` | Core | `fs` | Files | lazy |
 | `internal/stdio` | Core | `internal/net/transport` | Network | load |
 | `internal/stdio` | Core | `net` | Network | lazy |
-| `internal/streams/fast-utf8-stream` | Core | `fs` | Files | load |
-| `internal/streams/fast-utf8-stream` | Core | `internal/fs/utils` | Files | load |
+| `internal/streams/fast-utf8-stream` | Core | `fs` | Files | lazy |
+| `internal/streams/fast-utf8-stream` | Core | `internal/fs/utils` | Files | lazy |
 | `internal/streams/iter/compression` | Core | `internal/compression/binding` | Compression | load |
 | `internal/streams/iter/transform` | Core | `internal/compression/constants` | Compression | load |
 | `internal/timers_binding` | Core | `internal/trace_events` | Inspector | lazy |
@@ -430,7 +429,7 @@ Load-time edges block an empty service outright; lazy ones fail only on the path
 
 | Service | Modules |
 | --- | --- |
-| Core | `embed_smoke.silk`, `ext/blocking_pool.silk`, `ext/buffer_codec.silk`, `ext/builtin_cache.silk`, `ext/call_sites.silk`, `ext/diagnostics_fatal.silk`, `ext/diagnostics_hub.silk`, `ext/fs_async.silk`, `ext/immediates.silk`, `ext/introspection.silk`, `ext/keep_exports.silk`, `ext/module_cache.silk`, `ext/permission_gate.silk`, `ext/pg_rows.silk`, `ext/process_diagnostics.silk`, `ext/script_cache.silk`, `ext/script_metadata.silk`, `ext/system_errors.silk`, `ext/url_native.silk`, `ext/util_native.silk`, `ext/vm_global.silk`, `ext/vm_interrupt.silk`, `ext/vm_native.silk`, `lib.silk`, `libs/core/async_events.silk`, `libs/core/capabilities.silk`, `libs/core/common.silk`, `libs/core/host.silk`, `libs/core/intl.silk`, `libs/core/modules.silk`, `libs/core/owners.silk`, `runtime/embed.silk`, `runtime/embedded.silk`, `runtime/session.silk`, `runtime/worker.silk`, `wamr/src/lib.silk`, `wamr/src/wamr.silk`, `cli/src/embed_smoke_wamr.silk`, `cli/src/napi_exports.silk` |
+| Core | `embed_smoke.silk`, `ext/blocking_pool.silk`, `ext/buffer_codec.silk`, `ext/builtin_cache.silk`, `ext/call_sites.silk`, `ext/diagnostics_fatal.silk`, `ext/diagnostics_hub.silk`, `ext/fs_async.silk`, `ext/immediates.silk`, `ext/introspection.silk`, `ext/keep_exports.silk`, `ext/module_cache.silk`, `ext/permission_gate.silk`, `ext/pg_rows.silk`, `ext/process_diagnostics.silk`, `ext/script_cache.silk`, `ext/script_metadata.silk`, `ext/system_errors.silk`, `ext/url_native.silk`, `ext/util_native.silk`, `ext/vm_global.silk`, `ext/vm_interrupt.silk`, `ext/vm_native.silk`, `files_tests.silk`, `lib.silk`, `libs/core/async_events.silk`, `libs/core/capabilities.silk`, `libs/core/common.silk`, `libs/core/host.silk`, `libs/core/intl.silk`, `libs/core/modules.silk`, `libs/core/owners.silk`, `runtime/embed.silk`, `runtime/embedded.silk`, `runtime/session.silk`, `runtime/worker.silk`, `wamr/src/lib.silk`, `wamr/src/wamr.silk`, `cli/src/embed_smoke_wamr.silk`, `cli/src/napi_exports.silk` |
 | Platform | `ext/platform_native.silk`, `libs/core/platforms.silk` |
 | ModuleResolver | `ext/module_native.silk`, `libs/core/module_sources.silk` |
 | Files | `ext/fs_descriptors.silk`, `ext/fs_native.silk`, `ext/fs_ops.silk`, `ext/uv_fs.silk`, `libs/core/files.silk` |
@@ -456,8 +455,10 @@ Built-ins that call require with a computed name, which no static check can see;
 | Built-in | At load | Lazily |
 | --- | ---: | ---: |
 | `cluster` | 1 | 0 |
+| `internal/compile_cache` | 0 | 1 |
 | `internal/main/mksnapshot` | 0 | 1 |
 | `internal/sea` | 0 | 1 |
+| `internal/streams/fast-utf8-stream` | 0 | 1 |
 | `internal/test_runner/utils` | 0 | 1 |
 | `internal/worker` | 0 | 1 |
 | `internal/worker/js_transferable` | 0 | 1 |

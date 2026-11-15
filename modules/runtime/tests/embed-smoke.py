@@ -16,28 +16,28 @@ import tomllib
 ROOT = Path(__file__).resolve().parents[1]
 # The same host (the core's src/embed_smoke.silk) twice: without WebAssembly (./smoke, EmptyWasm),
 # and with it (./cli, WamrWasm). Only the second program depends on WAMR.
+# The first has no file system either (EmptyFiles); the second's is in memory (MemoryFiles).
 PROGRAMS = [
-    ('embed-smoke', ROOT / 'smoke', 'src/main.silk', 'undefined'),
-    ('embed-smoke-wamr', ROOT / 'cli', 'src/embed_smoke_wamr.silk', 'object'),
+    ('embed-smoke', ROOT / 'smoke', 'src/main.silk', 'undefined', False),
+    ('embed-smoke-wamr', ROOT / 'cli', 'src/embed_smoke_wamr.silk', 'object', True),
 ]
 
 
-def expected(wasm):
+def expected(wasm, files):
     return [
         'add 5',
         'wasm ' + wasm,
         'lib 42',
         'env EMBED_SMOKE fixed /embed-smoke',
         'setenv EPERM',
-        'fs function',
-        'read hello from memory',
-        'dir greeting.txt,out.txt 6 false',
+        *(['fs function', 'read hello from memory', 'dir greeting.txt,out.txt 6 false'] if files else
+          ['fs ERR_UNKNOWN_BUILTIN_MODULE undefined false']),
         'cjs helpers',
         'missing ERR_MODULE_NOT_FOUND',
         'tick 1',
         'tick 2',
         'tick 3',
-        'async abcdef',
+        'async ' + ('abcdef' if files else 'none'),
         'exit 3',
         'host: callback returned 42 after its microtask',
         'host: finished with 3',
@@ -56,17 +56,17 @@ def build(name, package, source):
 
 def main():
     failed = False
-    for name, package, source, wasm in PROGRAMS:
+    for name, package, source, wasm, files in PROGRAMS:
         if '--skip-build' not in sys.argv[1:]:
             build(name, package, source)
         executable = ROOT / 'build' / name / name
         result = subprocess.run([str(executable)], capture_output=True, text=True, timeout=60, stdin=subprocess.DEVNULL)
         lines = result.stdout.splitlines()
-        if result.returncode != 3 or lines != expected(wasm):
+        if result.returncode != 3 or lines != expected(wasm, files):
             print(f'{name} failed: status {result.returncode}')
             print('stdout:\n' + result.stdout)
             print('stderr:\n' + result.stderr)
-            print('expected:\n' + '\n'.join(expected(wasm)))
+            print('expected:\n' + '\n'.join(expected(wasm, files)))
             failed = True
         else:
             print(f'{name} passed')

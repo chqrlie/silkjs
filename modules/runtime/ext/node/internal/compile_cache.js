@@ -8,7 +8,9 @@
 // TypeScript loader participate: VM scripts and embedded builtins do not. Like
 // Node, data: ESM and Module._compile virtual filenames do participate.
 const host = require('internal/host');
-const fs = require('fs');
+// Loaded when first used: a runtime without a file system (Files.empty) loads this module too.
+const lazy = name => { let loaded; return new Proxy({}, { get(target, key) { return (loaded ??= require(name))[key]; } }); };
+const fs = lazy('fs');
 const path = require('path');
 const { Buffer } = require('buffer');
 // Node throws these two from C++: a TypeError with a code and its own message.

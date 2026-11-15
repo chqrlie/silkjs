@@ -31,12 +31,12 @@ import runtime.embed { Host, Options }
 import runtime.embed
 import runtime.session { Runtime, Turn }
 import libs.core.host { Services }
-import libs.core.capabilities { Capabilities, Composition, HostApi, HOST_API_FIRST, Wasm }
+import libs.core.capabilities { Capabilities, Composition, Files, HostApi, HOST_API_FIRST, Wasm }
 import libs.core.module_sources { MemoryModule, MemoryModules }
 import libs.core.platforms { FixedPlatform, Variable }
-import libs.core.files { MemoryFiles }
+import libs.core.files { EmptyFiles, MemoryFiles }
 
-const SOURCE: &[u8] = b"import { twice } from './lib.mjs';\nconsole.log('add', hostAdd(2, 3));\nconsole.log('wasm', typeof WebAssembly);\nconsole.log('lib', twice(21));\nconsole.log('env', Object.keys(process.env).join(), process.env.EMBED_SMOKE, process.cwd());\ntry { process.env.EMBED_SMOKE = 'changed'; } catch (error) { console.log('setenv', error.code); }\nglobalThis.onHost = x => { queueMicrotask(() => hostAdd(x, 100)); return x * 2; };\nlet ticks = 0;\nconst timer = setInterval(() => {\n  ticks++;\n  console.log('tick', ticks);\n  if (ticks === 3) {\n    clearInterval(timer);\n    // Nothing referenced is left: a kept-alive runtime keeps turning until the host or\n    // process.exit ends it.\n    // The file system is MemoryFiles on the blocking threads too.\n    import('node:fs').then(fs => fs.promises.readFile('/data/out.txt', 'utf8')).then(text => {\n      console.log('async', text);\n      setTimeout(() => { process.exitCode = 3; process.exit(); }, 5).unref();\n    });\n  }\n}, 5);\nprocess.on('exit', code => console.log('exit', code));\nconst fs = await import('node:fs');\nconsole.log('fs', typeof fs.readFileSync);\nconsole.log('read', fs.readFileSync('/data/greeting.txt', 'utf8'));\nfs.writeFileSync('/data/out.txt', 'abc');\nfs.appendFileSync('/data/out.txt', 'def');\nconsole.log('dir', fs.readdirSync('/data').join(), fs.statSync('/data/out.txt').size, fs.existsSync('/etc/passwd'));\nconst { createRequire } = await import('node:module');\nconsole.log('cjs', createRequire(import.meta.url)('./helpers').name);\nconsole.log('missing', await import('./missing.mjs').then(() => 'found', error => error.code));\n"
+const SOURCE: &[u8] = b"import { twice } from './lib.mjs';\nconsole.log('add', hostAdd(2, 3));\nconsole.log('wasm', typeof WebAssembly);\nconsole.log('lib', twice(21));\nconsole.log('env', Object.keys(process.env).join(), process.env.EMBED_SMOKE, process.cwd());\ntry { process.env.EMBED_SMOKE = 'changed'; } catch (error) { console.log('setenv', error.code); }\nglobalThis.onHost = x => { queueMicrotask(() => hostAdd(x, 100)); return x * 2; };\nlet ticks = 0;\nlet fs;\nconst timer = setInterval(() => {\n  ticks++;\n  console.log('tick', ticks);\n  if (ticks === 3) {\n    clearInterval(timer);\n    // Nothing referenced is left: a kept-alive runtime keeps turning until the host or\n    // process.exit ends it.\n    // The file system is MemoryFiles on the blocking threads too.\n    (fs.promises ? fs.promises.readFile('/data/out.txt', 'utf8') : Promise.resolve('none')).then(text => {\n      console.log('async', text);\n      setTimeout(() => { process.exitCode = 3; process.exit(); }, 5).unref();\n    });\n  }\n}, 5);\nprocess.on('exit', code => console.log('exit', code));\nfs = await import('node:fs').catch(error => error);\nif (typeof fs.readFileSync === 'function') {\n  console.log('fs', typeof fs.readFileSync);\n  console.log('read', fs.readFileSync('/data/greeting.txt', 'utf8'));\n  fs.writeFileSync('/data/out.txt', 'abc');\n  fs.appendFileSync('/data/out.txt', 'def');\n  console.log('dir', fs.readdirSync('/data').join(), fs.statSync('/data/out.txt').size, fs.existsSync('/etc/passwd'));\n} else {\n  console.log('fs', fs.code, process.getBuiltinModule('fs'), (await import('node:module')).builtinModules.includes('fs'));\n}\nconst { createRequire } = await import('node:module');\nconsole.log('cjs', createRequire(import.meta.url)('./helpers').name);\nconsole.log('missing', await import('./missing.mjs').then(() => 'found', error => error.code));\n"
 
 /// The runtime's whole environment (`FixedPlatform`): it does not see the process's.
 const ENVIRONMENT: [Variable; 1] = [Variable { name: b"EMBED_SMOKE", value: b"fixed" }]
@@ -126,24 +126,42 @@ effect fn seededFiles() -> MemoryFiles ! OutOfMemoryError ? &mut Allocator {
   return files
 }
 
-/// The smoke test with the given WebAssembly capability.
-pub effect fn program<W: Wasm + Copy>(wasm: W) -> i32 ! OutOfMemoryError | SynchronizationError ? &mut Allocator {
+/// The smoke test with the given WebAssembly capability and file system.
+effect fn smoke<W: Wasm + Copy, F: Files + Copy>(wasm: W, files: F) -> i32 ! OutOfMemoryError | SynchronizationError ? &mut Allocator {
   let options = run Options.make(b"embed-smoke")
   let mut added = Added { last: 0 }
   let addedAt = Pointer.fromMutRef<Added>(&mut added)
   let mut host = Smoke { turns: 0, added: addedAt, doubled: 0, afterMicrotask: 0 }
-  let files = run seededFiles()
   let capabilities = Capabilities { platform: FixedPlatform.make(&ENVIRONMENT, b"/embed-smoke"), modules: MemoryModules.make(&MODULES), files: files, wasm: wasm, hostApi: SmokeApi { added: addedAt } }
   return run embed.start(move options, &mut host, move capabilities)
 }
 
-/// Runs `program` and turns its failure into status 1.
-pub effect fn report<W: Wasm + Copy>(wasm: W) -> i32 ? &mut HostInput {
-  let mut allocator = Allocator.systemAllocatorProvider()
-  let result = run Effect.result(program(wasm)) |> Effect.provideMut<Allocator>(&mut allocator)
+/// The smoke test on a file system in memory (`MemoryFiles`).
+pub effect fn program<W: Wasm + Copy>(wasm: W) -> i32 ! OutOfMemoryError | SynchronizationError ? &mut Allocator {
+  let files = run seededFiles()
+  return run smoke(wasm, files)
+}
+
+/// The smoke test with no file system (`EmptyFiles`): `node:fs` is not there.
+pub effect fn programWithoutFiles<W: Wasm + Copy>(wasm: W) -> i32 ! OutOfMemoryError | SynchronizationError ? &mut Allocator {
+  return run smoke(wasm, EmptyFiles {})
+}
+
+fn status(result: Result<i32, OutOfMemoryError | SynchronizationError>) -> i32 {
   return match move result {
     Result<i32, OutOfMemoryError | SynchronizationError>.Success { value } => value
     Result<i32, OutOfMemoryError | SynchronizationError>.Failure { .. } => 1
   }
 }
 
+/// Runs `program` and turns its failure into status 1.
+pub effect fn report<W: Wasm + Copy>(wasm: W) -> i32 ? &mut HostInput {
+  let mut allocator = Allocator.systemAllocatorProvider()
+  return status(run Effect.result(program(wasm)) |> Effect.provideMut<Allocator>(&mut allocator))
+}
+
+/// Runs `programWithoutFiles` and turns its failure into status 1.
+pub effect fn reportWithoutFiles<W: Wasm + Copy>(wasm: W) -> i32 ? &mut HostInput {
+  let mut allocator = Allocator.systemAllocatorProvider()
+  return status(run Effect.result(programWithoutFiles(wasm)) |> Effect.provideMut<Allocator>(&mut allocator))
+}

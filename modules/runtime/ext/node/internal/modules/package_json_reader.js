@@ -32,7 +32,9 @@ const permission = { isEnabled: () => (permissionModel ??= require('internal/per
 const { internalBinding } = require('internal/bindings');
 const modulesBinding = internalBinding('modules');
 const path = require('path');
-const internalFsBinding = internalBinding('fs');
+// The loader's stat, which the program's ModuleResolver answers (as the fs binding's does): it
+// is there without a file system too.
+const internalFsBinding = { internalModuleStat: name => require('internal/host').internalModuleStat(path.toNamespacedPath(`${name}`)) };
 
 
 /**

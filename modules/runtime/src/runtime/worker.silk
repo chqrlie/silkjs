@@ -449,9 +449,10 @@ unsafe effect fn configure<'m, C: Composition>(engine: &mut Engine<'m, Services<
   run unsafe function(&mut engine, context, native, b"builtinService", 42)
   // The services this runtime has (docs/composable-runtime.md): the bootstrap registers only
   // their built-ins. Every one is here until each becomes a capability the embedder chooses.
-  // Wasm is the embedder's choice (`Capabilities`); the rest are still always here.
+  // Wasm and Files are the embedder's choice (`Capabilities`); the rest are still always here.
   let mut wasm: &[u8] = b"" static if capabilities.hasWasm<C>() { wasm = b"Wasm" }
-  let present = [b"Platform", b"ModuleResolver", b"Files", b"Network", b"Processes", b"SystemInfo", b"Workers", b"Crypto", b"Tls",
+  let mut files: &[u8] = b"" static if capabilities.hasFiles<C>() { files = b"Files" }
+  let present = [b"Platform", b"ModuleResolver", files, b"Network", b"Processes", b"SystemInfo", b"Workers", b"Crypto", b"Tls",
     b"Compression", b"Http", b"Http2", wasm, b"Database", b"TypeStripping", b"Inspector", b"NativeAddons", b"HostApi"]
   let services = run unsafe common.array(&mut engine, memory, context)
   let mut named: usize = 0
@@ -468,6 +469,8 @@ unsafe effect fn configure<'m, C: Composition>(engine: &mut Engine<'m, Services<
   run unsafe common.define(&mut engine, context, native, b"environmentTime", ValueBits.number(i64.toF64(clock.nowNanoseconds()) / 1000000.0), 7)
   let ioNames = [b"fsSync", b"submit", b"watch", b"watchControl", b"pollIO", b"hasPendingIO", b"fsTracking", b"resourceSnapshot"]
   at = 0
+  // The first four are fs's, there only with a file system; the rest are the loop's.
+  static if !capabilities.hasFiles<C>() { at = 4 }
   while at < ioNames.length { run unsafe function(&mut engine, context, native, ioNames[at], 2000 + usize.toU32(at)) at = at + 1 }
   run unsafe function(&mut engine, context, native, b"crypto", 2100)
   run unsafe function(&mut engine, context, native, b"cryptoAsync", 2101)
@@ -560,8 +563,8 @@ unsafe effect fn configure<'m, C: Composition>(engine: &mut Engine<'m, Services<
   if snapshot == SNAPSHOT_BUILD { run unsafe common.define(&mut engine, context, native, b"snapshotBuild", ValueBits.Bool { value: true }, 7) }
   // An embedded runtime does not own the process (bootstrap.js rawStd.exit).
   if hosted { run unsafe common.define(&mut engine, context, native, b"embedded", ValueBits.Bool { value: true }, 7) }
-  // Whether fs is the operating system's, whose descriptors the engine's os module reads directly.
-  static if Composition.filesNative() { run unsafe common.define(&mut engine, context, native, b"filesNative", ValueBits.Bool { value: true }, 7) }
+  // Whether fs is the operating system's, unrooted, whose paths the engine's os module takes itself.
+  static if Composition.filesDirect() { run unsafe common.define(&mut engine, context, native, b"filesDirect", ValueBits.Bool { value: true }, 7) }
   at = 0
   while at < count {
     let value = run unsafe host.string(&mut engine, context, arguments.asSlice()[at].asSlice())

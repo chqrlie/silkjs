@@ -70,7 +70,6 @@ internal/bootstrap/silk	Core	internal/web/wasm	Wasm	load
 internal/bootstrap/silk	Core	internal/worker	Workers	load
 internal/bootstrap/silk	Core	os	SystemInfo	lazy
 internal/child_process/ipc	Processes	_http_common	Http	lazy
-internal/compile_cache	Core	fs	Files	load
 internal/compile_cache	Core	host.compression	Compression	call
 internal/compile_cache	Core	os	SystemInfo	lazy
 internal/config_file	Core	internal/options_table	Executable	load
@@ -123,7 +122,7 @@ internal/modules/esm/resolve	ModuleResolver	fs	Files	lazy
 internal/modules/package_map	ModuleResolver	fs	Files	load
 internal/napi	NativeAddons	internal/worker	Workers	lazy
 internal/navigator	Core	internal/worker/locks	Workers	lazy
-internal/net	Network	fs	Files	load
+internal/net	Network	fs	Files	lazy
 internal/net/binding	Network	fs	Files	lazy
 internal/net/binding	Network	internal/trace_events	Inspector	lazy
 internal/net/binding	Network	os	SystemInfo	load
@@ -163,8 +162,8 @@ internal/startup_controls	Core	worker_threads	Workers	lazy
 internal/stdio	Core	fs	Files	lazy
 internal/stdio	Core	internal/net/transport	Network	load
 internal/stdio	Core	net	Network	lazy
-internal/streams/fast-utf8-stream	Core	fs	Files	load
-internal/streams/fast-utf8-stream	Core	internal/fs/utils	Files	load
+internal/streams/fast-utf8-stream	Core	fs	Files	lazy
+internal/streams/fast-utf8-stream	Core	internal/fs/utils	Files	lazy
 internal/streams/iter/compression	Core	internal/compression/binding	Compression	load
 internal/streams/iter/transform	Core	internal/compression/constants	Compression	load
 internal/timers_binding	Core	internal/trace_events	Inspector	lazy

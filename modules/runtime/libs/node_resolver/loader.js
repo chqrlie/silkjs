@@ -99,6 +99,8 @@ function createLoader(host, builtins) {
   // reads are taken then.
   let fsOriginals = null;
   function patchedFs(name) {
+    // Without a file system (Files.empty) there is no fs to patch.
+    if (!host.hasService('Files')) return null;
     const fs = builtins.get('fs');
     fsOriginals ??= { readFileSync: fs.readFileSync, realpathSync: fs.realpathSync };
     return fs[name] === fsOriginals[name] ? null : fs;
@@ -383,6 +385,7 @@ function createLoader(host, builtins) {
   const detectedModules = new WeakSet();
 
   function wasmMagic(disk) {
+    if (!host.hasService('Files')) return false;
     const fs = builtins.get('fs');
     const bytes = new Uint8Array(4);
     let fd;

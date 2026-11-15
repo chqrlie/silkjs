@@ -1,5 +1,5 @@
 //! The [`Files`] implementations the core ships: `OsFiles`, the operating system's file system,
-//! and `MemoryFiles`, a file system in memory that the embedder creates and every thread of the
+//! `RootedFiles`, the same under one directory, `EmptyFiles`, none, and `MemoryFiles`, a file system in memory that the embedder creates and every thread of the
 //! runtime shares.
 //!
 //! An implementation runs one `fs` operation (`ext/fs_ops.silk`'s `Call`) and writes its
@@ -33,6 +33,7 @@ impl Copy for OsFiles {}
 impl Files for OsFiles {
   static fn present() -> bool { return true }
   static fn native() -> bool { return true }
+  static fn direct() -> bool { return true }
   fn forWorker(self: &Self) -> Self { return OsFiles {} }
   unsafe fn execute(self: &Self, call: &Call, out: &mut Outcome) -> () { unsafe ops.execute(&call, &mut out) }
 }
@@ -216,6 +217,7 @@ fn timestamp(seconds: f64) -> Timestamp {
 impl Files for MemoryFiles {
   static fn present() -> bool { return true }
   static fn native() -> bool { return false }
+  static fn direct() -> bool { return false }
   fn forWorker(self: &Self) -> Self { return MemoryFiles { tree: self.tree } }
   unsafe fn execute(self: &Self, call: &Call, out: &mut Outcome) -> () {
     // The standard streams are the process's.
@@ -460,4 +462,77 @@ effect fn open(tree: &mut Tree, name: &[u8], found: i32, call: &Call, out: &mut 
   run tree.opens.append(Open { fd: fd, inode: tree.nodes.asSlice()[i32.toUsize(index)].inode, offset: 0, append: (flags & OPEN_APPEND) != 0, readable: access != OPEN_WRITE_ONLY, writable: writable })
   out.count = i32.toI64(fd)
   return 0
+}
+
+/// No file system: `node:fs` and the built-ins that stand on it are not there, and the natives
+/// of `fs` are not compiled. The runtime's own reads of files fail with `ENOSYS`. Its
+/// operation is never called, because `present` is false.
+pub struct EmptyFiles {}
+impl Copy for EmptyFiles {}
+impl Files for EmptyFiles {
+  static fn present() -> bool { return false }
+  static fn native() -> bool { return false }
+  static fn direct() -> bool { return false }
+  fn forWorker(self: &Self) -> Self { return EmptyFiles {} }
+  unsafe fn execute(self: &Self, call: &Call, out: &mut Outcome) -> () { out.code = -enosys() }
+}
+
+/// The operating system's files under one directory: a path is taken from `root` (`/` is the
+/// root itself, and `..` stops there), and a path that comes back (`realpath`, `mkdtemp`) loses
+/// the root again. The rooting is lexical: a symbolic link inside the tree that points outside
+/// it is followed, so the tree must not hold links the runtime may not leave by.
+pub struct RootedFiles { root: &'static [u8] }
+impl Copy for RootedFiles {}
+impl RootedFiles {
+  /// `root` is an absolute directory path without a final `/`.
+  pub fn make(root: &'static [u8]) -> Self { return RootedFiles { root: root } }
+  effect fn place(self: &Self, path: &[u8]) -> List<u8> ! OutOfMemoryError ? &mut Allocator {
+    let normal = run normalize(path)
+    let mut placed = List<u8>.make()
+    run placed.appendBytes(self.root)
+    if normal.length() > 1 { run placed.appendBytes(normal.asSlice()) }
+    return move placed
+  }
+}
+impl Files for RootedFiles {
+  static fn present() -> bool { return true }
+  static fn native() -> bool { return true }
+  static fn direct() -> bool { return false }
+  fn forWorker(self: &Self) -> Self { return RootedFiles { root: self.root } }
+  unsafe fn execute(self: &Self, call: &Call, out: &mut Outcome) -> () {
+    if ops.takesDescriptor(call.op) { return unsafe ops.execute(&call, &mut out) }
+    let mut allocator = Allocator.systemAllocatorProvider()
+    let placed = run Effect.result(unsafe self.placed(&call)) |> Effect.provideMut<Allocator>(&mut allocator)
+    match move placed {
+      Result<Call, OutOfMemoryError>.Success { value } => {
+        unsafe ops.execute(&value, &mut out)
+        if out.code == 0 && (call.op == ops.REALPATH || call.op == ops.MKDTEMP) { unsafe self.unplace(&mut out) }
+      }
+      Result<Call, OutOfMemoryError>.Failure { .. } => { out.code = -12 }
+    }
+  }
+}
+impl RootedFiles {
+  unsafe effect fn placed(self: &Self, call: &Call) -> Call ! OutOfMemoryError ? &mut Allocator {
+    let mut copy = ops.call(call.op)
+    copy.fd = call.fd copy.a = call.a copy.b = call.b copy.atime = call.atime copy.mtime = call.mtime
+    copy.buffer = call.buffer copy.length = call.length copy.position = call.position
+    copy.path = run self.place(call.path.asSlice())
+    // A symbolic link's target is kept as given; every other second path is placed too.
+    if call.op == ops.SYMLINK { run copy.dest.appendBytes(call.dest.asSlice()) }
+    else if ops.takesDestination(call.op) { copy.dest = run self.place(call.dest.asSlice()) }
+    if call.op == ops.MKDTEMP { run copy.path.appendBytes(b"XXXXXX") }
+    return move copy
+  }
+  /// Takes the root off a path result; one outside the tree (through a link) becomes `/`.
+  unsafe fn unplace(self: &Self, out: &mut Outcome) -> () {
+    let text = out.text.asSlice()
+    let root = self.root
+    let inside = text.length >= root.length && same(Slice.view(text, 0, root.length), root) && (text.length == root.length || text[root.length] == 47)
+    let mut kept = List<u8>.make()
+    let mut allocator = Allocator.systemAllocatorProvider()
+    let rest = if inside && text.length > root.length { Slice.view(text, root.length, text.length - root.length) } else { b"/" }
+    let _appended = run Effect.result(kept.appendBytes(rest)) |> Effect.provideMut<Allocator>(&mut allocator)
+    out.text = move kept
+  }
 }

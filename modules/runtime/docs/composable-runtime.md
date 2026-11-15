@@ -582,14 +582,31 @@ standard streams. It has no links and keeps no owners, and a relative path is ta
 read that skips the blocking threads (`preadv2` with `RWF_NOWAIT`) runs only for `OsFiles`, and an
 abandoned open is closed through the capability. Some of `fs`, and the bootstrap's own reads, call
 the engine's `os` module on files directly; with a file system other than the operating system's
-(`native.filesNative` false), the bootstrap points those calls at the capability as well. The embedding smoke test runs on `MemoryFiles`:
+(`Files.direct` false), the bootstrap points those calls at the capability as well. The embedding smoke test runs on `MemoryFiles`:
 a seeded file, a write and an append, `readdir`, `stat`, `existsSync` of a host path (false), and
 `fs.promises.readFile` on the blocking threads.
 
-Still to come in step 4: `Files.empty` (the built-ins of `fs` absent, as step 2 does for a
-missing service), a rooted `OsFiles`, and routing the readers that bypass `fs` today through the
-capability: WASI preopens, SQLite's VFS, the compile cache, reports, snapshots, the DNS resolver's
-configuration, TLS roots, and the bootstrap's own `host.readFile` and `host.stat`.
+**Step 4, second part: `EmptyFiles` and `RootedFiles`.** With `EmptyFiles` the program has no
+file system: `Files` is not among the services, so `node:fs` and the built-ins that stand on it are
+not registered (`import('node:fs')` fails with `ERR_UNKNOWN_BUILTIN_MODULE`,
+`process.getBuiltinModule('fs')` is undefined), fs's natives (2000 to 2003) are not registered and
+their dispatch is not compiled, and the bootstrap's own reads of files fail with `ENOSYS`. The
+built-ins that start without `fs` no longer need it at load: `constants`, the constants binding,
+the TTY writer, `internal/net`, the compile cache and `Utf8Stream` load it when used, the loader
+checks for a patched `fs` only when there is one, and `package_json_reader` takes its stat from the
+`ModuleResolver`. The smoke test without WebAssembly now has no file system either; the one with
+WebAssembly keeps `MemoryFiles`. `RootedFiles` is the operating system's files under one
+directory: paths are taken from the root and `..` stops there, and `realpath` and `mkdtemp` hand
+paths back without it. The rooting is lexical, so a link inside the tree that points out of it is
+followed. Its descriptors are the system's (`Files.native`), but a path does not mean the same to
+it as to the system (`Files.direct` is false), so the bootstrap sends the engine's `os` calls
+through the capability, as for `MemoryFiles`. `src/files_tests.silk`
+(`silk test --root src/files_tests.silk`) tests both.
+
+Still to come in step 4: the readers that do not go through `fs` and open files in C: WASI's
+preopens (WAMR's own file layer), SQLite's VFS, and OpenSSL's root certificates. A
+`ModuleResolver` over a `Files` (so a rooted or in-memory file system also serves modules) is a
+small addition when an embedder needs it.
 
 ## Risks and decisions taken
 

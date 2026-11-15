@@ -29,7 +29,8 @@ const {
 } = require('internal/per_context/primordials');
 
 const Buffer = require('buffer').Buffer;
-const { writeSync } = require('fs');
+// Only a socket on a file descriptor writes through fs, so fs loads when one does.
+const writeSync = (...args) => require('fs').writeSync(...args);
 
 // IPv4 Segment
 const v4Seg = '(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])';
