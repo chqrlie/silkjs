@@ -160,7 +160,7 @@ host.processFeatures = {
   tls: presentServices.has('Tls'), tls_alpn: presentServices.has('Tls'), tls_sni: presentServices.has('Tls'), tls_ocsp: false,
   cached_builtins: false,
   get require_module() { return !host.requireModuleDisabled; },
-  get typescript() { return host.typeScriptMode; }
+  get typescript() { return presentServices.has('TypeStripping') ? host.typeScriptMode : false; }
 };
 // Node's kFirstModuleParent: the module that first required a module, for require stacks.
 host.kFirstModuleParent = Symbol('kFirstModuleParent');
@@ -174,7 +174,13 @@ internalRequire('internal/error_stack').install(globalThis);
 // QuickJS's InternalError is no Node global; the engine still throws its errors.
 delete globalThis.InternalError;
 let warnedTransformTypes = false;
+// Node's assertTypeScript: a build without TypeScript stripping (the TypeStripping service) throws
+// ERR_NO_TYPESCRIPT for a TypeScript file.
+host.assertTypeScript = () => {
+  if (!presentServices.has('TypeStripping')) throw new (internalRequire('internal/errors').codes.ERR_NO_TYPESCRIPT)();
+};
 host.stripTypeScriptModuleTypes = (source, filename, sourceURL = filename) => {
+  host.assertTypeScript();
   const transform = host.typeScriptMode === 'transform';
   if (transform && !warnedTransformTypes) {
     warnedTransformTypes = true;
@@ -884,7 +890,7 @@ function buildConfig() {
     },
     variables: {
       asan: 0, ubsan: 0, napi_build_version: '10', node_builtin_shareable_builtins: [], node_module_version: 137, node_shared: false,
-      node_shared_openssl: false, node_shared_sqlite: false, node_shared_zstd: false, node_use_amaro: true,
+      node_shared_openssl: false, node_shared_sqlite: false, node_shared_zstd: false, node_use_amaro: presentServices.has('TypeStripping'),
       node_use_openssl: true, node_without_node_options: false, node_quic: false, shlib_suffix: host.platform === 'darwin' ? 'dylib' : 'so',
       single_executable_application: true, icu_small: false, v8_enable_i18n_support: 1, v8_enable_inspector: 1,
     },

@@ -1370,6 +1370,7 @@ function createLoader(host, builtins) {
   Module._initPaths();
   Module.findPackageJSON = findPackageJSON;
   Module.stripTypeScriptTypes = function stripTypeScriptTypes(code, options) {
+    host.assertTypeScript?.();
     return arguments.length < 2 ? builtins.get('internal/modules/typescript').stripTypeScriptTypes(code)
       : builtins.get('internal/modules/typescript').stripTypeScriptTypes(code, options);
   };

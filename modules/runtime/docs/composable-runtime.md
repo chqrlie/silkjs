@@ -483,8 +483,13 @@ missing one fails as in a Node build without it: `ERR_UNKNOWN_BUILTIN_MODULE` fo
 package lookup for a bare name, `ERR_NO_CRYPTO` for crypto and TLS, and
 `ERR_INSPECTOR_NOT_AVAILABLE` for the inspector. `process.features` and that capability's command
 line options follow presence too. With every service present the executable behaves as before.
-Still to come in step 2: one index per service rather than one tagged index, `globalThis.crypto`
-split between core randomness and `subtle`, and amaro behind `TypeStripping`.
+TypeScript follows `TypeStripping`: without it a `.ts` file and `module.stripTypeScriptTypes`
+throw `ERR_NO_TYPESCRIPT`, `process.features.typescript` is false and `node_use_amaro` is false, as
+in a Node build without amaro. Two parts of step 2 move to the step whose service they need:
+`globalThis.crypto` split between core randomness and `subtle` comes with the `Crypto` service
+(step 5), since only then can a runtime be without Crypto; one index of built-ins per service
+rather than one tagged index comes with the package split (step 7), since only then can a
+service's JavaScript leave the program with its package.
 
 **Step 1, the spike.** Neither route in "The one dependency of this shape" works on the pinned
 toolchain (0.1.0-dev.74) as written:
