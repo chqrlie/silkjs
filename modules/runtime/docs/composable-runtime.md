@@ -715,6 +715,32 @@ The inspector's server computes the WebSocket handshake's SHA-1 itself, so it ne
 metadata the engine keeps on code (`ext/inspector_debugger` and what it uses) stays in the core,
 since `vm` and the loader defer sources whether or not there is an inspector.
 
+The Embedding workflow (`.github/workflows/embedding.yml`) is the matrix's first two rows: the
+program of the core alone and the program with every capability package, each with its
+expected output and its symbol checks (`silk task symbols`). The executable is the third.
+
+**What is left of step 7.**
+
+- `DlopenAddons` stays in the core. Node-API is several hundred C functions that addons find by
+  name, and Silk emits a dependency's C exports only when something takes them as values. The
+  compiler change that makes every loaded dependency's exports roots is done in Silk and waits for
+  a release; with it, Node-API moves to a package the way the others did, and
+  `cli/src/napi_exports.silk` goes away.
+- libuv stays in the core until the loop plan replaces it; `OsFiles`, `OsNetwork`,
+  `OsProcesses`, `OsSystemInfo` and `ThreadWorkers` stay with it for now (a `silkjsruntime-os`
+  package once libuv is gone, so that the core touches no libc).
+- Amaro's 3.8 MB of JavaScript is left out of a program without `TypeStripping` at run time but
+  is still embedded in its binary: the built-in sources are one generated table. Per-package
+  built-in tables are the next change to `tools/embed.py`.
+- The heap image and the built-ins' bytecode are still written by `tools/build.py` for the
+  executable only. Moving that into a build step any embedding program can run, with the
+  implementation types in the image identity, is the remaining half of the step.
+
+**Step 8** has its seams now: each library is private to one package and reached only through its
+capability's operations, so replacing llhttp with `silk.http`, zlib, zstd and brotli with
+`silk.compress`, or OpenSSL with `silk.crypto` and `silk.tls` is a new implementation package of
+the same capability, chosen by the embedder, and none of them has started.
+
 ## Risks and decisions taken
 
 Decisions made here without asking, each reversible before step 1 lands:

@@ -167,8 +167,9 @@ service = "Compression"
 prefixes = ["ext/compression_"]
 [[silk]]
 service = "Inspector"
-prefixes = ["ext/inspector_", "ext/profile_", "ext/coverage_native", "ext/trace_", "ext/sigint_trace", "ext/report_json",
-  "ext/resource_snapshot"]
+# The protocol and its server (./inspector). Profiles, coverage, tracing, reports and the debugger
+# metadata the engine keeps on code are the core's.
+prefixes = ["ext/inspector_native", "ext/inspector_route", "ext/inspector_transport", "node_inspector"]
 [[silk]]
 service = "Workers"
 prefixes = ["ext/worker_"]
@@ -242,7 +243,7 @@ service = "Http"
 [[block]]
 first = 12000
 last = 12000
-service = "Inspector"
+service = "Core"
 [[block]]
 first = 13000
 last = 13000
@@ -253,12 +254,16 @@ last = 14000
 service = "NativeAddons"
 [[block]]
 first = 15000
-last = 16000
+last = 15032
 service = "Inspector"
+[[block]]
+first = 16000
+last = 16000
+service = "Core"
 [[block]]
 first = 18000
 last = 18999
-service = "Inspector"
+service = "Core"
 [[block]]
 first = 19000
 last = 19000

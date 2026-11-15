@@ -12,7 +12,7 @@ declarations, the libc and library surface each service reaches today. Requires 
 
 | Service | Built-ins | JavaScript KiB | Load-time requires | Lazy requires | Silk files | Silk KiB | `extern "C"` |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Core | 336 | 3,560.2 | 954 | 377 | 54 | 787.6 | 89 |
+| Core | 336 | 3,560.2 | 954 | 377 | 66 | 945.4 | 104 |
 | Platform | 0 | 0.0 | 0 | 0 | 2 | 10.8 | 0 |
 | ModuleResolver | 15 | 181.7 | 22 | 20 | 2 | 6.9 | 0 |
 | Files | 18 | 238.9 | 76 | 40 | 5 | 81.2 | 49 |
@@ -28,7 +28,7 @@ declarations, the libc and library surface each service reaches today. Requires 
 | Wasm | 3 | 35.9 | 3 | 1 | 5 | 179.3 | 156 |
 | Database | 6 | 54.8 | 8 | 7 | 2 | 86.2 | 7 |
 | TypeStripping | 2 | 3,716.1 | 2 | 4 | 0 | 0.0 | 0 |
-| Inspector | 15 | 83.7 | 30 | 24 | 18 | 236.6 | 33 |
+| Inspector | 15 | 83.7 | 30 | 24 | 6 | 78.8 | 18 |
 | NativeAddons | 1 | 10.6 | 0 | 7 | 4 | 221.7 | 205 |
 | Executable | 47 | 577.1 | 323 | 35 | 6 | 39.3 | 21 |
 | **Total** | 562 | 11,134.4 | 2050 | 686 | 124 | 2,530.6 | 1483 |
@@ -114,7 +114,7 @@ Load-time edges block an empty service outright; lazy ones fail only on the path
 | Core | Files | 29 | 6 |
 | Core | Http | 1 | 0 |
 | Core | Http2 | 1 | 0 |
-| Core | Inspector | 32 | 1 |
+| Core | Inspector | 7 | 1 |
 | Core | NativeAddons | 1 | 1 |
 | Core | Network | 16 | 2 |
 | Core | Processes | 10 | 0 |
@@ -186,11 +186,7 @@ Load-time edges block an empty service outright; lazy ones fail only on the path
 | `internal/bootstrap/silk` | Core | `crypto` | Crypto | lazy |
 | `internal/bootstrap/silk` | Core | `fs/promises` | Files | lazy |
 | `internal/bootstrap/silk` | Core | `fs` | Files | lazy |
-| `internal/bootstrap/silk` | Core | `host.allocationProfileStart` | Inspector | call |
-| `internal/bootstrap/silk` | Core | `host.allocationProfileStop` | Inspector | call |
-| `internal/bootstrap/silk` | Core | `host.collectGarbage` | Inspector | call |
 | `internal/bootstrap/silk` | Core | `host.processNative` | Processes | call |
-| `internal/bootstrap/silk` | Core | `host.traceNative` | Inspector | call |
 | `internal/bootstrap/silk` | Core | `host.watch` | Files | call |
 | `internal/bootstrap/silk` | Core | `internal/child_process/ipc` | Processes | lazy |
 | `internal/bootstrap/silk` | Core | `internal/crypto/webcrypto` | Crypto | lazy |
@@ -239,8 +235,6 @@ Load-time edges block an empty service outright; lazy ones fail only on the path
 | `internal/error_stack` | Core | `crypto` | Crypto | lazy |
 | `internal/fatal_report` | Core | `fs` | Files | lazy |
 | `internal/heap_prof` | Core | `fs` | Files | lazy |
-| `internal/heap_prof` | Core | `host.allocationProfileStart` | Inspector | call |
-| `internal/heap_prof` | Core | `host.allocationProfileStop` | Inspector | call |
 | `internal/heap_prof` | Core | `host.processNative` | Processes | call |
 | `internal/heap_prof` | Core | `os` | SystemInfo | lazy |
 | `internal/heap_prof` | Core | `worker_threads` | Workers | lazy |
@@ -260,15 +254,6 @@ Load-time edges block an empty service outright; lazy ones fail only on the path
 | `internal/inspector_contexts` | Inspector | `worker_threads` | Workers | lazy |
 | `internal/inspector_debugger` | Inspector | `crypto` | Crypto | lazy |
 | `internal/inspector_network_tracking` | Inspector | `internal/inspector/network_http2` | Http2 | lazy |
-| `internal/inspector_profiles` | Core | `host.allocationProfileStart` | Inspector | call |
-| `internal/inspector_profiles` | Core | `host.allocationProfileStop` | Inspector | call |
-| `internal/inspector_profiles` | Core | `host.allocationProfile` | Inspector | call |
-| `internal/inspector_profiles` | Core | `host.collectGarbage` | Inspector | call |
-| `internal/inspector_profiles` | Core | `host.cpuProfileStart` | Inspector | call |
-| `internal/inspector_profiles` | Core | `host.cpuProfileStop` | Inspector | call |
-| `internal/inspector_profiles` | Core | `host.heapCensus` | Inspector | call |
-| `internal/inspector_profiles` | Core | `host.heapSnapshotDevtools` | Inspector | call |
-| `internal/inspector_profiles` | Core | `host.queryObjects` | Inspector | call |
 | `internal/inspector_tracing` | Inspector | `worker_threads` | Workers | load |
 | `internal/inspector` | Inspector | `host.processNative` | Processes | call |
 | `internal/inspector` | Inspector | `host.workerNative` | Workers | call |
@@ -317,7 +302,6 @@ Load-time edges block an empty service outright; lazy ones fail only on the path
 | `internal/streams/fast-utf8-stream` | Core | `internal/fs/utils` | Files | lazy |
 | `internal/streams/iter/compression` | Core | `internal/compression/binding` | Compression | lazy |
 | `internal/tls/context` | Tls | `fs` | Files | lazy |
-| `internal/trace_events` | Core | `host.traceNative` | Inspector | call |
 | `internal/trace_events` | Core | `worker_threads` | Workers | lazy |
 | `internal/tty/colors` | Core | `os` | SystemInfo | lazy |
 | `internal/tty/write` | Core | `internal/fs/utils` | Files | load |
@@ -353,34 +337,25 @@ Load-time edges block an empty service outright; lazy ones fail only on the path
 | `internal/worker/clone` | Core | `internal/net/binding` | Network | lazy |
 | `internal/worker/messaging` | Core | `host.workerNative` | Workers | call |
 | `internal/worker/ports` | Core | `host.workerNative` | Workers | call |
-| `internal/worker/profiles` | Core | `host.profilePoll` | Inspector | call |
-| `internal/worker/profiles` | Core | `host.profileRequest` | Inspector | call |
 | `internal/worker` | Workers | `host.fsTracking` | Files | call |
 | `internal/worker` | Workers | `internal/watch_mode/dependencies` | Executable | lazy |
 | `internal/ws` | Network | `crypto` | Crypto | lazy |
 | `net` | Network | `cluster` | Processes | lazy |
 | `path` | Core | `internal/path_events/glob` | Files | lazy |
-| `perf_hooks` | Core | `host.traceNative` | Inspector | call |
 | `stream/web` | Core | `internal/webstreams/compression` | Compression | load |
 | `tls` | Tls | `fs` | Files | lazy |
 | `trace_events` | Core | `worker_threads` | Workers | load |
 | `util` | Core | `host.processNative` | Processes | call |
 | `util` | Core | `worker_threads` | Workers | lazy |
 | `v8` | Core | `fs` | Files | lazy |
-| `v8` | Core | `host.collectGarbage` | Inspector | call |
-| `v8` | Core | `host.cpuProfileStart` | Inspector | call |
-| `v8` | Core | `host.cpuProfileStop` | Inspector | call |
-| `v8` | Core | `host.heapMetrics` | Inspector | call |
-| `v8` | Core | `host.queryObjects` | Inspector | call |
 | `v8` | Core | `worker_threads` | Workers | lazy |
-| `vm` | Core | `host.measureMemory` | Inspector | call |
 | `vm` | Core | `internal/inspector_contexts` | Inspector | lazy |
 
 ## Native functions by service
 
 | Service | Natives |
 | --- | --- |
-| Core | `asyncHookFatal`, `bufferCodec`, `bufferOperation`, `builtinCount`, `builtinName`, `builtinService`, `builtinSource`, `captureCallSites`, `checkSyntax`, `compileBuiltin`, `compileFunction`, `createInterceptor`, `defineLazyDataProperty`, `detectModuleSyntax`, `drainJobs`, `enqueueMicrotask`, `evaluateModule`, `getAsyncContext`, `getScriptMetadata`, `heapStatistics`, `hideFrames`, `immediateAttention`, `immediateCount`, `immediateCreate`, `immediateEnqueue`, `immediateEntry`, `immediateHooks`, `immediateRefs`, `immediateRun`, `immediateSettle`, `immediateSetup`, `immediateTurns`, `installPermissionGuard`, `isInterceptor`, `loopIdleTime`, `loopMetrics`, `markPromiseAsHandled`, `markUntransferable`, `mathSpecial`, `moduleHasTopLevelAwait`, `now`, `nowNanoseconds`, `pgRows`, `privateSymbol`, `promiseResult`, `promiseState`, `requireModule`, `runTicks`, `setAsyncContext`, `setAsyncHooksEnabled`, `setCompileCacheCallbacks`, `setFunctionSource`, `setImmediate`, `stalledTopLevelAwaits`, `urlCanParse`, `urlDomainToASCII`, `urlDomainToUnicode`, `urlFormParse`, `urlFormSerialize`, `urlIdnaToASCII`, `urlParse`, `urlUpdate`, `utilErrorMap`, `utilErrorMessage`, `writeBuiltinCache` |
+| Core | `allocationProfile`, `allocationProfileStart`, `allocationProfileStop`, `asyncHookFatal`, `bufferCodec`, `bufferOperation`, `builtinCount`, `builtinName`, `builtinService`, `builtinSource`, `captureCallSites`, `checkSyntax`, `collectGarbage`, `compileBuiltin`, `compileFunction`, `cpuProfileStart`, `cpuProfileStop`, `createInterceptor`, `defineLazyDataProperty`, `detectModuleSyntax`, `drainJobs`, `enqueueMicrotask`, `evaluateModule`, `getAsyncContext`, `getScriptMetadata`, `heapCensus`, `heapMetrics`, `heapSnapshotDevtools`, `heapStatistics`, `hideFrames`, `immediateAttention`, `immediateCount`, `immediateCreate`, `immediateEnqueue`, `immediateEntry`, `immediateHooks`, `immediateRefs`, `immediateRun`, `immediateSettle`, `immediateSetup`, `immediateTurns`, `installPermissionGuard`, `isInterceptor`, `loopIdleTime`, `loopMetrics`, `markPromiseAsHandled`, `markUntransferable`, `mathSpecial`, `measureMemory`, `moduleHasTopLevelAwait`, `now`, `nowNanoseconds`, `pgRows`, `privateSymbol`, `profilePoll`, `profileRequest`, `promiseResult`, `promiseState`, `queryObjects`, `requireModule`, `runTicks`, `setAsyncContext`, `setAsyncHooksEnabled`, `setCompileCacheCallbacks`, `setFunctionSource`, `setImmediate`, `stalledTopLevelAwaits`, `testCoverageNative`, `traceNative`, `urlCanParse`, `urlDomainToASCII`, `urlDomainToUnicode`, `urlFormParse`, `urlFormSerialize`, `urlIdnaToASCII`, `urlParse`, `urlUpdate`, `utilErrorMap`, `utilErrorMessage`, `writeBuiltinCache` |
 | Platform | `platformNative`, `rawOS`, `rawStd` |
 | ModuleResolver | `moduleNative` |
 | Files | `fsConstants`, `fsSync`, `fsTracking`, `hasPendingIO`, `pollIO`, `resourceSnapshot`, `submit`, `watch`, `watchControl` |
@@ -395,7 +370,6 @@ Load-time edges block an empty service outright; lazy ones fail only on the path
 | Http2 | `http2` |
 | Wasm | `wasiNative`, `wasmNative` |
 | Database | `sqliteNative` |
-| Inspector | `allocationProfile`, `allocationProfileStart`, `allocationProfileStop`, `collectGarbage`, `cpuProfileStart`, `cpuProfileStop`, `heapCensus`, `heapMetrics`, `heapSnapshotDevtools`, `measureMemory`, `profilePoll`, `profileRequest`, `queryObjects`, `testCoverageNative`, `traceNative` |
 | NativeAddons | `napiNative` |
 | Executable | `seaNative` |
 
@@ -403,7 +377,7 @@ Load-time edges block an empty service outright; lazy ones fail only on the path
 
 | Service | Modules |
 | --- | --- |
-| Core | `embed_smoke.silk`, `ext/blocking_pool.silk`, `ext/buffer_codec.silk`, `ext/builtin_cache.silk`, `ext/call_sites.silk`, `ext/diagnostics_fatal.silk`, `ext/diagnostics_hub.silk`, `ext/fs_async.silk`, `ext/immediates.silk`, `ext/introspection.silk`, `ext/keep_exports.silk`, `ext/library_hooks.silk`, `ext/module_cache.silk`, `ext/permission_gate.silk`, `ext/pg_rows.silk`, `ext/process_diagnostics.silk`, `ext/script_cache.silk`, `ext/script_metadata.silk`, `ext/system_errors.silk`, `ext/url_native.silk`, `ext/util_native.silk`, `ext/vm_global.silk`, `ext/vm_interrupt.silk`, `ext/vm_native.silk`, `files_tests.silk`, `lib.silk`, `libs/core/async_events.silk`, `libs/core/capabilities.silk`, `libs/core/common.silk`, `libs/core/host.silk`, `libs/core/intl.silk`, `libs/core/modules.silk`, `libs/core/owners.silk`, `runtime/embed.silk`, `runtime/embedded.silk`, `runtime/session.silk`, `runtime/worker.silk`, `wamr/src/lib.silk`, `wamr/src/wamr.silk`, `compress/src/compress.silk`, `compress/src/lib.silk`, `http2/src/lib.silk`, `http2/src/nghttp2.silk`, `llhttp/src/lib.silk`, `llhttp/src/llhttp.silk`, `sqlite/src/lib.silk`, `sqlite/src/sqlite_database.silk`, `openssl/src/lib.silk`, `openssl/src/openssl_capabilities.silk`, `inspector/src/lib.silk`, `inspector/src/node_inspector.silk`, `cli/src/embed_smoke_wamr.silk`, `cli/src/napi_exports.silk` |
+| Core | `embed_smoke.silk`, `ext/blocking_pool.silk`, `ext/buffer_codec.silk`, `ext/builtin_cache.silk`, `ext/call_sites.silk`, `ext/coverage_native.silk`, `ext/diagnostics_fatal.silk`, `ext/diagnostics_hub.silk`, `ext/fs_async.silk`, `ext/immediates.silk`, `ext/inspector_debugger.silk`, `ext/inspector_evaluate.silk`, `ext/inspector_values.silk`, `ext/introspection.silk`, `ext/keep_exports.silk`, `ext/library_hooks.silk`, `ext/module_cache.silk`, `ext/permission_gate.silk`, `ext/pg_rows.silk`, `ext/process_diagnostics.silk`, `ext/profile_heap_json.silk`, `ext/profile_heap_json_consumer.silk`, `ext/profile_native.silk`, `ext/profile_transport.silk`, `ext/report_json.silk`, `ext/resource_snapshot.silk`, `ext/script_cache.silk`, `ext/script_metadata.silk`, `ext/sigint_trace.silk`, `ext/system_errors.silk`, `ext/trace_abi.silk`, `ext/trace_native.silk`, `ext/url_native.silk`, `ext/util_native.silk`, `ext/vm_global.silk`, `ext/vm_interrupt.silk`, `ext/vm_native.silk`, `files_tests.silk`, `lib.silk`, `libs/core/async_events.silk`, `libs/core/capabilities.silk`, `libs/core/common.silk`, `libs/core/host.silk`, `libs/core/intl.silk`, `libs/core/modules.silk`, `libs/core/owners.silk`, `runtime/embed.silk`, `runtime/embedded.silk`, `runtime/session.silk`, `runtime/worker.silk`, `wamr/src/lib.silk`, `wamr/src/wamr.silk`, `compress/src/compress.silk`, `compress/src/lib.silk`, `http2/src/lib.silk`, `http2/src/nghttp2.silk`, `llhttp/src/lib.silk`, `llhttp/src/llhttp.silk`, `sqlite/src/lib.silk`, `sqlite/src/sqlite_database.silk`, `openssl/src/lib.silk`, `openssl/src/openssl_capabilities.silk`, `inspector/src/lib.silk`, `cli/src/embed_smoke_wamr.silk`, `cli/src/napi_exports.silk` |
 | Platform | `ext/platform_native.silk`, `libs/core/platforms.silk` |
 | ModuleResolver | `ext/module_native.silk`, `libs/core/module_sources.silk` |
 | Files | `ext/fs_descriptors.silk`, `ext/fs_native.silk`, `ext/fs_ops.silk`, `ext/uv_fs.silk`, `libs/core/files.silk` |
@@ -418,7 +392,7 @@ Load-time edges block an empty service outright; lazy ones fail only on the path
 | Http2 | `http2/src/ext/http2_abi.silk`, `http2/src/ext/http2_native.silk` |
 | Wasm | `wamr/src/ext/wamr_abi.silk`, `wamr/src/ext/wasi_abi.silk`, `wamr/src/ext/wasi_native.silk`, `wamr/src/ext/wasm_native.silk`, `wamr/src/ext/wasm_ownership.silk` |
 | Database | `ext/webstorage_native.silk`, `sqlite/src/ext/sqlite_native.silk` |
-| Inspector | `ext/coverage_native.silk`, `ext/inspector_debugger.silk`, `ext/inspector_evaluate.silk`, `ext/inspector_values.silk`, `ext/profile_heap_json.silk`, `ext/profile_heap_json_consumer.silk`, `ext/profile_native.silk`, `ext/profile_transport.silk`, `ext/report_json.silk`, `ext/resource_snapshot.silk`, `ext/sigint_trace.silk`, `ext/trace_abi.silk`, `ext/trace_native.silk`, `inspector/src/ext/inspector_native.silk`, `inspector/src/ext/inspector_route.silk`, `inspector/src/ext/inspector_transport.silk` |
+| Inspector | `inspector/src/ext/inspector_native.silk`, `inspector/src/ext/inspector_route.silk`, `inspector/src/ext/inspector_transport.silk`, `inspector/src/node_inspector.silk` |
 | NativeAddons | `ext/napi_async.silk`, `ext/napi_core.silk`, `ext/napi_native.silk`, `ext/napi_values.silk` |
 | Executable | `ext/heap_image.silk`, `ext/sea_native.silk`, `ext/sea_payload.silk`, `tasks.silk`, `cli/src/main.silk`, `smoke/src/main.silk` |
 
