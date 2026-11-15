@@ -68,6 +68,9 @@ const ONESHOT: u32 = 64
 const READY: u32 = 128
 // A timer that has a callback (libuv's handle->timer_cb != NULL), for uv_timer_again.
 const HAS_CALLBACK: u32 = 256
+// A descriptor handle of another module (a TCP, pipe, TTY or UDP handle of ext.uv_api_stream): the
+// loop watches its descriptor and calls back, and the module decides when it is active.
+const IO: u32 = 512
 
 const TAG_WAKE: u64 = 1
 const TAG_SIGNAL: u64 = 2
@@ -785,10 +788,11 @@ pub unsafe fn uv_handle_type_name(kind: i32) -> *const u8 {
   let name: &[u8] = if kind == UV_ASYNC { b"async\0" } else { if kind == UV_FS_EVENT { b"fs_event\0" } else { if kind == UV_FS_POLL { b"fs_poll\0" } else { if kind == UV_POLL { b"poll\0" } else { if kind == UV_PROCESS { b"process\0" } else { if kind == UV_SIGNAL { b"signal\0" } else { b"unknown\0" } } } } } }
   return Pointer.fromRef<u8>(&name[0])
 }
-/// The descriptor of a poll handle. -22 (EINVAL) for the other kinds, -9 (EBADF) once it closes.
+/// The descriptor of a poll or descriptor handle, as libuv's uv_fileno: UV_EINVAL for the other
+/// kinds, UV_EBADF without a descriptor or once it closes.
 pub unsafe fn uv_fileno(memory: *const u8, fd: *mut i32) -> i32 {
   let anchor = () let h = unsafe Pointer.borrow<(), Handle>(&anchor, unsafe handleOfConst(memory))
-  if h.kind != UV_POLL { return -22 }
+  if h.kind != UV_POLL && (h.flags & IO) == 0 { return -22 }
   if (h.flags & (CLOSING | CLOSED)) != 0 || h.fd < 0 { return -9 }
   unsafe Pointer.write<i32>(fd, h.fd)
   return 0
@@ -836,6 +840,8 @@ pub unsafe fn uv_close(memory: *mut u8, callback: CloseCallback) -> () {
   if kind == UV_FS_POLL { let _ignored = unsafe uv_fs_poll_stop(memory) }
   if kind == UV_TIMER { let _ignored = unsafe uv_timer_stop(memory) }
   if kind == UV_IDLE || kind == UV_PREPARE || kind == UV_CHECK { unsafe phaseStop(handle) }
+  let io = (unsafe Pointer.borrow<(), Handle>(&anchor, handle)).flags & IO != 0
+  if io { let _unwatched = unsafe ioWatch(memory, 0, silkUvNoPoll) unsafe stop(handle) }
   let h2 = unsafe Pointer.borrowMut<(), Handle>(&mut anchor, handle)
   h2.flags = h2.flags | CLOSING
   // A stat poll closes once its last context is gone (libuv's uv__fs_poll_close).
@@ -970,6 +976,18 @@ pub unsafe fn uv_poll_stop(memory: *mut u8) -> i32 {
 }
 unsafe fn pollReady(loop: *mut Loop, handle: *mut Handle, ready: i32) -> bool {
   let mut anchor = () let h = unsafe Pointer.borrowMut<(), Handle>(&mut anchor, handle)
+  if (h.flags & IO) != 0 {
+    if h.registered == 0 { return false }
+    let callback = h.polled let registered = h.registered
+    let mut events = ready & registered
+    // libuv's epoll quirk: an error or hangup alone wakes every event the watcher waits for.
+    if (ready & QUEUE_ERROR) != 0 { events = events | registered | IO_ERROR }
+    drop h
+    if events == 0 { return false }
+    unsafe metricsLeave(loop)
+    unsafe callback(unsafe bytesOf(handle), 0, events)
+    return true
+  }
   if h.kind != UV_POLL || (h.flags & (CLOSING | CLOSED)) != 0 || h.registered == 0 { return false }
   let callback = h.polled let registered = h.registered
   let mut events = ready & registered
@@ -2469,6 +2487,49 @@ unsafe fn runPhase(loop: *mut Loop, kind: i32) -> () {
   }
 }
 
+// ---- Descriptor handles for other modules -----------------------------------------------------
+/// The `events` bit that a descriptor handle's callback gets with an error or hangup condition.
+pub const IO_ERROR: i32 = 256
+/// Initializes a descriptor handle of libuv kind `kind` (UV_TCP 12, UV_NAMED_PIPE 7, UV_TTY 14,
+/// UV_UDP 15) with no descriptor yet.
+pub unsafe fn ioInit(loopMemory: *mut u8, memory: *mut u8, kind: i32) -> () {
+  let handle = unsafe initialize(unsafe loopOf(loopMemory), memory, kind)
+  let mut anchor = () let h = unsafe Pointer.borrowMut<(), Handle>(&mut anchor, handle)
+  h.flags = h.flags | IO
+}
+/// Sets the descriptor of a descriptor handle (-1 for none). Its watch must be off.
+pub unsafe fn ioSetDescriptor(memory: *mut u8, fd: i32) -> () {
+  let mut anchor = () let h = unsafe Pointer.borrowMut<(), Handle>(&mut anchor, unsafe handleOf(memory))
+  h.fd = fd
+}
+pub unsafe fn ioDescriptor(memory: *const u8) -> i32 {
+  let anchor = () let h = unsafe Pointer.borrow<(), Handle>(&anchor, unsafe handleOfConst(memory))
+  return h.fd
+}
+/// Watches the descriptor for `events` (UV_READABLE 1, UV_WRITABLE 2, UV_DISCONNECT 4,
+/// UV_PRIORITIZED 8; 0 stops watching) and calls `callback(handle, 0, ready)`, where `ready` may
+/// carry IO_ERROR. It does not make the handle active.
+pub unsafe fn ioWatch(memory: *mut u8, events: i32, callback: PollCallback) -> i32 {
+  let handle = unsafe handleOf(memory)
+  let mut anchor = () let h = unsafe Pointer.borrowMut<(), Handle>(&mut anchor, handle)
+  let wanted = events & (UV_READABLE | UV_WRITABLE | UV_DISCONNECT | UV_PRIORITIZED)
+  if wanted == h.registered { h.polled = callback return 0 }
+  if h.fd < 0 { if wanted == 0 { return 0 } return -9 }
+  let second = () let l = unsafe Pointer.borrow<(), Loop>(&second, h.loop)
+  let status = unsafe queueSet(l.backend, h.fd, usize.toU64(Pointer.address<Handle>(handle)), h.registered, wanted)
+  if status != 0 { return status }
+  h.registered = wanted h.polled = callback
+  return 0
+}
+/// The events a descriptor handle is watched for.
+pub unsafe fn ioWatched(memory: *const u8) -> i32 {
+  let anchor = () let h = unsafe Pointer.borrow<(), Handle>(&anchor, unsafe handleOfConst(memory))
+  return h.registered
+}
+/// libuv's uv__handle_start and uv__handle_stop for a module that manages its handle's activity.
+pub unsafe fn ioActivate(memory: *mut u8) -> () { unsafe start(unsafe handleOf(memory)) }
+pub unsafe fn ioDeactivate(memory: *mut u8) -> () { unsafe stop(unsafe handleOf(memory)) }
+
 // ---- Handles for other modules ----------------------------------------------------------------
 /// Marks a handle as the loop's own: uv_walk does not report it and uv_loop_close does not wait for
 /// it. It is also unreferenced, as libuv's internal handles are.
@@ -2578,7 +2639,8 @@ unsafe fn dispatch(loop: *mut Loop, item: Ready) -> bool {
   let handle = unsafe handleOf(unsafe nn(target))
   let second = () let h = unsafe Pointer.borrow<(), Handle>(&second, handle)
   let kind = h.kind drop h
-  if kind == UV_POLL { return unsafe pollReady(loop, handle, item.events) }
+  let io = (unsafe Pointer.borrow<(), Handle>(&second, handle)).flags & IO != 0
+  if kind == UV_POLL || io { return unsafe pollReady(loop, handle, item.events) }
   static if Intrinsic.targetOperatingSystem() == "darwin" { if kind == UV_FS_EVENT { unsafe metricsLeave(loop) unsafe vnodeReady(handle, u32.shiftRight(i32.toU32(item.events), 16)) return true } }
   return false
 }
