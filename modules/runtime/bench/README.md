@@ -22,7 +22,7 @@ silk task bench-all              # the three above into one results directory, a
 | `--runtimes a,b` | Columns: `silkjs`, `bun_nojit`, `bun_nojit_smol`; `bench-cold` also takes `bun` (JIT on) | `$RUNTIMES`, else the three |
 | `--out DIR` | Where results go | `<work>/results/<UTC time>` |
 | `--work DIR` | The work directory `bench-setup` fills | `$SILKJS_BENCH_WORK`, else `build/bench` |
-| `--force` | Measure although a build is running or the host is busy | off |
+| `--force` | Measure although a build is running | off |
 
 `silk task bench http sqlite` runs only those groups (`http ws pg sqlite spawn cat imm`, or a
 benchmark name such as `node_http`); `silk task bench-cold hello esm` only those cases;
@@ -48,7 +48,7 @@ measure otherwise:
 - Servers run on CPU 0, `wrk` and the clients on CPUs 2 and 3.
 - Every round runs each benchmark and runtime pair once in shuffled order, so host noise (about 8%
   of wall time) falls on all runtimes alike. Take several rounds.
-- Nothing is measured while a compiler runs or the load average is above half the CPUs.
+- Nothing is measured while a compiler runs (`--force` overrides); a busy host gets a warning.
 
 ## Reading the numbers
 
@@ -104,6 +104,6 @@ cp ~/.silk/toolchains/$V/bin/silk ~/.silk/bin/ && echo "default = \"$V\"" > ~/.s
 # Silk's Clang and lld, one multicall binary
 curl -fsSLo llvm.tgz https://github.com/silk-lang/silk/releases/download/llvm-23.1.5-silk.1/silk-llvm-23.1.5-silk.1-x86_64-unknown-linux-gnu.tar.gz
 mkdir -p ~/.silk/llvm && tar xzf llvm.tgz -C ~/.silk/llvm --strip-components 1
-(cd ~/.silk/llvm/bin && for n in clang clang++ ld.lld lld llvm-ar llvm-nm llvm-objcopy llvm-strip llvm-ranlib; do ln -sf llvm $n; done)
+(cd ~/.silk/llvm/bin && for n in clang clang++ ld.lld lld wasm-ld llvm-ar llvm-nm llvm-objcopy llvm-strip llvm-ranlib; do ln -sf llvm $n; done)
 export PATH=~/.silk/bin:~/.silk/llvm/bin:$PATH SILK_CLANG=~/.silk/llvm/bin/clang
 ```

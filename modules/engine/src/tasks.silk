@@ -58,7 +58,7 @@ impl CommandLine for Measure {
       |> Command.option("jit", Opt.about("Add the v8-jit and jsc-jit columns, for context only"))
       |> Command.option("out", Opt.about("The results directory (default: <work>/results)"))
       |> Command.option("work", Opt.about("The work directory of bench-setup (default: build/bench)") |> Opt.env("SILKJS_BENCH_WORK"))
-      |> Command.option("force", Opt.about("Measure even while a build runs or the host is busy"))
+      |> Command.option("force", Opt.about("Measure even while a build runs"))
   }
 }
 

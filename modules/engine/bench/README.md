@@ -77,14 +77,15 @@ release build), `--engines a,b` (columns; default every installed one of `silkjs
 only), `--out DIR` (default `<work>/results`), `--work DIR` (default `$SILKJS_BENCH_WORK`, else
 `build/bench`) and `--force`. `$NODE_REFERENCE` selects the Node executable and `$JSC` the
 JavaScriptCore shell. `silk task bench-setup wasm` runs one step; that step needs `SILK_CLANG` set
-to a Clang 22 or newer with `wasm-ld` beside it, and is run again after a new commit to rebuild
+to a Clang 22 or newer with `wasm-ld` beside it (Silk's own LLVM release has one: link `wasm-ld`
+to its `llvm` binary), and is run again after a new commit to rebuild
 `silkjs.wasm`.
 
 The harness keeps what is easy to get wrong:
 
 - silkjs runs with `SILKJS_PREPARSE_THREADS=0`; `NODE_OPTIONS` and `BUN_OPTIONS` are dropped.
-- Engines are interleaved over the rounds, and nothing is measured while a compiler runs or the
-  host is busy (`--force` overrides). Never build while benchmarking.
+- Engines are interleaved over the rounds, and nothing is measured while a compiler runs
+  (`--force` overrides); a busy host gets a warning. Never build while benchmarking.
 - Octane runs V8 through a loader that evaluates the script as a global script, because code-load
   needs a global eval. The micros run `node` directly: through the loader `microbench.js` reads its
   own path as a test name.

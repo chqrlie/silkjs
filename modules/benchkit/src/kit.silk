@@ -1017,33 +1017,29 @@ pub effect fn runningBuilds() -> Bytes
   return move found
 }
 
-/// Never build while benchmarking: fails the task when a compiler is running or the host is busy.
-/// With `force` it warns instead.
+/// Never build while benchmarking: fails the task when a compiler is running, and warns when the
+/// host is busy (the load average also counts a benchmark that has just ended). With `force` a
+/// running build is a warning too.
 pub effect fn refuseWhileBuilding(force: bool) -> ()
   ! TaskError | OutOfMemoryError | WriterError ? &mut Allocator | &mut FileSystem {
-  let builds = run runningBuilds()
   let mut loads = [0.0, 0.0, 0.0]
   let _count = unsafe getloadavg(Pointer.fromMutSlice<f64>(&mut loads), 3)
   // _SC_NPROCESSORS_ONLN
   let cpus = unsafe sysconf(84)
-  let mut problem = Bytes.make()
-  if Bytes.length(&builds) > 0 {
-    run Bytes.append(&mut problem, b"a build is running:\n")
-    run Bytes.append(&mut problem, Bytes.asSlice(&builds))
-  }
   if loads[0] > 0.5 * i64.toF64(cpus) {
-    run Bytes.append(&mut problem, b"the 1-minute load average is ")
-    run appendFixed(&mut problem, loads[0], 2)
-    run Bytes.append(&mut problem, b" on ")
-    run appendInteger(&mut problem, cpus)
-    run Bytes.append(&mut problem, b" CPUs: the host is not idle\n")
+    let mut busy = run Bytes.copy(b"the 1-minute load average is ")
+    run appendFixed(&mut busy, loads[0], 2)
+    run Bytes.append(&mut busy, b" on ")
+    run appendInteger(&mut busy, cpus)
+    run warn(Bytes.asSlice(&busy), b" CPUs: if anything but a benchmark that just ended is running, the numbers will not be comparable")
   }
-  if Bytes.length(&problem) == 0 { return () }
+  let builds = run runningBuilds()
+  if Bytes.length(&builds) == 0 { return () }
   if force {
-    run warn(b"measuring anyway (--force): ", Bytes.asSlice(&problem))
+    run warn(b"measuring while a build is running (--force):\n", Bytes.asSlice(&builds))
     return ()
   }
-  run abort(Bytes.asSlice(&problem), b"Wait for it to finish, or pass --force to measure anyway (the numbers will not be comparable).")
+  run abort(Bytes.asSlice(&(run cat(b"a build is running:\n", Bytes.asSlice(&builds)))), b"Wait for it to finish, or pass --force to measure anyway (the numbers will not be comparable).")
 }
 
 /// Fails the task unless servers can be pinned to CPU 0 and clients to CPUs 2 and 3.

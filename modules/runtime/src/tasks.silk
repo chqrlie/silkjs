@@ -53,7 +53,7 @@ impl CommandLine for Measure {
       |> Command.option("runtimes", Opt.about("Columns, comma-separated: silkjs,bun_nojit,bun_nojit_smol (the default); bench-cold also takes bun") |> Opt.env("RUNTIMES"))
       |> Command.option("out", Opt.about("The results directory (default: <work>/results/<UTC time>)"))
       |> Command.option("work", Opt.about("The work directory of bench-setup (default: build/bench)") |> Opt.env("SILKJS_BENCH_WORK"))
-      |> Command.option("force", Opt.about("Measure even while a build runs or the host is busy"))
+      |> Command.option("force", Opt.about("Measure even while a build runs"))
   }
 }
 
