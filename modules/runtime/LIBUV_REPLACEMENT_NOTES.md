@@ -279,6 +279,31 @@ Reading it:
   alternated they are -0.2% and -0.6%. The binary that ran second in each round was penalized.
 - The engine benchmarks (section 4 of the guide) were not run: no engine source changed.
 
+### The final build (Linux x64), and what remains against main
+
+Interleaved against main f3d5ea8 (8 rounds, order alternated; main / branch, medians): setImmediate
+1.59 M / 1.68 M per s; serve() 121.5 k / 118.2 k req/s; node:http 9,350 / 9,337 req/s; Express over
+HTTPS 2,945 / 3,003 req/s; ws 1.54 M / 1.58 M msg/s; Postgres 7,186 / 7,472; spawnSync 1,455 /
+1,411 us; cat 745 / 675 ms; sqlite `db.exec` 1000 to 8000 statements +2.0, +3.6, -5.7, -8.3%. Cold
+start and page faults at or below main in every case.
+
+- **sqlite `db.exec` and code placement.** Three earlier runs of the final build read `db.exec`
+  5 to 13% slower. cachegrind runs the same 488.9 M instructions on main, the earlier branch build
+  and the final one; only L1 instruction misses differ (24.2, 26.8 and 28.5 M), all of them in
+  sqlite's own functions, which a few hundred bytes of other code had moved. The 311 functions a
+  profile of the sqlite benchmark enters, and the lists lacked, are appended to
+  `tools/server-order.txt`; with them the benchmark reads as above, though the simulated miss count
+  moved little (28.2 M), so part of this is placement luck either way.
+- **ws peak memory** is 0.2 to 2.2 MB over main f3d5ea8. The malloc heap alone ends at 12 or 14 MB
+  at random on either binary; the rest is the pages of the binary itself the server touches
+  (code +0.4 MB, read-only and writable data +0.8 and +0.5 MB, around the embedded builtin
+  snapshot). A build of main at df9c30b, which has main's later commits (the renames, the
+  benchmark harness) but not this work, touches as much of that data and 15.5 MB more code, and
+  peaks at 97.7 to 98.6 MB on the same load against 80.6 to 82.6 MB for this branch: the data
+  pages come from main's own commits, and against the main this merges into the branch is lower.
+- File-backed RSS depends on how much of the binary is in the page cache (fault-around maps
+  cached neighbours); every comparison here ran with both binaries cached.
+
 ## Next
 
 - Rename `modules/native/libuv` (it holds only uvwasi now).
