@@ -10,9 +10,12 @@ symbol. Zstandard and Brotli are as they were.
 | Adapter | `src/ext/zlib_stream.silk` | zlib's calling convention over the codecs: window bits that choose a format, gzip or zlib by the first two bytes, zlib's status codes and message texts, the gzip operating system byte. |
 | Binding | `src/ext/compression_native.silk` | As before, with the zlib kinds calling the adapter where they called C. |
 
-**The local copies are temporary.** Delete `src/stdlib_copy` and import `silk.compress.deflate` and
-`silk.compress.inflate` again once a Silk release has the changes. Upstream pull request: _not
-opened yet; see "Upstreaming" at the end._
+**The local copies are temporary.** The changes are upstream in
+[silk-lang/silk#3122](https://github.com/silk-lang/silk/pull/3122). Once a Silk release contains
+them: move `silk-version` to that release, delete `src/stdlib_copy`, point the imports in
+`src/ext/zlib_stream.silk` (and `tests/zlib-differential/build.sh`) back at
+`silk.compress.deflate` and `silk.compress.inflate`, and run `tests/zlib-differential` and
+`tests/zlib-bytes-smoke.cjs` again.
 
 ## Who else used zlib
 
@@ -71,6 +74,7 @@ mismatch came within a few scenarios; after them none in the runs recorded under
 | D8 | The RLE strategy clears the match length on each pass. | A later change of strategy starts from it (zlib sets `match_length = 0`). |
 | D9 | `Encoder.setGzipSystem(code)`: the operating system byte of the gzip header, 255 by default as before. | zlib writes its build's system (3 on Unix, 19 on macOS); the adapter sets it. |
 | D10 | `reset` keeps the match start and sets the dictionary id to 1 (Adler-32 of nothing). | As `deflateReset`. |
+| D11 | The match search reads through pointers after proving once that its reads are in the window, and compares 8 bytes at a time; the hash insert is inlined and goes through one slice per table. | Speed. After D1–D10 the encoder ran at 0.80–0.95 of zlib's throughput; callgrind, 2 MiB of text at level 6: 948M instructions, zlib 489M. After: about 580M, and 1.04 of zlib's throughput on average. A vectorized hash slide (`u16x8.saturatingSubtract`) was tried and measured no better, so it was not kept. |
 
 ### `inflate.silk`
 
@@ -83,6 +87,7 @@ mismatch came within a few scenarios; after them none in the runs recorded under
 | I5 | `Decoder.setBlockStop(true)`: a step returns at the start of each block. | `Z_BLOCK` for inflate. |
 | I6 | A literal that meets a full output is consumed and held (`PHASE_LITERAL`); the distance of a match is checked when the copy has room, and again when a later step continues it. | zlib decodes before it looks for room, so the input consumed when the output fills is the same now; and an invalid distance is reported in the same call as zlib reports it. |
 | I7 | A dynamic block with more than 30 distance codes fails (`SymbolCounts`); a repeat is checked after its extra bits are there; a code-length code with no lengths at all reads as zlib reads it. | Same accept, reject and "need more input" as zlib on damaged data. |
+| I8 | A final input that ends inside a header unit whose first bytes already prove it wrong fails with that cause, not `TruncatedInput`; a zlib header with both a bad check and a bad method keeps the kind `UnsupportedMethod` (the detail is zlib's `HeaderCheck`). | The standard library's own corpus (`streaming-inflate`, `http-content-decoding`) relies on those kinds; with I8 it passes unchanged. |
 
 ## Compressed bytes
 
@@ -97,19 +102,67 @@ mismatch came within a few scenarios; after them none in the runs recorded under
 
 ## Verification
 
-See the reply that accompanies the branch for the numbers of the last run; the tools are:
+Last run on the final code, branch `feature/zlib-silk`, Linux x86_64:
 
-- `tests/zlib-differential/`: C fuzzers that drive the adapter and zlib 1.3.1 with the same calls
-  and compare status, message, consumed, written and bytes per call.
-- `tests/zlib-bytes-smoke.cjs`: the bytes of zlib 1.3.1 through `node:zlib`.
-- `tests/compat.mjs` (`silk task compat`): the zlib cases against Node 24.
-- `tools/zlib_bench.py`: throughput and peak memory of two builds in turns.
+- Differential fuzzers (`tests/zlib-differential`) against zlib 1.3.1, comparing status, message,
+  consumed, written and bytes per call: deflate 90,000 scenarios, inflate 180,000 scenarios over
+  the course of the work; the last pass on the final code was 10,000 deflate and 30,000 inflate on
+  fresh seeds, 0 mismatches.
+- `tests/zlib-bytes-smoke.cjs`: 1,089 of 1,089 cases have the bytes of zlib 1.3.1.
+- `silk task compat` against Node 24.22.3: 79 passed, 0 failed (75 existing cases, and 4 new zlib
+  ones: the behaviour matrix and three fuzz seeds). The baseline with the C zlib passes the same.
+- `tests/ws-native-smoke.cjs` and `tests/web-boundaries-smoke.cjs`: pass on both builds.
+- `nm build/silkjs`: no zlib symbol.
+
+## Performance
+
+Both builds `silk task build --release` of this branch's base and head, run in turns. Host noise
+is about 8%.
+
+Codec, `tests/zlib-differential/bench_codec`, five rounds, 4 to 16 MiB inputs (text, JSON, random,
+an executable), levels 1, 6 and 9, gzip and raw, one call and 1 KiB calls; throughput of the Silk
+code over zlib 1.3.1 at `-O2`:
+
+| | mean | min | max |
+| --- | --- | --- | --- |
+| deflate | 1.04 | 0.89 | 1.26 |
+| inflate | 2.65 | 0.81 | 5.05 |
+
+Through `node:zlib` (`tools/zlib_bench.py`, three rounds, 96 cases plus crc32): the codec is a
+small part of the time there. The engine copies the input into the native side and the output
+back byte by byte, so most cases run at 4 to 60 MB/s on both builds. Medians, after over before:
+
+| Group | Ratio range | Typical |
+| --- | --- | --- |
+| deflate, one call | 0.83 – 1.04 | 0.91 |
+| deflate, 1 KiB writes | 0.76 – 1.29 | 1.04 |
+| inflate, one call | 0.78 – 1.05 | 0.90 |
+| inflate, 1 KiB writes | 0.78 – 1.35 | 1.10 |
+| crc32 (same Silk code in both) | 0.80 – 1.21 | 0.92 |
+| HTTP server gzip + fetch gunzip, requests/s | 1.00 | |
+| peak RSS, 8 single cases and the HTTP case | 0.96 – 1.07 | +4 MB |
+
+The one-call cases look about 10% slower even though the codec itself is faster. crc32 runs the
+same Silk code in both builds and still varies from 0.80 to 1.21, so differences of this size are
+within the noise of these runs. The extra 4 MB of RSS is in every case, idle ones too. It is the
+size of the executable's code (the binary grew 29 KB), not codec memory: the Silk encoder
+allocates the same tables as zlib's at the same memory level, and the decoder 64 KiB, against
+zlib's 7 KiB of state plus a 32 KiB window.
+
+Not measured: a package install through `modules/pm`. The package manager unpacks with the
+standard library's own `silk.compress.inflate`, which this change does not touch.
 
 ## Compiler walls
 
-None met so far. The decoder's fast loop already uses unaligned loads, 16-byte SIMD copies and a
-BMI2 build of itself. See the reply for what the measurements say about CRC-32 and the match loop.
+None. The encoder needed unaligned 8-byte loads, a trailing-zero count, and `u16x8` saturating
+subtraction (tried, not kept). The standard library has all three. The decoder already had SIMD
+copies and a BMI2 build.
 
 ## Upstreaming
 
-_To be filled in when the pull request on silk-lang/silk is open._
+[silk-lang/silk#3122](https://github.com/silk-lang/silk/pull/3122), a draft: the two files as in
+`src/stdlib_copy` (without their header note), `corpus/native/deflate-zlib-bytes`, a changeset with
+migration notes, and the regenerated `reference/stdlib`. Before it was opened, these ran with
+Silk 0.1.0-dev.74: nine `corpus/native` programs, `silk doctest --stdlib` (414 passed, 0 failed),
+and `doc-reference --check`. Once a release contains it, delete `src/stdlib_copy` as described at
+the top of this file.
