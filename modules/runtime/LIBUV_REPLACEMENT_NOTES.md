@@ -30,6 +30,7 @@ Verified on **Linux x64 only**. macOS arm64 is written and type-checks
 | `uv_ip4_addr`, `uv_ip6_addr`, `uv_ip4_name`, `uv_ip6_name` | Silk | `src/ext/uv_inet.silk` |
 | What uvwasi calls (63 functions) | Silk, under `silk_uvwasi_*` names | `src/ext/uvwasi_host.silk`, `modules/native/libuv/uvwasi/shim/uv.h` |
 | What a Node-API addon may call on the loop | Silk, C symbols with libuv's names | `src/ext/uv_addon.silk` |
+| What an addon may call for fs requests, `uv_queue_work`, `uv_cancel`, `uv_getaddrinfo`/`uv_freeaddrinfo`/`uv_getnameinfo` (with libuv's IDNA) and `uv_random` | Silk, libuv's C symbols and record layouts, on the loop's thread pool | `src/ext/uv_api_fs.silk` |
 | TCP, pipes, TTY, UDP, streams, fs requests, the thread pool, DNS, `setImmediate`, loop turns | Already Silk before this branch (`net_native`, `fs_ops`, `blocking_pool`, `dns_native`, `runtime/session`) | unchanged |
 
 The functions keep libuv's names and statuses, so the callers read as before
@@ -151,6 +152,7 @@ None blocked the work, and no C was added. Reported for the compiler's owner:
 | Standalone harness of `uv_loop.silk` and `uv_addon.silk` (async, signal, spawn, kill, missing program, fs event, stat poll, close order, addon timer and thread) | passes; it lives outside the repository and is not committed |
 | OS queries against real libuv 1.51 (same program, both libraries): real machine, 23 substituted `/proc` and cgroup scenarios, synthetic `getifaddrs`, 89,118 address texts | identical output |
 | uvwasi driver against real libuv 1.51 and against the shim (about 140 lines: fs, `poll_oneoff`, sockets) | identical but for four expected lines |
+| libuv 1.51's own fs, thread-pool, cancel, getaddrinfo, getnameinfo, IDNA and random tests (80 on Linux), linked against `uv_api_fs.silk` and against real libuv, run as `nobody`; plus a differential program (about 170 lines of results, fields and cleanup) | all 80 pass on both; differential output identical. Harness outside the repository (`/home/user/dl/uvapi-tests/fs`) |
 
 ## Benchmarks
 

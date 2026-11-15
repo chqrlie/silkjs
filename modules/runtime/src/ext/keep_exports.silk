@@ -18,6 +18,7 @@ import ext.sqlite_native
 import ext.tls_native
 import ext.trace_native
 import ext.uv_api_abi
+import ext.uv_api_fs
 import ext.uv_api_loop
 import ext.uv_api_sys
 import ext.uv_loop
@@ -48,6 +49,7 @@ pub fn all() -> () {
   tls_native.keepExports()
   trace_native.keepExports()
   uv_api_abi.keepExports()
+  uv_api_fs.keepExports()
   uv_api_loop.keepExports()
   uv_api_sys.keepExports()
   uv_loop.keepExports()
