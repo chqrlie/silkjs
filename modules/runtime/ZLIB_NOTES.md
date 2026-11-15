@@ -143,65 +143,91 @@ it was then decided to match Node instead, with D12. Behaviour that does not dep
 
 Last run on the final code, branch `feature/zlib-silk`, Linux x86_64:
 
-- Differential fuzzers (`tests/zlib-differential`) against zlib 1.3.1, comparing status, message,
-  consumed, written and bytes per call: deflate 90,000 scenarios, inflate 180,000 scenarios over
-  the course of the work; the last pass on the final code was 10,000 deflate and 30,000 inflate on
-  fresh seeds, 0 mismatches.
-- `tests/zlib-bytes-smoke.cjs`: 1,089 of 1,089 cases have the bytes of zlib 1.3.1.
-- `silk task compat` against Node 24.22.3: 79 passed, 0 failed (75 existing cases, and 4 new zlib
-  ones: the behaviour matrix and three fuzz seeds). The baseline with the C zlib passes the same.
-- `tests/ws-native-smoke.cjs` and `tests/web-boundaries-smoke.cjs`: pass on both builds.
-- `nm build/silkjs`: no zlib symbol.
+- Differential fuzzers (`tests/zlib-differential`), comparing status, message, consumed, written
+  and bytes per call:
+  - against zlib 1.3.1 over the course of the work: deflate 90,000 scenarios, inflate 180,000;
+  - after the Chromium hash (D12), against Node 24's zlib: deflate 54,000 scenarios;
+  - with `Hash.Rolling` against zlib 1.3.1: deflate 29,000;
+  - inflate: 3,000 against Node's zlib and 5,000 against zlib 1.3.1.
+  - 0 mismatches. The harness does tell the hashes apart: the rolling hash against Node's zlib
+    mismatches within the first 200 seeds.
+- `silk task compat` against Node 24.22.3: 81 passed, 0 failed. That is the 75 existing cases
+  and six zlib ones: the behaviour matrix, three fuzz seeds, the compressed-bytes matrix (1,089
+  cases equal to Node's bytes) and the small async write case.
+- `tests/ws-native-smoke.cjs` and `tests/web-boundaries-smoke.cjs`: pass.
+- `nm build/silkjs`: no zlib symbol. The executable is 70 KB larger than with the C zlib.
 
 ## Performance
 
-Both builds `silk task build --release` of this branch's base and head, run in turns. Host noise
-is about 8%.
+`silk task build --release` of this branch against Node 24.22.3 (the official Linux x64 build),
+run in turns, median of three rounds, `bench/scripts/zlib.cjs` (4 MiB of text, JSON and random
+bytes, 16 MiB of an executable; levels 1, 6 and 9; gzip and raw; one call, and 1 KiB stream
+writes). Ratio is SilkJS throughput over Node's; host noise is about 10%.
 
-Codec, `tests/zlib-differential/bench_codec`, five rounds, 4 to 16 MiB inputs (text, JSON, random,
-an executable), levels 1, 6 and 9, gzip and raw, one call and 1 KiB calls; throughput of the Silk
-code over zlib 1.3.1 at `-O2`:
+| Group | Cases | Min | Median | Max |
+| --- | --- | --- | --- | --- |
+| deflate, one call, text/JSON/binary | 18 | 0.78 | 1.05 | 1.17 |
+| deflate, one call, random | 6 | 0.84 | 0.88 | 1.00 |
+| inflate, one call, text/JSON/binary | 18 | 1.08 | 1.23 | 1.71 |
+| inflate, one call, random | 6 | 0.74 | 1.01 | 1.30 |
+| deflate, 1 KiB writes | 24 | 1.74 | 2.15 | 3.10 |
+| inflate, 1 KiB writes | 24 | 1.60 | 1.90 | 2.38 |
+| crc32 | 4 | 3.58 | 4.29 | 4.81 |
 
-| | mean | min | max |
-| --- | --- | --- | --- |
-| deflate | 1.04 | 0.89 | 1.26 |
-| inflate | 2.65 | 0.81 | 5.05 |
+Geometric mean over the 100 cases: 1.56. Before this work, with the C zlib 1.3.1 and the old
+binding, the same runs were below Node almost everywhere. The binding copied input and output a
+byte at a time, and copied the remaining input again for every output chunk.
 
-Through `node:zlib` (`tools/zlib_bench.py`, three rounds, 96 cases plus crc32): the codec is a
-small part of the time there. The engine copies the input into the native side and the output
-back byte by byte, so most cases run at 4 to 60 MB/s on both builds. Medians, after over before:
+- **Codec** (`tests/zlib-differential/bench_codec`, against Node's zlib built with gcc `-O2` and
+  Node's defines): deflate 0.89–1.31 on real data and about 0.97 on random and binary data;
+  inflate 1.35–2.7 (0.74–1.09 on random data, where both only copy stored blocks; libc's AVX
+  `memcpy` copies faster than the Silk loop).
+- **Below Node:**
+  - deflate of incompressible data, one call: the encoder still runs about 20% more instructions
+    per position than zlib's `deflate_fast` there (311M against 254M for 2 MiB at level 1), mostly
+    loads and stores of encoder fields that LLVM keeps in memory;
+  - inflate of random data in one call: noisy across runs. A direct measurement of
+    `inflateRawSync` on 4 MiB of stored data gives 1,368–1,460 MB/s against Node's
+    1,159–1,329.
+- **Streams of small writes** are faster than Node because of the inline path (see "The binding"):
+  per 1 KiB write, a thread-pool round trip here costs about 40 microseconds in either runtime.
 
-| Group | Ratio range | Typical |
-| --- | --- | --- |
-| deflate, one call | 0.83 – 1.04 | 0.91 |
-| deflate, 1 KiB writes | 0.76 – 1.29 | 1.04 |
-| inflate, one call | 0.78 – 1.05 | 0.90 |
-| inflate, 1 KiB writes | 0.78 – 1.35 | 1.10 |
-| crc32 (same Silk code in both) | 0.80 – 1.21 | 0.92 |
-| HTTP server gzip + fetch gunzip, requests/s | 1.00 | |
-| peak RSS, 8 single cases and the HTTP case | 0.96 – 1.07 | +4 MB |
-
-The one-call cases look about 10% slower even though the codec itself is faster. crc32 runs the
-same Silk code in both builds and still varies from 0.80 to 1.21, so differences of this size are
-within the noise of these runs. The extra 4 MB of RSS is in every case, idle ones too. It is the
-size of the executable's code (the binary grew 29 KB), not codec memory: the Silk encoder
-allocates the same tables as zlib's at the same memory level, and the decoder 64 KiB, against
-zlib's 7 KiB of state plus a 32 KiB window.
+Earlier measurements against zlib 1.3.1 (the codec before D12): deflate 1.04 of zlib's
+throughput on average (0.89–1.26), inflate 2.65 (0.81–5.05). Callgrind, 2 MiB of text at level 6:
+about 460M instructions, zlib 489M.
 
 Not measured: a package install through `modules/pm`. The package manager unpacks with the
 standard library's own `silk.compress.inflate`, which this change does not touch.
 
 ## Compiler walls
 
-None. The encoder needed unaligned 8-byte loads, a trailing-zero count, and `u16x8` saturating
-subtraction (tried, not kept). The standard library has all three. The decoder already had SIMD
-copies and a BMI2 build.
+None that blocked. The encoder needed unaligned 2-, 4- and 8-byte loads, a trailing-zero count,
+and `u16x8` saturating subtraction (tried, not kept). The standard library has all of them; the
+decoder already had SIMD copies and a BMI2 build. Two gaps, worked around:
+
+- No byte swap for integers, so the multiplicative hash's single 4-byte load is used on
+  little-endian targets only (`static if`), and other targets read the 4 bytes one at a time.
+- `Slice.copyInto` is not turned into a `memcpy` call. Its comment expects LLVM to form one, but
+  the build has no `memcpy` there, and the vectorized loop copies large stored blocks at about
+  0.7 of the speed of libc's AVX `memcpy` (inflate of random data in `bench_codec`).
 
 ## Upstreaming
 
-[silk-lang/silk#3122](https://github.com/silk-lang/silk/pull/3122), a draft: the two files as in
-`src/stdlib_copy` (without their header note), `corpus/native/deflate-zlib-bytes`, a changeset with
-migration notes, and the regenerated `reference/stdlib`. Before it was opened, these ran with
-Silk 0.1.0-dev.74: nine `corpus/native` programs, `silk doctest --stdlib` (414 passed, 0 failed),
-and `doc-reference --check`. Once a release contains it, delete `src/stdlib_copy` as described at
-the top of this file.
+[silk-lang/silk#3122](https://github.com/silk-lang/silk/pull/3122), a draft, not to be merged from
+here. It holds:
+
+- the two files as in `src/stdlib_copy`, without their header note, including `Options.hash`
+  (D12);
+- `corpus/native/deflate-zlib-bytes`, which checks both hashes against bytes that zlib 1.3.1 and
+  Node 24 wrote;
+- `hash: Hash.Rolling` in the corpus's `Options` literals;
+- a changeset with migration notes (`Options` has a new field);
+- the regenerated `reference/stdlib`.
+
+With Silk 0.1.0-dev.74 these ran on the final files:
+
+- `deflate-zlib-bytes`, `deflate-encode`, `inflate-fast-loop`, `streaming-inflate`,
+  `http-content-decoding` and `tar-write` exit with their expected codes;
+- `silk doctest --stdlib`: 414 passed, 4 skipped, 0 failed.
+
+Once a release contains it, delete `src/stdlib_copy` as described at the top of this file.
