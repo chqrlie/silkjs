@@ -272,7 +272,8 @@ static if Intrinsic.targetOperatingSystem() == "darwin" {
   }
   unsafe fn queueChange(queue: i32, change: KernelEvent) -> i32 {
     let changes = [change]
-    if unsafe kevent(queue, Pointer.fromSlice<KernelEvent>(&changes), 1, Pointer.null<KernelEvent>(), 0, Pointer.null<TimeSpec>()) < 0 { return -(unsafe errno()) }
+    let mut none: [KernelEvent; 0] = []
+    if unsafe kevent(queue, Pointer.fromSlice<KernelEvent>(&changes), 1, Pointer.fromMutSlice<KernelEvent>(&mut none), 0, Pointer.null<TimeSpec>()) < 0 { return -(unsafe errno()) }
     return 0
   }
   unsafe fn queueSet(queue: i32, fd: i32, tag: u64, previous: i32, events: i32) -> i32 {
@@ -295,7 +296,8 @@ static if Intrinsic.targetOperatingSystem() == "darwin" {
   unsafe fn queueWait(queue: i32, ready: &mut [Ready; 64], timeout: i64) -> i32 {
     let mut raw: [KernelEvent; 64] = [kernelEvent(0, 0, 0, 0, 0); 64]
     let span = TimeSpec { seconds: if timeout > 0 { timeout / 1000 } else { 0 }, nanoseconds: if timeout > 0 { (timeout % 1000) * 1000000 } else { 0 } }
-    let count = unsafe kevent(queue, Pointer.null<KernelEvent>(), 0, Pointer.fromMutSlice<KernelEvent>(&mut raw), 64, if timeout < 0 { Pointer.null<TimeSpec>() } else { Pointer.fromRef<TimeSpec>(&span) })
+    let nothing: [KernelEvent; 0] = []
+    let count = unsafe kevent(queue, Pointer.fromSlice<KernelEvent>(&nothing), 0, Pointer.fromMutSlice<KernelEvent>(&mut raw), 64, if timeout < 0 { Pointer.null<TimeSpec>() } else { Pointer.fromRef<TimeSpec>(&span) })
     if count < 0 { return 0 }
     let mut index: usize = 0
     while index < i32.toUsize(count) {
