@@ -13,8 +13,8 @@ import silk.collections.list { List }
 import silk.collections.slice { Slice }
 import silk.num.u32
 import silk.num.u64
-import ext.diagnostics_hub as hub
-import ext.diagnostics_hub { Mailbox }
+import silkjsruntime.ext.diagnostics_hub as hub
+import silkjsruntime.ext.diagnostics_hub { Mailbox }
 
 pub const OPEN: u32 = 1
 pub const ROUTE_RESPONSE: u32 = 4

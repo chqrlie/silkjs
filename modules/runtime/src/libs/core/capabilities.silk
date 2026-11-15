@@ -27,6 +27,7 @@ import silkjs.js_runtime_registry { ClassIdAllocator }
 import ext.diagnostics_fatal { RuntimeHeap }
 import ext.fs_async as fs_async
 import ext.library_hooks { SecureOps, ThreadSetup }
+import ext.diagnostics_hub { Mailbox }
 import libs.core.host { Services }
 
 /// The first native function id that belongs to the embedder's [`HostApi`]: `NativeFunctionId.Host`
@@ -520,18 +521,54 @@ impl Workers for EmptyWorkers { static fn present() -> bool { return false } }
 /// CPU profiles the `v8` module takes, and coverage stay the core's. Without it
 /// `require('inspector')` fails with `ERR_INSPECTOR_NOT_AVAILABLE` and the inspector options are
 /// bad options, as in a Node build without the inspector. It needs `Network` (`checkCombination`).
+///
+/// The real implementation is `NodeInspector` of ./inspector (silkjsruntime-inspector), which
+/// brings the inspector's server.
 pub interface Inspector {
   /// A constant of the implementation type: whether the inspector is there.
   static fn present() -> bool
+  /// The instance a new worker thread starts with, made from its parent's: nothing opened yet.
+  fn forWorker(self: &Self) -> Self
+  /// Opens this runtime's inspector: `wake` wakes its loop, `mailbox` reaches its worker threads.
+  effect fn open(self: &mut Self, wake: ?*mut u8, mailbox: Mailbox) -> () ! OutOfMemoryError
+  /// Native function `INSPECTOR_FIRST + operation`.
+  unsafe effect fn call<'m, C: Composition>(self: &Self, engine: &mut Engine<'m, Services<C>>, context: *mut HeapHeader, operation: u32, argc: i32, argv: &FrameSlots) -> ValueBits
+    ! OutOfMemoryError | JsException ? &mut Allocator
+  /// A script or function was compiled: sessions are told of its source.
+  unsafe effect fn compiledSource<'m, C: Composition>(self: &Self, engine: &mut Engine<'m, Services<C>>, context: *mut HeapHeader, compiled: ValueBits) -> ()
+    ! OutOfMemoryError | JsException ? &mut Allocator
+  /// The main module's code: `--inspect-brk` breaks at its first line.
+  unsafe effect fn markEntry<'m, C: Composition>(self: &Self, engine: &mut Engine<'m, Services<C>>, context: *mut HeapHeader, compiled: ValueBits) -> ()
+    ! JsException ? &mut Allocator
+  /// The engine's debugger event `event` (a pause, a step).
+  unsafe effect fn debuggerCallback<'m, C: Composition>(self: &Self, engine: &mut Engine<'m, Services<C>>, context: *mut HeapHeader, event: u32) -> () ? &mut Allocator
+  /// Handles the sessions' messages, waiting up to `waitMs` for one (-1: no limit).
+  unsafe effect fn pumpCallback<'m, C: Composition>(self: &Self, engine: &mut Engine<'m, Services<C>>, context: *mut HeapHeader, waitMs: i32) -> () ? &mut Allocator
+  /// Closes the server and the sessions.
+  unsafe fn dispose<'m, C: Composition>(self: &mut Self, engine: &mut Engine<'m, Services<C>>, context: *mut HeapHeader) -> ()
 }
-/// Node's inspector protocol, over the engine.
-pub struct NodeInspector {}
-impl Copy for NodeInspector {}
-impl Inspector for NodeInspector { static fn present() -> bool { return true } }
+/// The inspector's native ids: `INSPECTOR_FIRST` and the `INSPECTOR_COUNT - 1` after it.
+pub const INSPECTOR_FIRST: u32 = 15000
+pub const INSPECTOR_COUNT: u32 = 33
 /// No inspector.
 pub struct EmptyInspector {}
 impl Copy for EmptyInspector {}
-impl Inspector for EmptyInspector { static fn present() -> bool { return false } }
+impl Inspector for EmptyInspector {
+  static fn present() -> bool { return false }
+  fn forWorker(self: &Self) -> Self { return EmptyInspector {} }
+  effect fn open(self: &mut Self, wake: ?*mut u8, mailbox: Mailbox) -> () ! OutOfMemoryError {}
+  unsafe effect fn call<'m, C: Composition>(self: &Self, engine: &mut Engine<'m, Services<C>>, context: *mut HeapHeader, operation: u32, argc: i32, argv: &FrameSlots) -> ValueBits
+    ! OutOfMemoryError | JsException ? &mut Allocator {
+    Intrinsic.trap("the inspector is not there")
+  }
+  unsafe effect fn compiledSource<'m, C: Composition>(self: &Self, engine: &mut Engine<'m, Services<C>>, context: *mut HeapHeader, compiled: ValueBits) -> ()
+    ! OutOfMemoryError | JsException ? &mut Allocator {}
+  unsafe effect fn markEntry<'m, C: Composition>(self: &Self, engine: &mut Engine<'m, Services<C>>, context: *mut HeapHeader, compiled: ValueBits) -> ()
+    ! JsException ? &mut Allocator {}
+  unsafe effect fn debuggerCallback<'m, C: Composition>(self: &Self, engine: &mut Engine<'m, Services<C>>, context: *mut HeapHeader, event: u32) -> () ? &mut Allocator {}
+  unsafe effect fn pumpCallback<'m, C: Composition>(self: &Self, engine: &mut Engine<'m, Services<C>>, context: *mut HeapHeader, waitMs: i32) -> () ? &mut Allocator {}
+  unsafe fn dispose<'m, C: Composition>(self: &mut Self, engine: &mut Engine<'m, Services<C>>, context: *mut HeapHeader) -> () {}
+}
 
 /// The file type bits ([`ModuleResolver.kind`]) of a regular file.
 pub const MODULE_FILE: i32 = 0o100000
@@ -563,7 +600,7 @@ pub interface ModuleResolver {
 /// a capability the program does not want is given its empty implementation.
 ///
 /// ```silk
-/// let capabilities = Capabilities { platform: OsPlatform {}, modules: NodeResolution {}, files: OsFiles {}, compression: NativeCompression.make(), http2: Nghttp2.make(), crypto: OpenSslCrypto.make(), tls: OpenSslTls.make(), database: SqliteDatabase.make(), addons: DlopenAddons {}, processes: OsProcesses {}, network: OsNetwork {}, http: Llhttp.make(), systemInfo: OsSystemInfo {}, typeStripping: Amaro {}, workers: ThreadWorkers {}, inspector: NodeInspector {}, wasm: EmptyWasm {}, hostApi: EmptyHostApi {} }
+/// let capabilities = Capabilities { platform: OsPlatform {}, modules: NodeResolution {}, files: OsFiles {}, compression: NativeCompression.make(), http2: Nghttp2.make(), crypto: OpenSslCrypto.make(), tls: OpenSslTls.make(), database: SqliteDatabase.make(), addons: DlopenAddons {}, processes: OsProcesses {}, network: OsNetwork {}, http: Llhttp.make(), systemInfo: OsSystemInfo {}, typeStripping: Amaro {}, workers: ThreadWorkers {}, inspector: NodeInspector.make(), wasm: EmptyWasm {}, hostApi: EmptyHostApi {} }
 /// ```
 pub struct Capabilities<P, M, F, Z, H, K, T, D, N, R, E, L, S, Y, X, I, W, A> {
   pub platform: P,
@@ -653,6 +690,14 @@ pub interface Composition {
   unsafe fn wasmFinalize<'m>(engine: &mut Engine<'m, Services<Self>>, rt: *mut HeapHeader, object: *mut HeapHeader) -> ()
   unsafe fn wasmOpenHandles<'m>(engine: &Engine<'m, Services<Self>>) -> usize
   effect fn compressionOpen<'m>(engine: &mut Engine<'m, Services<Self>>) -> () ! OutOfMemoryError
+  effect fn inspectorOpen<'m>(engine: &mut Engine<'m, Services<Self>>, wake: ?*mut u8, mailbox: Mailbox) -> () ! OutOfMemoryError
+  unsafe effect fn inspectorCall<'m>(engine: &mut Engine<'m, Services<Self>>, context: *mut HeapHeader, operation: u32, argc: i32, argv: &FrameSlots) -> ValueBits
+    ! OutOfMemoryError | JsException ? &mut Allocator
+  unsafe effect fn inspectorCompiledSource<'m>(engine: &mut Engine<'m, Services<Self>>, context: *mut HeapHeader, compiled: ValueBits) -> () ! OutOfMemoryError | JsException ? &mut Allocator
+  unsafe effect fn inspectorMarkEntry<'m>(engine: &mut Engine<'m, Services<Self>>, context: *mut HeapHeader, compiled: ValueBits) -> () ! JsException ? &mut Allocator
+  unsafe effect fn inspectorDebuggerCallback<'m>(engine: &mut Engine<'m, Services<Self>>, context: *mut HeapHeader, event: u32) -> () ? &mut Allocator
+  unsafe effect fn inspectorPumpCallback<'m>(engine: &mut Engine<'m, Services<Self>>, context: *mut HeapHeader, waitMs: i32) -> () ? &mut Allocator
+  unsafe fn inspectorDispose<'m>(engine: &mut Engine<'m, Services<Self>>, context: *mut HeapHeader) -> ()
   effect fn cryptoOpen<'m>(engine: &mut Engine<'m, Services<Self>>, main: bool) -> () ! OutOfMemoryError
   unsafe fn cryptoThreadSetup<'m>(engine: &Engine<'m, Services<Self>>) -> ThreadSetup
   unsafe effect fn cryptoCall<'m>(engine: &mut Engine<'m, Services<Self>>, context: *mut HeapHeader, id: u32, io: *mut fs_async.State, argc: i32, argv: &FrameSlots) -> ValueBits
@@ -735,7 +780,7 @@ impl<P: Platform + Copy, M: ModuleResolver + Copy, F: Files + Copy, Z: Compressi
   static fn filesDirect() -> bool { return directFiles<F>() }
   unsafe fn filesExecute(self: &Self, call: &Call, out: &mut Outcome) -> () { unsafe self.files.execute(&call, &mut out) }
   fn forWorker(self: &Self) -> Self {
-    return Capabilities<P, M, F, Z, H, K, T, D, N, R, E, L, S, Y, X, I, W, A> { platform: self.platform.forWorker(), modules: self.modules.forWorker(), files: self.files.forWorker(), compression: self.compression.forWorker(), http2: self.http2.forWorker(), crypto: self.crypto.forWorker(), tls: self.tls.forWorker(), database: self.database.forWorker(), addons: self.addons, processes: self.processes, network: self.network, http: self.http.forWorker(), systemInfo: self.systemInfo, typeStripping: self.typeStripping, workers: self.workers, inspector: self.inspector, wasm: self.wasm.forWorker(), hostApi: self.hostApi.forWorker() }
+    return Capabilities<P, M, F, Z, H, K, T, D, N, R, E, L, S, Y, X, I, W, A> { platform: self.platform.forWorker(), modules: self.modules.forWorker(), files: self.files.forWorker(), compression: self.compression.forWorker(), http2: self.http2.forWorker(), crypto: self.crypto.forWorker(), tls: self.tls.forWorker(), database: self.database.forWorker(), addons: self.addons, processes: self.processes, network: self.network, http: self.http.forWorker(), systemInfo: self.systemInfo, typeStripping: self.typeStripping, workers: self.workers, inspector: self.inspector.forWorker(), wasm: self.wasm.forWorker(), hostApi: self.hostApi.forWorker() }
   }
   effect fn platformGetenv<'m>(engine: &Engine<'m, Services<Self>>, name: &[u8], into: &mut List<u8>) -> bool ! OutOfMemoryError ? &mut Allocator {
     let platform = engine.services.capabilities.platform return run platform.getenv(name, &mut into.*)
@@ -862,6 +907,28 @@ impl<P: Platform + Copy, M: ModuleResolver + Copy, F: Files + Copy, Z: Compressi
   unsafe fn tlsOpenHandles<'m>(engine: &Engine<'m, Services<Self>>) -> usize { let tls = engine.services.capabilities.tls return unsafe tls.openHandles() }
   unsafe fn tlsClose<'m>(engine: &mut Engine<'m, Services<Self>>, context: *mut HeapHeader) -> () {
     let mut tls = engine.services.capabilities.tls unsafe tls.close(&mut engine, context) engine.services.capabilities.tls = tls
+  }
+  effect fn inspectorOpen<'m>(engine: &mut Engine<'m, Services<Self>>, wake: ?*mut u8, mailbox: Mailbox) -> () ! OutOfMemoryError {
+    run engine.services.capabilities.inspector.open(wake, mailbox)
+  }
+  unsafe effect fn inspectorCall<'m>(engine: &mut Engine<'m, Services<Self>>, context: *mut HeapHeader, operation: u32, argc: i32, argv: &FrameSlots) -> ValueBits
+    ! OutOfMemoryError | JsException ? &mut Allocator {
+    let inspector = engine.services.capabilities.inspector return run unsafe inspector.call(&mut engine, context, operation, argc, argv)
+  }
+  unsafe effect fn inspectorCompiledSource<'m>(engine: &mut Engine<'m, Services<Self>>, context: *mut HeapHeader, compiled: ValueBits) -> () ! OutOfMemoryError | JsException ? &mut Allocator {
+    let inspector = engine.services.capabilities.inspector run unsafe inspector.compiledSource(&mut engine, context, compiled)
+  }
+  unsafe effect fn inspectorMarkEntry<'m>(engine: &mut Engine<'m, Services<Self>>, context: *mut HeapHeader, compiled: ValueBits) -> () ! JsException ? &mut Allocator {
+    let inspector = engine.services.capabilities.inspector run unsafe inspector.markEntry(&mut engine, context, compiled)
+  }
+  unsafe effect fn inspectorDebuggerCallback<'m>(engine: &mut Engine<'m, Services<Self>>, context: *mut HeapHeader, event: u32) -> () ? &mut Allocator {
+    let inspector = engine.services.capabilities.inspector run unsafe inspector.debuggerCallback(&mut engine, context, event)
+  }
+  unsafe effect fn inspectorPumpCallback<'m>(engine: &mut Engine<'m, Services<Self>>, context: *mut HeapHeader, waitMs: i32) -> () ? &mut Allocator {
+    let inspector = engine.services.capabilities.inspector run unsafe inspector.pumpCallback(&mut engine, context, waitMs)
+  }
+  unsafe fn inspectorDispose<'m>(engine: &mut Engine<'m, Services<Self>>, context: *mut HeapHeader) -> () {
+    let mut inspector = engine.services.capabilities.inspector unsafe inspector.dispose(&mut engine, context) engine.services.capabilities.inspector = inspector
   }
   effect fn compressionOpen<'m>(engine: &mut Engine<'m, Services<Self>>) -> () ! OutOfMemoryError {
     run engine.services.capabilities.compression.open()

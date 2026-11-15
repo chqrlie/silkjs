@@ -60,7 +60,7 @@ import ext.webstorage_native
 import ext.worker_native
 import ext.napi_native
 import ext.profile_native
-import ext.inspector_native
+import libs.core.capabilities { INSPECTOR_FIRST }
 import libs.core.intl as intl
 import libs.core.capabilities { Composition, checkCombination }
 import libs.core.capabilities as capabilities
@@ -375,10 +375,7 @@ unsafe effect fn saveImage<'m, C: Composition>(engine: &mut Engine<'m, Services<
   static if Composition.addonsPresent() { if let Option<*mut napi_native.State>.Some { value: napi } = Pointer.nonNullMut<napi_native.State>(engine.services.napi) { unsafe napi_native.close(&mut engine, context, napi) } }
   let immediateQueue = unsafe host.immediatesState(&mut engine)
   unsafe immediates.close(&mut engine, rt, immediateQueue)
-  if let Option<*mut inspector_native.State>.Some { value: inspector } = Pointer.nonNullMut<inspector_native.State>(engine.services.inspector) {
-    engine.services.inspector = Pointer.null<inspector_native.State>()
-    unsafe inspector_native.dispose(&mut engine, context, inspector)
-  }
+  unsafe Composition.inspectorDispose(&mut engine, context)
   unsafe Composition.wasmClose(&mut engine, context)
   let written = unsafe heap_image.save(unsafe Intrinsic.pointerRequalify<?*mut u8, *mut u8>(region), path)
   if written { unsafe leave(status) }
@@ -533,7 +530,7 @@ unsafe effect fn configure<'m, C: Composition>(engine: &mut Engine<'m, Services<
   at = 0
   static if !Composition.inspectorPresent() { at = inspectorNames.length }
   while at < inspectorNames.length {
-    run unsafe function(&mut engine, context, native, inspectorNames[at], inspector_native.BASE + usize.toU32(at))
+    run unsafe function(&mut engine, context, native, inspectorNames[at], INSPECTOR_FIRST + usize.toU32(at))
     at = at + 1
   }
   let mut profileOperation: u32 = 0
@@ -624,7 +621,7 @@ unsafe effect fn execute<'m, D: Driver, C: Composition>(engine: &mut Engine<'m, 
   let workers = unsafe Intrinsic.pointerRequalify<?*mut worker_native.State, *mut worker_native.State>(engine.services.workers)
   run unsafe worker_native.attach(workers, io, unsafe Composition.cryptoThreadSetup(&engine.*))
   let mailbox = match unsafe worker_native.mailbox(workers) { Option<Mailbox>.Some { value } => value _ => { Intrinsic.trap("worker diagnostics are not attached") } }
-  static if Composition.inspectorPresent() { engine.services.inspector = run inspector_native.create(unsafe fs_async.wakerAddress(io), mailbox) }
+  run Composition.inspectorOpen(&mut engine, unsafe fs_async.wakerAddress(io), mailbox)
   static if Composition.networkPresent() { engine.services.network = run net_native.open(io, Composition.tlsSecureOps(&engine.*)) }
   run Composition.tlsOpen(&mut engine, allocator)
   run Composition.compressionOpen(&mut engine)
@@ -792,13 +789,7 @@ unsafe effect fn realm<'m, D: Driver, C: Composition>(engine: &mut Engine<'m, Se
     _ => ()
   }
   }
-  match Pointer.nonNullMut<inspector_native.State>(engine.services.inspector) {
-    Option<*mut inspector_native.State>.Some { value: inspector } => {
-      engine.services.inspector = Pointer.null<inspector_native.State>()
-      unsafe inspector_native.dispose(&mut engine, context, inspector)
-    }
-    _ => ()
-  }
+  unsafe Composition.inspectorDispose(&mut engine, context)
   if !Pointer.isNull<worker_native.State>(engine.services.workers) {
     let workers = unsafe Intrinsic.pointerRequalify<?*mut worker_native.State, *mut worker_native.State>(engine.services.workers)
     status = unsafe worker_native.exitCode(workers, status)

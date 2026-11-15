@@ -693,6 +693,7 @@ that depends on the core, as `WamrWasm` does in ./wamr:
 | ./llhttp (`silkjsruntime-llhttp`) | `Llhttp` | llhttp and its bridge |
 | ./sqlite (`silkjsruntime-sqlite`) | `SqliteDatabase` | SQLite (lib-sqlite) |
 | ./openssl (`silkjsruntime-openssl`) | `OpenSslCrypto`, `OpenSslTls` | OpenSSL |
+| ./inspector (`silkjsruntime-inspector`) | `NodeInspector` | the inspector's WebSocket server (its own sockets and thread) |
 | ./wamr (`silkjsruntime-wamr`) | `WamrWasm` | WAMR, SIMDe |
 
 The core's manifest no longer lists those libraries. The embedding smoke test checks with `nm`
@@ -707,6 +708,12 @@ through C function tables the core defines and the implementation fills
 `Crypto.threadSetup`), so the core names no OpenSSL symbol; the empty implementations give tables
 that attach no session and set nothing up. A library's version is a call of its native with no
 arguments, so ordinary calls pay nothing for it.
+
+The inspector's server computes the WebSocket handshake's SHA-1 itself, so it needs no OpenSSL.
+`NodeInspector` holds the protocol's natives and the server; the engine's hooks reach it through
+`Inspector` (`compiledSource`, `markEntry`, `debuggerCallback`, `pumpCallback`). The debugger
+metadata the engine keeps on code (`ext/inspector_debugger` and what it uses) stays in the core,
+since `vm` and the loader defer sources whether or not there is an inspector.
 
 ## Risks and decisions taken
 

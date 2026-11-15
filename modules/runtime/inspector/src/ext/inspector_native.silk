@@ -22,23 +22,23 @@ import silkjs.js_core_types { FrameSlots, NativeErrorKind, RuntimeState, ObjectD
 import silkjs.js_value { ValueBits }
 import silkjs.js_exceptions { JsException }
 import silkjs.js_coercion_host { CoercionHooks }
-import libs.core.owners { Scope }
-import libs.core.owners as owners
-import libs.core.common as common
+import silkjsruntime.libs.core.owners { Scope }
+import silkjsruntime.libs.core.owners as owners
+import silkjsruntime.libs.core.common as common
 import silkjs.js_std_support as text
 import silkjs.js_promise as promises
 import silkjs.js_runtime as runtime
 import silkjs.js_debugger as debugger
 import silkjs.js_string_rope { RopeIterator }
-import ext.script_metadata as metadata
+import silkjsruntime.ext.script_metadata as metadata
 import ext.inspector_transport as transport
-import ext.diagnostics_hub as hub
-import ext.diagnostics_hub { Mailbox }
+import silkjsruntime.ext.diagnostics_hub as hub
+import silkjsruntime.ext.diagnostics_hub { Mailbox }
 import ext.inspector_route as route
-import ext.inspector_debugger as debug
-import ext.inspector_evaluate as evaluation
-import ext.inspector_values as values
-import ext.vm_native as vm
+import silkjsruntime.ext.inspector_debugger as debug
+import silkjsruntime.ext.inspector_evaluate as evaluation
+import silkjsruntime.ext.inspector_values as values
+import silkjsruntime.ext.vm_native as vm
 
 unsafe extern "C" fn calloc(count:usize,size:usize)->?*mut u8
 unsafe extern "C" fn free(pointer:?*mut u8)->()

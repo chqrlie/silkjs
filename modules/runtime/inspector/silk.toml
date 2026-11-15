@@ -1,0 +1,22 @@
+[package]
+name = "silkjsruntime-inspector"
+description = "The inspector of the SilkJS runtime: node:inspector, --inspect and its server; the real implementation of its Inspector capability"
+version = "0.1.0"
+silk-version = "0.1.0-dev.78+e02346fdb3aa"
+kind = "library"
+# `node_inspector` is NodeInspector.
+exports = ["node_inspector"]
+
+[dependencies]
+silkjs = { path = "../../engine" }
+silkjsruntime = { path = ".." }
+
+# The inspector's WebSocket server (its own sockets and thread), compiled into a program only
+# when it depends on this package.
+[native]
+sources = [
+  { c = "src/ext/inspector_transport.c", flags = ["-std=gnu11", "-O2", "-w"] },
+]
+link = [
+  { library = "pthread", mode = "dynamic", os = "linux" },
+]
