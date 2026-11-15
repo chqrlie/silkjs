@@ -1,0 +1,4 @@
+//! libuv's stream, TCP, pipe, TTY and UDP functions for Node-API addons. Placeholder until the
+//! module lands: the hooks ext.uv_api_loop calls exist, and refuse.
+pub unsafe fn streamClose(outer: *mut u8) -> () {}
+pub unsafe fn streamOpen(outer: *mut u8, fd: i32, readable: bool, writable: bool) -> i32 { return -38 }

@@ -124,6 +124,13 @@ None blocked the work, and no C was added. Reported for the compiler's owner:
    names neither the variable nor the assignment).
 8. `tools/keep_exports.py` cannot keep an export that takes a function pointer; such exports are
    still emitted for this package (the addon fixture links them), so this is a note, not a wall.
+9. **No variadic `export "C"` functions.** libuv's `int uv_loop_configure(uv_loop_t*, uv_loop_option, ...)`
+   cannot be defined with its C signature; `ext.uv_api_loop` exports it with a fixed third `int`.
+   On Linux x86-64 and GNU arm64 a variadic caller passes that argument in the same register, so
+   it behaves the same. On Darwin arm64 a variadic argument goes on the stack, so
+   `UV_LOOP_BLOCK_SIGNAL` there takes `SIGPROF` (the only signal libuv accepts) without reading it,
+   and an addon passing another signal gets success where libuv returns `UV_EINVAL`. Wanted:
+   `export "C" fn f(a: A, ...)` with a `VaList` reader, as calls to variadic externs already work.
 
 ## Test status (Linux x64, release build of this branch)
 
