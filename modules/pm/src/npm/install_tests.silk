@@ -670,7 +670,7 @@ effect fn sharesAWorkspace(pool: &Pool) -> ()
   run package(here, b"/tools/build/deep", b"{\"name\":\"deep\"}")
   run package(here, b"/elsewhere", b"{\"name\":\"elsewhere\"}")
   let cli = run path(here, b"/packages/lib/cli.js")
-  run writeFile(Bytes.asSlice(&cli), b"#!/usr/bin/env silkjsruntime\n")
+  run writeFile(Bytes.asSlice(&cli), b"#!/usr/bin/env silkjs\n")
   let empty = run path(here, b"/packages/empty")
   run makeDirectories(Bytes.asSlice(&empty))
 

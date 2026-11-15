@@ -37,7 +37,7 @@ def silk_output() -> Path:
 
 
 def release_binary() -> Path:
-    return silk_output() / "llvm" / host_target() / "release/silkjs"
+    return silk_output() / "llvm" / host_target() / "release/silkjs-engine"
 
 
 def compiler_path() -> Path:

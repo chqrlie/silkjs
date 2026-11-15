@@ -1,5 +1,5 @@
 [package]
-name = "silkjsruntime"
+name = "silkjs-runtime"
 version = "0.1.0"
 # The embedding API (src/runtime/embed.silk), the loop it turns, and the hook for an embedder's own
 # native functions (src/libs/core/embedder.silk). src/main.silk is the
@@ -9,8 +9,8 @@ silk-version = "0.1.0-dev.74+205aea3f5b2e"
 
 [dependencies]
 # The engine, from this repository's modules/engine.
-silkjs = { path = "../engine" }
-# The package manager, from this repository's modules/pm: `silkjsruntime install` and the other commands.
+silkjs = { path = "../engine", package = "silkjs-engine" }
+# The package manager, from this repository's modules/pm: `silkjs install` and the other commands.
 pm = { path = "../pm" }
 # SQLite 3 compiled from the amalgamation that silk-lang/lib-sqlite pins, with the features Node builds.
 sqlite = { git = "https://github.com/silk-lang/lib-sqlite", rev = "b633d162c209a41547c5a0ea3a96098eff2e20bb", package = "db-sqlite" }
@@ -22,6 +22,10 @@ nghttp2 = { path = "../native/nghttp2", package = "silkjs-nghttp2" }
 zlib = { path = "../native/zlib", package = "silkjs-zlib" }
 zstd = { path = "../native/zstd", package = "silkjs-zstd" }
 brotli = { path = "../native/brotli", package = "silkjs-brotli" }
+
+# The benchmark tasks (bench/README.md) are written with the package of ../benchkit.
+[profiles.tasks.dependencies]
+benchkit = { path = "../benchkit" }
 
 # The runtime's own C, and WAMR: vendor/wamr is WAMR with vendor/wamr/patches applied
 # (tools/vendor_wamr.py writes it). builtin_sources.c embeds the built-in JavaScript (tools/embed.py).

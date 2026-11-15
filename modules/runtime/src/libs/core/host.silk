@@ -367,7 +367,7 @@ pub unsafe effect fn fatal<'m>(engine: &mut Engine<'m, Services>, context: *mut 
   let printed = run Effect.result(printing.printValue(&mut engine, memory, unsafe lendRealm(&context, context), unsafe lendFor(error), Options.defaults()))
   match move printed {
     Result<List<u8>, OutOfMemoryError | JsException>.Success { value: bytes } => { let _written = platform.writeAll(2, bytes.asSlice()) }
-    _ => { let _written = platform.writeAll(2, b"silkjsruntime: fatal async hook error") }
+    _ => { let _written = platform.writeAll(2, b"silkjs: fatal async hook error") }
   }
   let _written = platform.writeAll(2, b"\n")
   unsafe native.exit(1)
