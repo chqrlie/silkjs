@@ -27,6 +27,7 @@ import silk.core.ownership { Copy }
 import ext.uv_fs { UvStat, UvTimespec }
 import silk.concurrency.atomic { CompareExchange }
 import ext.process_abi { Options, Stdio }
+import ext.uv_os
 import ext.uv_fsevents as fsevents
 import ext.uv_spawn_darwin as spawn_darwin
 
@@ -283,8 +284,10 @@ fn zeroStat() -> UvStat {
   return UvStat { st_dev: 0, st_mode: 0, st_nlink: 0, st_uid: 0, st_gid: 0, st_rdev: 0, st_ino: 0, st_size: 0, st_blksize: 0, st_blocks: 0, st_flags: 0, st_gen: 0, st_atim: zeroTime(), st_mtim: zeroTime(), st_ctim: zeroTime(), st_birthtim: zeroTime() }
 }
 
-/// Monotonic nanoseconds, libuv's uv_hrtime.
+/// Monotonic nanoseconds, libuv's uv_hrtime, which is also the loop's clock (libuv's uv__hrtime):
+/// on Darwin mach_continuous_time, as ext.uv_os, so that a timer never fires early by uv_hrtime.
 pub unsafe fn hrtime() -> u64 {
+  static if Intrinsic.targetOperatingSystem() == "darwin" { return unsafe uv_os.uv_hrtime() }
   let mut now = TimeSpec { seconds: 0, nanoseconds: 0 }
   let _ignored = unsafe clock_gettime(MONOTONIC, Pointer.fromMutRef<TimeSpec>(&mut now))
   return i64.toU64(now.seconds) * 1000000000 + i64.toU64(now.nanoseconds)
