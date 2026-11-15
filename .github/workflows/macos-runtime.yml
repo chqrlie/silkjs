@@ -41,6 +41,9 @@ jobs:
           "$RUNNER_TEMP/sl/bin/clang" --version
           xcrun --show-sdk-path
           sysctl hw.memsize hw.ncpu
+          # GNU timeout, which the fixture loop uses.
+          brew install coreutils >/dev/null 2>&1 || true
+          echo "$(brew --prefix)/opt/coreutils/libexec/gnubin" >> "$GITHUB_PATH"
       - name: Build the runtime
         working-directory: modules/runtime
         run: |
