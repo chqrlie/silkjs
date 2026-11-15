@@ -337,8 +337,10 @@ unsafe effect fn appendResourceSnapshots<'m, C: Composition>(engine: &mut Engine
   array: ValueBits) -> () ! JsException ? &mut Allocator {
   let length = run unsafe common.get(&mut engine, context, array, b"length")
   let mut index = f64.toU32(length.numericValue())
-  let network = unsafe networkState(&engine.*)
-  run unsafe net_native.appendResources(&mut engine, context, network, array, &mut index)
+  static if capabilities.hasNetwork<C>() {
+    let network = unsafe networkState(&engine.*)
+    run unsafe net_native.appendResources(&mut engine, context, network, array, &mut index)
+  }
   static if capabilities.hasCrypto<C>() {
     let crypto = unsafe cryptoState(&engine.*)
     run unsafe crypto_native.appendResources(&mut engine, context, crypto, array, &mut index)
@@ -467,8 +469,11 @@ unsafe effect fn pollOnce<'m, C: Composition>(engine: &mut Engine<'m, Services<C
     let crypto = unsafe cryptoState(&engine.*)
     cryptoRan = run unsafe crypto_native.poll(&mut engine, context, crypto)
   }
-  let network = unsafe networkState(&engine.*)
-  let netRan = run unsafe net_native.poll(&mut engine, context, network)
+  let mut netRan = false
+  static if capabilities.hasNetwork<C>() {
+    let network = unsafe networkState(&engine.*)
+    netRan = run unsafe net_native.poll(&mut engine, context, network)
+  }
   let mut compressionRan = false
   static if capabilities.hasCompression<C>() {
     let compression = unsafe compressionState(&engine.*)
@@ -839,9 +844,11 @@ impl<C: Composition> EngineServices for Services<C> {
     static if capabilities.hasWasm<C>() {
       if id == 9000 || id == 10000 { return run unsafe Composition.wasmCall(&mut engine, context, id, argc, argv) }
     }
+    static if capabilities.hasHttp<C>() {
     if id == 11000 {
       let parser = unsafe httpParserState(&engine.*)
       return run unsafe http_parser_native.dispatch(&mut engine, context, parser, argc, argv)
+    }
     }
     if id == 12000 {
       let tracing = unsafe traceState(&engine.*)
@@ -957,6 +964,7 @@ impl<C: Composition> EngineServices for Services<C> {
     }
     if url_native.handles(id) { return run unsafe url_native.dispatch(&mut engine, context, id, argc, argv) }
     if id == 2300 { return run unsafe os_native.dispatch(&mut engine, context, argc, argv) }
+    static if capabilities.hasNetwork<C>() {
     if id == 2400 {
       let network = unsafe networkState(&engine.*)
       return run unsafe net_native.dispatch(&mut engine, context, network, argc, argv)
@@ -982,6 +990,7 @@ impl<C: Composition> EngineServices for Services<C> {
       let network = unsafe networkState(&engine.*)
       let sessions = engine.services.tls
       return run unsafe net_native.secure(&mut engine, context, network, sessions, argv)
+    }
     }
     static if capabilities.hasTls<C>() {
     if id == 2500 {

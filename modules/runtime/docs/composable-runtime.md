@@ -630,6 +630,18 @@ runtime; `silk build` does.
 
 The smoke test without WebAssembly has none of the four; the one with it has all of them.
 
+**Step 5, second part: Network and Http.** `OsNetwork` and `EmptyNetwork`, `Llhttp` and
+`EmptyHttp`. Without the network `node:net`, `node:dgram`, `node:dns`, `node:http`, `node:tty`,
+`fetch` and `WebSocket` are not there, and the network's natives (2400 to 2405), state, loop turn
+and resource report are not compiled; without the HTTP/1 parser its native (11000) and state are
+not. Standard output and error are then written synchronously, as a file's are (`process.stdout.isTTY`
+still says whether it is a terminal), and standard input is read as a file when there is a file
+system. `tty` is the network's now (a terminal stream is a socket of libuv's, as in Node), and the
+message event classes that worker ports use are the core's. `checkCombination` has the rules the
+graph declares: the network needs Http, and Tls, Http2 and Processes need the network. The
+inspector's own server needs the network as well; the inspector is not a capability yet, so a
+runtime without the network has the in-process inspector only.
+
 **Step 6, first part: Database, NativeAddons and Processes.** `SqliteDatabase` and
 `EmptyDatabase`, `DlopenAddons` and `EmptyAddons`, `OsProcesses` and `EmptyProcesses`, in the same
 shape as the libraries of step 5. Without a database

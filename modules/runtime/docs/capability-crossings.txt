@@ -69,6 +69,7 @@ internal/bootstrap/silk	Core	internal/web/storage	Database	lazy
 internal/bootstrap/silk	Core	internal/web/wasm	Wasm	load
 internal/bootstrap/silk	Core	internal/worker	Workers	load
 internal/bootstrap/silk	Core	os	SystemInfo	lazy
+internal/bootstrap/silk	Core	tty	Network	lazy
 internal/child_process/ipc	Processes	_http_common	Http	lazy
 internal/compile_cache	Core	host.compression	Compression	call
 internal/compile_cache	Core	os	SystemInfo	lazy
@@ -162,6 +163,7 @@ internal/startup_controls	Core	worker_threads	Workers	lazy
 internal/stdio	Core	fs	Files	lazy
 internal/stdio	Core	internal/net/transport	Network	load
 internal/stdio	Core	net	Network	lazy
+internal/stdio	Core	tty	Network	lazy
 internal/streams/fast-utf8-stream	Core	fs	Files	lazy
 internal/streams/fast-utf8-stream	Core	internal/fs/utils	Files	lazy
 internal/streams/iter/compression	Core	internal/compression/binding	Compression	lazy
@@ -196,7 +198,6 @@ internal/worker	Workers	internal/heap_prof	Inspector	lazy
 internal/worker	Workers	internal/trace_events	Inspector	lazy
 internal/worker	Workers	internal/watch_mode/dependencies	Executable	lazy
 internal/worker	Workers	internal/worker/profiles	Inspector	lazy
-internal/worker/broadcast	Workers	internal/web/websocket/events	Network	load
 internal/worker/clone	Core	crypto	Crypto	lazy
 internal/worker/clone	Core	host.processNative	Processes	call
 internal/worker/clone	Core	host.wasmNative	Wasm	call
@@ -210,7 +211,6 @@ internal/worker/clone	Core	internal/fs/utils	Files	lazy
 internal/worker/clone	Core	internal/net/binding	Network	lazy
 internal/worker/messaging	Core	host.workerNative	Workers	call
 internal/worker/ports	Core	host.workerNative	Workers	call
-internal/worker/ports	Core	internal/web/websocket/events	Network	load
 internal/ws	Network	crypto	Crypto	lazy
 net	Network	cluster	Processes	lazy
 path	Core	internal/path_events/glob	Files	lazy
@@ -219,8 +219,6 @@ perf_hooks	Core	internal/trace_events	Inspector	load
 stream/web	Core	internal/webstreams/compression	Compression	load
 tls	Tls	fs	Files	lazy
 trace_events	Inspector	worker_threads	Workers	load
-tty	Core	internal/net/binding	Network	load
-tty	Core	net	Network	load
 util	Core	host.processNative	Processes	call
 util	Core	worker_threads	Workers	lazy
 v8	Core	fs	Files	lazy

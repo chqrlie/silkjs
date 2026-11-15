@@ -12,11 +12,11 @@ declarations, the libc and library surface each service reaches today. Requires 
 
 | Service | Built-ins | JavaScript KiB | Load-time requires | Lazy requires | Silk files | Silk KiB | `extern "C"` |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Core | 326 | 3,474.7 | 948 | 353 | 41 | 731.9 | 80 |
+| Core | 326 | 3,473.8 | 944 | 354 | 41 | 736.0 | 80 |
 | Platform | 0 | 0.0 | 0 | 0 | 2 | 10.8 | 0 |
 | ModuleResolver | 15 | 181.7 | 22 | 20 | 2 | 6.9 | 0 |
 | Files | 18 | 238.9 | 76 | 40 | 5 | 81.2 | 49 |
-| Network | 45 | 1,422.2 | 271 | 65 | 4 | 253.6 | 107 |
+| Network | 45 | 1,423.8 | 275 | 64 | 4 | 253.6 | 107 |
 | Processes | 10 | 88.4 | 50 | 14 | 3 | 68.5 | 60 |
 | SystemInfo | 2 | 11.6 | 4 | 2 | 2 | 38.9 | 61 |
 | Workers | 6 | 47.6 | 15 | 20 | 4 | 117.0 | 24 |
@@ -31,7 +31,7 @@ declarations, the libc and library surface each service reaches today. Requires 
 | Inspector | 24 | 165.0 | 40 | 47 | 18 | 234.1 | 33 |
 | NativeAddons | 1 | 10.6 | 0 | 7 | 4 | 221.7 | 205 |
 | Executable | 47 | 577.1 | 323 | 35 | 6 | 38.9 | 21 |
-| **Total** | 561 | 11,131.4 | 2049 | 685 | 111 | 2,466.5 | 1474 |
+| **Total** | 561 | 11,132.1 | 2049 | 685 | 111 | 2,470.7 | 1474 |
 
 ## Linked size
 
@@ -116,7 +116,7 @@ Load-time edges block an empty service outright; lazy ones fail only on the path
 | Core | Http2 | 1 | 0 |
 | Core | Inspector | 34 | 4 |
 | Core | NativeAddons | 1 | 1 |
-| Core | Network | 17 | 5 |
+| Core | Network | 16 | 2 |
 | Core | Processes | 9 | 0 |
 | Core | SystemInfo | 16 | 3 |
 | Core | Tls | 3 | 0 |
@@ -156,7 +156,6 @@ Load-time edges block an empty service outright; lazy ones fail only on the path
 | Workers | Executable | 1 | 0 |
 | Workers | Files | 1 | 0 |
 | Workers | Inspector | 3 | 0 |
-| Workers | Network | 1 | 1 |
 
 ### Every crossing
 
@@ -232,6 +231,7 @@ Load-time edges block an empty service outright; lazy ones fail only on the path
 | `internal/bootstrap/silk` | Core | `internal/web/wasm` | Wasm | load |
 | `internal/bootstrap/silk` | Core | `internal/worker` | Workers | load |
 | `internal/bootstrap/silk` | Core | `os` | SystemInfo | lazy |
+| `internal/bootstrap/silk` | Core | `tty` | Network | lazy |
 | `internal/child_process/ipc` | Processes | `_http_common` | Http | lazy |
 | `internal/compile_cache` | Core | `host.compression` | Compression | call |
 | `internal/compile_cache` | Core | `os` | SystemInfo | lazy |
@@ -325,6 +325,7 @@ Load-time edges block an empty service outright; lazy ones fail only on the path
 | `internal/stdio` | Core | `fs` | Files | lazy |
 | `internal/stdio` | Core | `internal/net/transport` | Network | load |
 | `internal/stdio` | Core | `net` | Network | lazy |
+| `internal/stdio` | Core | `tty` | Network | lazy |
 | `internal/streams/fast-utf8-stream` | Core | `fs` | Files | lazy |
 | `internal/streams/fast-utf8-stream` | Core | `internal/fs/utils` | Files | lazy |
 | `internal/streams/iter/compression` | Core | `internal/compression/binding` | Compression | lazy |
@@ -354,7 +355,6 @@ Load-time edges block an empty service outright; lazy ones fail only on the path
 | `internal/web/websocket/framing` | Network | `crypto` | Crypto | lazy |
 | `internal/web/websocket` | Network | `crypto` | Crypto | lazy |
 | `internal/webstreams/adapters` | Core | `zlib` | Compression | lazy |
-| `internal/worker/broadcast` | Workers | `internal/web/websocket/events` | Network | load |
 | `internal/worker/clone` | Core | `crypto` | Crypto | lazy |
 | `internal/worker/clone` | Core | `host.processNative` | Processes | call |
 | `internal/worker/clone` | Core | `host.wasmNative` | Wasm | call |
@@ -368,7 +368,6 @@ Load-time edges block an empty service outright; lazy ones fail only on the path
 | `internal/worker/clone` | Core | `internal/net/binding` | Network | lazy |
 | `internal/worker/messaging` | Core | `host.workerNative` | Workers | call |
 | `internal/worker/ports` | Core | `host.workerNative` | Workers | call |
-| `internal/worker/ports` | Core | `internal/web/websocket/events` | Network | load |
 | `internal/worker` | Workers | `host.fsTracking` | Files | call |
 | `internal/worker` | Workers | `internal/heap_prof` | Inspector | lazy |
 | `internal/worker` | Workers | `internal/trace_events` | Inspector | lazy |
@@ -382,8 +381,6 @@ Load-time edges block an empty service outright; lazy ones fail only on the path
 | `stream/web` | Core | `internal/webstreams/compression` | Compression | load |
 | `tls` | Tls | `fs` | Files | lazy |
 | `trace_events` | Inspector | `worker_threads` | Workers | load |
-| `tty` | Core | `internal/net/binding` | Network | load |
-| `tty` | Core | `net` | Network | load |
 | `util` | Core | `host.processNative` | Processes | call |
 | `util` | Core | `worker_threads` | Workers | lazy |
 | `v8` | Core | `fs` | Files | lazy |

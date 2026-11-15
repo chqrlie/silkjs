@@ -1,7 +1,14 @@
 'use strict';
 
 const host = require('internal/host');
-const { native, error: nativeError } = require('internal/net/transport');
+// Without the network (Network.empty) there are no socket or terminal streams: a descriptor is a
+// terminal or not, as the engine's os module says, and every output is written synchronously, as a
+// file's is; standard input is read as a file when there is a file system.
+const network = host.hasService('Network');
+const { native, error: nativeError } = network ? require('internal/net/transport') : {
+  native(operation, [fd]) { return host.rawOS.isatty(fd) ? 5 : 6; },
+  error(code, syscall) { return Object.assign(new Error(`${syscall} ${code}`), { errno: code, syscall }); },
+};
 
 function socket(fd, reading) {
   const owned = native('duplicateFd', [fd]);
@@ -26,16 +33,16 @@ function addCleanup(fn) {
 function output(fd) {
   const kind = native('guessHandleType', [fd]);
   let stream;
-  if (kind === 5) {
+  if (kind === 5 && network) {
     stream = new (require('tty').WriteStream)(fd);
     stream._type = 'tty';
-  } else if (kind === 1 || kind === 2) {
+  } else if ((kind === 1 || kind === 2) && network) {
     stream = socket(fd, false);
     if (process.platform === 'win32') {
       const status = stream._handle.setBlocking(true);
       if (status < 0) { stream.destroy(); throw nativeError(status, 'setBlocking'); }
     }
-  } else if (kind === 6) {
+  } else if (kind === 6 || !network) {
     // Regular files (and character devices such as /dev/null) use synchronous
     // writes on all platforms.
     const { writeAll } = require('internal/tty/write');
@@ -51,6 +58,7 @@ function output(fd) {
     // As Node's SyncWriteStream, which marks itself not readable.
     stream.readable = false;
     stream._type = 'fs';
+    if (kind === 5) stream.isTTY = true;
   } else {
     // createWritableStdioStream's dummy black-hole output for a descriptor that is
     // none of these (closed, or a UDP socket).
@@ -74,12 +82,12 @@ function output(fd) {
 function input() {
   const kind = native('guessHandleType', [0]);
   let stream;
-  if (kind === 5) {
+  if (kind === 5 && network) {
     stream = new (require('tty').ReadStream)(0);
     stream._type = 'tty';
-  } else if (kind === 1 || kind === 2) {
+  } else if ((kind === 1 || kind === 2) && network) {
     stream = socket(0, true);
-  } else if (kind === 6) {
+  } else if (kind === 6 || (!network && host.hasService('Files'))) {
     stream = require('fs').createReadStream(undefined, { fd: 0, autoClose: false });
     stream._type = 'fs';
     // Even an explicit close() must not transfer ownership of process fd 0.

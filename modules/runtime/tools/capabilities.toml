@@ -47,6 +47,11 @@ needs = ["Platform", "ModuleResolver", "Files", "Network", "Processes", "SystemI
   "NativeAddons", "HostApi"]
 
 # Built-in JavaScript, by the name it is required by.
+# The message event classes are the core's: worker ports and broadcast channels use them as
+# WebSocket does, so they are there without the network.
+[[builtin]]
+service = "Core"
+names = ["internal/web/websocket/events"]
 [[builtin]]
 service = "TypeStripping"
 names = ["internal/deps/amaro", "internal/modules/typescript"]
@@ -105,7 +110,8 @@ names = ["fs", "internal/fs", "internal/fs_async", "internal/path_events/glob"]
 prefixes = ["fs/", "internal/fs/"]
 [[builtin]]
 service = "Network"
-names = ["net", "dgram", "dns", "internal/net", "internal/dgram", "internal/socketaddress", "internal/socket_list",
+# tty: a terminal stream is a socket of the network's, as in Node.
+names = ["net", "tty", "dgram", "dns", "internal/net", "internal/dgram", "internal/socketaddress", "internal/socket_list",
   "internal/blocklist", "internal/block_list_binding", "internal/stream_base_commons", "internal/js_stream_socket",
   "_http_agent", "_http_client", "_http_incoming", "_http_outgoing", "_http_server", "http", "internal/http",
   "internal/web/fetch", "internal/web/websocket", "internal/web/eventsource", "internal/web/serve", "internal/ws",

@@ -336,7 +336,7 @@ unsafe effect fn writeImage<'m, C: Composition>(engine: &mut Engine<'m, Services
 unsafe fn openHandles<'m, C: Composition>(engine: &Engine<'m, Services<C>>) -> bool {
   let services = &engine.services
   let mut open = false
-  if let Option<*mut net_native.State>.Some { value } = Pointer.nonNullMut<net_native.State>(services.network) { open = unsafe reportOpen(b"network and DNS", unsafe net_native.openHandles(value)) || open }
+  static if Composition.networkPresent() { if let Option<*mut net_native.State>.Some { value } = Pointer.nonNullMut<net_native.State>(services.network) { open = unsafe reportOpen(b"network and DNS", unsafe net_native.openHandles(value)) || open } }
   static if capabilities.hasCrypto<C>() { if let Option<*mut crypto_native.State>.Some { value } = Pointer.nonNullMut<crypto_native.State>(services.crypto) { open = unsafe reportOpen(b"crypto", unsafe crypto_native.openHandles(value)) || open } }
   static if capabilities.hasTls<C>() { if let Option<*mut tls_native.State>.Some { value } = Pointer.nonNullMut<tls_native.State>(services.tls) { open = unsafe reportOpen(b"TLS", unsafe tls_native.openHandles(value)) || open } }
   static if capabilities.hasCompression<C>() { if let Option<*mut compression_native.State>.Some { value } = Pointer.nonNullMut<compression_native.State>(services.compression) { open = unsafe reportOpen(b"zlib", unsafe compression_native.openHandles(value)) || open } }
@@ -449,7 +449,7 @@ unsafe effect fn configure<'m, C: Composition>(engine: &mut Engine<'m, Services<
   run unsafe function(&mut engine, context, native, b"builtinService", 42)
   // The services this runtime has (docs/composable-runtime.md): the bootstrap registers only
   // their built-ins. Every one is here until each becomes a capability the embedder chooses.
-  // Files, Compression, Http2, Crypto, Tls, Database, NativeAddons, Processes and Wasm are the embedder's choice (`Capabilities`); the rest are
+  // Files, Compression, Http2, Crypto, Tls, Database, NativeAddons, Processes, Network, Http and Wasm are the embedder's choice (`Capabilities`); the rest are
   // still always here.
   let mut wasm: &[u8] = b"" static if capabilities.hasWasm<C>() { wasm = b"Wasm" }
   let mut files: &[u8] = b"" static if capabilities.hasFiles<C>() { files = b"Files" }
@@ -460,8 +460,10 @@ unsafe effect fn configure<'m, C: Composition>(engine: &mut Engine<'m, Services<
   let mut database: &[u8] = b"" static if Composition.databasePresent() { database = b"Database" }
   let mut addons: &[u8] = b"" static if Composition.addonsPresent() { addons = b"NativeAddons" }
   let mut processes: &[u8] = b"" static if Composition.processesPresent() { processes = b"Processes" }
-  let present = [b"Platform", b"ModuleResolver", files, b"Network", processes, b"SystemInfo", b"Workers", crypto, tls,
-    compression, b"Http", http2, wasm, database, b"TypeStripping", b"Inspector", addons, b"HostApi"]
+  let mut network: &[u8] = b"" static if Composition.networkPresent() { network = b"Network" }
+  let mut http: &[u8] = b"" static if Composition.httpPresent() { http = b"Http" }
+  let present = [b"Platform", b"ModuleResolver", files, network, processes, b"SystemInfo", b"Workers", crypto, tls,
+    compression, http, http2, wasm, database, b"TypeStripping", b"Inspector", addons, b"HostApi"]
   let services = run unsafe common.array(&mut engine, memory, context)
   let mut named: usize = 0
   while named < present.length {
@@ -498,12 +500,14 @@ unsafe effect fn configure<'m, C: Composition>(engine: &mut Engine<'m, Services<
   let urlNames = [b"urlParse", b"urlCanParse", b"urlUpdate", b"urlFormParse", b"urlFormSerialize", b"urlDomainToASCII", b"urlDomainToUnicode", b"urlIdnaToASCII"]
   at = 0
   while at < urlNames.length { run unsafe function(&mut engine, context, native, urlNames[at], url_native.BASE + usize.toU32(at)) at = at + 1 }
-  run unsafe function(&mut engine, context, native, b"net", 2400)
-  run unsafe function(&mut engine, context, native, b"wsSend", 2401)
-  run unsafe function(&mut engine, context, native, b"httpRespond", 2402)
-  run unsafe function(&mut engine, context, native, b"httpChunk", 2403)
-  run unsafe function(&mut engine, context, native, b"httpRespondText", 2404)
-  run unsafe function(&mut engine, context, native, b"secure", 2405)
+  static if Composition.networkPresent() {
+    run unsafe function(&mut engine, context, native, b"net", 2400)
+    run unsafe function(&mut engine, context, native, b"wsSend", 2401)
+    run unsafe function(&mut engine, context, native, b"httpRespond", 2402)
+    run unsafe function(&mut engine, context, native, b"httpChunk", 2403)
+    run unsafe function(&mut engine, context, native, b"httpRespondText", 2404)
+    run unsafe function(&mut engine, context, native, b"secure", 2405)
+  }
   static if capabilities.hasTls<C>() { run unsafe function(&mut engine, context, native, b"tls", 2500) }
   static if capabilities.hasCompression<C>() {
     run unsafe function(&mut engine, context, native, b"compression", 2600)
@@ -545,7 +549,7 @@ unsafe effect fn configure<'m, C: Composition>(engine: &mut Engine<'m, Services<
     run unsafe function(&mut engine, context, native, b"wasmNative", 9000)
     run unsafe function(&mut engine, context, native, b"wasiNative", 10000)
   }
-  run unsafe function(&mut engine, context, native, b"httpParserNative", 11000)
+  static if Composition.httpPresent() { run unsafe function(&mut engine, context, native, b"httpParserNative", 11000) }
   run unsafe function(&mut engine, context, native, b"traceNative", 12000)
   run unsafe function(&mut engine, context, native, b"seaNative", 13000)
   let vmClassId = run unsafe vm_global.install(rt, &process.namespace)
@@ -621,7 +625,7 @@ unsafe effect fn execute<'m, D: Driver, C: Composition>(engine: &mut Engine<'m, 
   run unsafe worker_native.attach(workers, io, engine.services.crypto)
   let mailbox = match unsafe worker_native.mailbox(workers) { Option<Mailbox>.Some { value } => value _ => { Intrinsic.trap("worker diagnostics are not attached") } }
   engine.services.inspector = run inspector_native.create(unsafe fs_async.wakerAddress(io), mailbox)
-  engine.services.network = run net_native.open(io)
+  static if Composition.networkPresent() { engine.services.network = run net_native.open(io) }
   static if capabilities.hasTls<C>() { engine.services.tls = run tls_native.open(allocator) }
   static if capabilities.hasCompression<C>() { engine.services.compression = run compression_native.open() }
   engine.services.processes = run process_native.make(io, workers)
@@ -633,7 +637,7 @@ unsafe effect fn execute<'m, D: Driver, C: Composition>(engine: &mut Engine<'m, 
     if restored { unsafe Composition.wasmAdoptClasses(&mut engine, unsafe runtime.contextRuntime(context), (unsafe Pointer.read<ImageRoots>(unsafe rootsAt(image))).wasmClasses) }
     else { run unsafe Composition.wasmInstall(&mut engine, unsafe runtime.contextRuntime(context), &process.namespace) }
   }
-  engine.services.httpParser = run http_parser_native.open(allocator)
+  static if Composition.httpPresent() { engine.services.httpParser = run http_parser_native.open(allocator) }
   engine.services.tracing = run trace_native.open(allocator)
   match Pointer.nonNullMut<trace_native.State>(engine.services.tracing) {
     Option<*mut trace_native.State>.Some { value: tracing } => { unsafe fs_async.setTracing(io, unsafe Intrinsic.pointerReinterpret<*mut trace_native.State, *mut u8>(tracing)) }
@@ -809,12 +813,14 @@ unsafe effect fn realm<'m, D: Driver, C: Composition>(engine: &mut Engine<'m, Se
         }
         _ => ()
       }
+      static if Composition.networkPresent() {
       match Pointer.nonNullMut<net_native.State>(engine.services.network) {
         Option<*mut net_native.State>.Some { value: network } => {
           unsafe net_native.close(&mut engine, context, network)
           engine.services.network = Pointer.null<net_native.State>()
         }
         _ => ()
+      }
       }
       static if capabilities.hasTls<C>() {
       match Pointer.nonNullMut<tls_native.State>(engine.services.tls) {
@@ -843,12 +849,14 @@ unsafe effect fn realm<'m, D: Driver, C: Composition>(engine: &mut Engine<'m, Se
         _ => ()
       }
       }
+      static if Composition.httpPresent() {
       match Pointer.nonNullMut<http_parser_native.State>(engine.services.httpParser) {
         Option<*mut http_parser_native.State>.Some { value: parser } => {
           unsafe http_parser_native.close(&mut engine, context, parser)
           engine.services.httpParser = Pointer.null<http_parser_native.State>()
         }
         _ => ()
+      }
       }
       unsafe Composition.wasmCloseWasi(&mut engine, context)
       unsafe Composition.wasmClose(&mut engine, context)
