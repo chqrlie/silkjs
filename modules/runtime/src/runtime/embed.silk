@@ -1,13 +1,14 @@
 //! Embedding the runtime in another program.
 //!
-//! The executable (`src/main.silk`) owns its process: it reads the command line, sets signal
+//! The executable (`cli/src/main.silk`) owns its process: it reads the command line, sets signal
 //! dispositions, and its `process.exit()` ends the process. An embedded runtime owns none of
 //! that. Its host gives it the arguments it would have had, turns its loop from the host's own
 //! loop, and `process.exit()` ends the runtime instead, with the status the host's turn reports.
 //!
 //! ```silk
-//! // No WebAssembly, no functions of the host's: the smallest runtime.
-//! return run embed.start(options, &mut app, Capabilities { wasm: EmptyWasm {}, hostApi: EmptyHostApi {} })
+//! // The process's environment and files, no WebAssembly, no functions of the host's.
+//! let capabilities = Capabilities { platform: OsPlatform {}, modules: NodeResolution {}, wasm: EmptyWasm {}, hostApi: EmptyHostApi {} }
+//! return run embed.start(options, &mut app, move capabilities)
 //!
 //! struct App {}
 //! impl Host for App {

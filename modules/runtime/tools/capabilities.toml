@@ -125,6 +125,12 @@ prefixes = ["internal/repl/", "internal/main/", "test/", "internal/test_runner/"
 
 # Silk modules and C files, by their path under src/.
 [[silk]]
+service = "Platform"
+prefixes = ["libs/core/platforms", "ext/platform_native"]
+[[silk]]
+service = "ModuleResolver"
+prefixes = ["libs/core/module_sources", "ext/module_native"]
+[[silk]]
 service = "Wasm"
 prefixes = ["ext/wasm_", "ext/wasi_", "ext/wamr"]
 [[silk]]
@@ -242,6 +248,14 @@ service = "Inspector"
 first = 18000
 last = 18999
 service = "Inspector"
+[[block]]
+first = 19000
+last = 19000
+service = "ModuleResolver"
+[[block]]
+first = 19100
+last = 19100
+service = "Platform"
 
 # Data on the natives object that belongs to a service.
 [[native]]

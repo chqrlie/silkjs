@@ -106,7 +106,7 @@ function createLoader(host, builtins) {
   // A module's source. Node reads package.json files natively, so they never come here.
   function text(filename) {
     const fs = patchedFs('readFileSync');
-    return fs === null ? host.readText(filename) : `${fs.readFileSync(filename, 'utf8')}`;
+    return fs === null ? host.readModule(filename) : `${fs.readFileSync(filename, 'utf8')}`;
   }
   // Module._stat as user code replaced it (Node's experimental hook for a virtual file
   // system), which the CommonJS file lookups ask instead of the filesystem; null while
@@ -226,7 +226,7 @@ function createLoader(host, builtins) {
     if (known !== undefined) return known;
     if (!isFile(filename)) { packages.set(directory, null); return null; }
     let data;
-    try { data = JSON.parse(host.readText(filename).replace(/^\uFEFF/, '')); }
+    try { data = JSON.parse(host.readModule(filename).replace(/^\uFEFF/, '')); }
     catch (cause) {
       if (!(cause instanceof SyntaxError)) throw cause;
       throw Object.assign(error('ERR_INVALID_PACKAGE_CONFIG', filename, importing, cause.message), { cause });

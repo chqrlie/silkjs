@@ -12,13 +12,14 @@ declarations, the libc and library surface each service reaches today. Requires 
 
 | Service | Built-ins | JavaScript KiB | Load-time requires | Lazy requires | Silk files | Silk KiB | `extern "C"` |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Core | 326 | 3,469.1 | 953 | 349 | 38 | 690.5 | 79 |
-| ModuleResolver | 15 | 181.3 | 22 | 20 | 0 | 0.0 | 0 |
+| Core | 326 | 3,469.9 | 953 | 349 | 40 | 706.4 | 80 |
+| Platform | 0 | 0.0 | 0 | 0 | 2 | 10.8 | 0 |
+| ModuleResolver | 15 | 181.3 | 22 | 20 | 2 | 6.9 | 0 |
 | Files | 18 | 238.9 | 76 | 40 | 4 | 55.1 | 49 |
 | Network | 45 | 1,421.1 | 278 | 61 | 4 | 253.4 | 107 |
 | Processes | 10 | 88.4 | 50 | 14 | 3 | 68.5 | 60 |
 | SystemInfo | 2 | 11.6 | 4 | 2 | 2 | 38.9 | 61 |
-| Workers | 6 | 47.2 | 15 | 20 | 4 | 116.1 | 24 |
+| Workers | 6 | 47.2 | 15 | 20 | 4 | 117.1 | 24 |
 | Crypto | 28 | 453.5 | 159 | 55 | 3 | 162.5 | 280 |
 | Tls | 12 | 315.8 | 44 | 9 | 3 | 102.5 | 213 |
 | Compression | 7 | 61.0 | 25 | 1 | 2 | 39.1 | 48 |
@@ -28,9 +29,9 @@ declarations, the libc and library surface each service reaches today. Requires 
 | Database | 6 | 54.8 | 8 | 7 | 2 | 85.6 | 6 |
 | TypeStripping | 2 | 3,716.1 | 2 | 4 | 0 | 0.0 | 0 |
 | Inspector | 24 | 165.0 | 40 | 47 | 18 | 234.1 | 33 |
-| NativeAddons | 1 | 10.6 | 0 | 7 | 4 | 222.3 | 205 |
-| Executable | 47 | 577.1 | 323 | 35 | 6 | 38.2 | 21 |
-| **Total** | 561 | 11,123.9 | 2061 | 677 | 103 | 2,379.9 | 1473 |
+| NativeAddons | 1 | 10.6 | 0 | 7 | 4 | 221.7 | 205 |
+| Executable | 47 | 577.1 | 323 | 35 | 6 | 38.4 | 21 |
+| **Total** | 561 | 11,124.7 | 2061 | 677 | 109 | 2,414.2 | 1474 |
 
 ## Linked size
 
@@ -89,7 +90,7 @@ build without the capability would drop, at most.
 | `internal/deps/acorn/acorn/dist/acorn` | Core | 240.6 |
 | `internal/tls/roots` | Tls | 177.4 |
 | `internal/web/vendor/text-encoding/data/gb18030.cp` | Core | 139.8 |
-| `internal/bootstrap/silk` | Core | 134.2 |
+| `internal/bootstrap/silk` | Core | 135.0 |
 | `internal/loader/loader` | ModuleResolver | 122.3 |
 | `internal/http2/core` | Http2 | 118.5 |
 | `internal/webstreams/readablestream` | Core | 116.6 |
@@ -407,7 +408,8 @@ Load-time edges block an empty service outright; lazy ones fail only on the path
 | Service | Natives |
 | --- | --- |
 | Core | `asyncHookFatal`, `bufferCodec`, `bufferOperation`, `builtinCount`, `builtinName`, `builtinService`, `builtinSource`, `captureCallSites`, `checkSyntax`, `compileBuiltin`, `compileFunction`, `createInterceptor`, `defineLazyDataProperty`, `detectModuleSyntax`, `drainJobs`, `enqueueMicrotask`, `evaluateModule`, `getAsyncContext`, `getScriptMetadata`, `heapStatistics`, `hideFrames`, `immediateAttention`, `immediateCount`, `immediateCreate`, `immediateEnqueue`, `immediateEntry`, `immediateHooks`, `immediateRefs`, `immediateRun`, `immediateSettle`, `immediateSetup`, `immediateTurns`, `installPermissionGuard`, `isInterceptor`, `loopIdleTime`, `loopMetrics`, `markPromiseAsHandled`, `markUntransferable`, `mathSpecial`, `moduleHasTopLevelAwait`, `now`, `nowNanoseconds`, `pgRows`, `privateSymbol`, `promiseResult`, `promiseState`, `requireModule`, `runTicks`, `setAsyncContext`, `setAsyncHooksEnabled`, `setCompileCacheCallbacks`, `setFunctionSource`, `setImmediate`, `stalledTopLevelAwaits`, `urlCanParse`, `urlDomainToASCII`, `urlDomainToUnicode`, `urlFormParse`, `urlFormSerialize`, `urlIdnaToASCII`, `urlParse`, `urlUpdate`, `utilErrorMap`, `utilErrorMessage`, `writeBuiltinCache` |
-| Platform | `rawOS`, `rawStd` |
+| Platform | `platformNative`, `rawOS`, `rawStd` |
+| ModuleResolver | `moduleNative` |
 | Files | `fsConstants`, `fsSync`, `fsTracking`, `hasPendingIO`, `pollIO`, `resourceSnapshot`, `submit`, `watch`, `watchControl` |
 | Network | `httpChunk`, `httpRespond`, `httpRespondText`, `net`, `secure`, `wsSend` |
 | Processes | `processNative` |
@@ -428,7 +430,9 @@ Load-time edges block an empty service outright; lazy ones fail only on the path
 
 | Service | Modules |
 | --- | --- |
-| Core | `embed_smoke.silk`, `ext/blocking_pool.silk`, `ext/buffer_codec.silk`, `ext/builtin_cache.silk`, `ext/call_sites.silk`, `ext/diagnostics_fatal.silk`, `ext/diagnostics_hub.silk`, `ext/fs_async.silk`, `ext/immediates.silk`, `ext/introspection.silk`, `ext/keep_exports.silk`, `ext/module_cache.silk`, `ext/permission_gate.silk`, `ext/pg_rows.silk`, `ext/process_diagnostics.silk`, `ext/script_cache.silk`, `ext/script_metadata.silk`, `ext/system_errors.silk`, `ext/url_native.silk`, `ext/util_native.silk`, `ext/vm_global.silk`, `ext/vm_interrupt.silk`, `ext/vm_native.silk`, `lib.silk`, `libs/core/async_events.silk`, `libs/core/capabilities.silk`, `libs/core/common.silk`, `libs/core/host.silk`, `libs/core/intl.silk`, `libs/core/modules.silk`, `libs/core/owners.silk`, `runtime/embed.silk`, `runtime/embedded.silk`, `runtime/session.silk`, `runtime/worker.silk`, `wamr/src/wamr.silk`, `cli/src/embed_smoke_wamr.silk` |
+| Core | `embed_smoke.silk`, `ext/blocking_pool.silk`, `ext/buffer_codec.silk`, `ext/builtin_cache.silk`, `ext/call_sites.silk`, `ext/diagnostics_fatal.silk`, `ext/diagnostics_hub.silk`, `ext/fs_async.silk`, `ext/immediates.silk`, `ext/introspection.silk`, `ext/keep_exports.silk`, `ext/module_cache.silk`, `ext/permission_gate.silk`, `ext/pg_rows.silk`, `ext/process_diagnostics.silk`, `ext/script_cache.silk`, `ext/script_metadata.silk`, `ext/system_errors.silk`, `ext/url_native.silk`, `ext/util_native.silk`, `ext/vm_global.silk`, `ext/vm_interrupt.silk`, `ext/vm_native.silk`, `lib.silk`, `libs/core/async_events.silk`, `libs/core/capabilities.silk`, `libs/core/common.silk`, `libs/core/host.silk`, `libs/core/intl.silk`, `libs/core/modules.silk`, `libs/core/owners.silk`, `runtime/embed.silk`, `runtime/embedded.silk`, `runtime/session.silk`, `runtime/worker.silk`, `wamr/src/lib.silk`, `wamr/src/wamr.silk`, `cli/src/embed_smoke_wamr.silk`, `cli/src/napi_exports.silk` |
+| Platform | `ext/platform_native.silk`, `libs/core/platforms.silk` |
+| ModuleResolver | `ext/module_native.silk`, `libs/core/module_sources.silk` |
 | Files | `ext/fs_descriptors.silk`, `ext/fs_native.silk`, `ext/fs_ops.silk`, `ext/uv_fs.silk` |
 | Network | `ext/dns_abi.silk`, `ext/dns_native.silk`, `ext/net_native.silk`, `ext/uv_net.silk` |
 | Processes | `ext/process_abi.silk`, `ext/process_native.silk`, `ext/spawn_sync.silk` |

@@ -13,6 +13,7 @@
 //! [`Capabilities`] that every embedder must then fill.
 import silk.mem.allocator { Allocator, OutOfMemoryError }
 import silk.core.ownership { Copy }
+import silk.collections.list { List }
 import silkjs.js_engine { Engine }
 import silkjs.js_heap { HeapHeader }
 import silkjs.js_value { ValueBits }
@@ -38,8 +39,8 @@ pub interface Wasm {
   /// there: no native function, class or loop turn of theirs is registered, and the code behind
   /// them is not compiled.
   static fn present() -> bool
-  /// The instance a new worker thread starts with: nothing opened yet.
-  fn forWorker() -> Self
+  /// The instance a new worker thread starts with, made from its parent's: nothing opened yet.
+  fn forWorker(self: &Self) -> Self
   /// Opens this runtime's native state, before the bootstrap runs.
   effect fn open(self: &mut Self, allocator: *mut RuntimeHeap) -> () ! OutOfMemoryError
   /// Registers the engine classes in a runtime that did not start from a heap image.
@@ -79,7 +80,7 @@ pub struct EmptyWasm {}
 impl Copy for EmptyWasm {}
 impl Wasm for EmptyWasm {
   static fn present() -> bool { return false }
-  fn forWorker() -> Self { return EmptyWasm {} }
+  fn forWorker(self: &Self) -> Self { return EmptyWasm {} }
   effect fn open(self: &mut Self, allocator: *mut RuntimeHeap) -> () ! OutOfMemoryError {}
   unsafe effect fn install(self: &Self, rt: *mut HeapHeader, namespace: &ClassIdAllocator) -> () ! OutOfMemoryError ? &mut Allocator {}
   unsafe fn adoptClasses(self: &Self, rt: *mut HeapHeader, ids: [u32; 2]) -> () {}
@@ -105,9 +106,10 @@ impl Wasm for EmptyWasm {
 /// An implementation keeps what it needs behind pointers, so it is `Copy`: the runtime copies it
 /// out of the services to call it with the engine.
 pub interface HostApi {
-  /// The instance a new worker thread starts with. Worker threads have not had the host's
-  /// functions so far; an implementation that has nothing for them gives an inert copy.
-  fn forWorker() -> Self
+  /// The instance a new worker thread starts with, made from its parent's. Worker threads have
+  /// not had the host's functions so far; an implementation that has nothing for them gives an
+  /// inert copy.
+  fn forWorker(self: &Self) -> Self
   /// Native function `id` ([`HOST_API_FIRST`] or more) called in `realm`.
   effect fn call<'r, 'm, 'w, C: Composition>(self: &Self, engine: &mut Engine<'m, Services<C>>, id: u32, realm: Realm<'r>, argc: i32, argv: Arguments<'w>) -> ValueBits
     ! OutOfMemoryError | JsException ? &mut Allocator
@@ -117,18 +119,71 @@ pub interface HostApi {
 pub struct EmptyHostApi {}
 impl Copy for EmptyHostApi {}
 impl HostApi for EmptyHostApi {
-  fn forWorker() -> Self { return EmptyHostApi {} }
+  fn forWorker(self: &Self) -> Self { return EmptyHostApi {} }
   effect fn call<'r, 'm, 'w, C: Composition>(self: &Self, engine: &mut Engine<'m, Services<C>>, id: u32, realm: Realm<'r>, argc: i32, argv: Arguments<'w>) -> ValueBits
     ! OutOfMemoryError | JsException ? &mut Allocator { return ValueBits.Undefined }
+}
+
+/// The process the runtime sees: its environment (`process.env`), its working directory
+/// (`process.cwd`, `process.chdir`) and exit. Native id 19100 (`platformNative`) is this
+/// capability's. There is no empty implementation: a runtime always has these.
+///
+/// `OsPlatform` (`libs/core/platforms.silk`) is the process's own; `FixedPlatform` is fixed by
+/// the embedder. Failures are negative errno values.
+pub interface Platform {
+  /// The instance a new worker thread starts with, made from its parent's.
+  fn forWorker(self: &Self) -> Self
+  /// Appends the value of the environment variable `name` to `into`; false when it is not set.
+  effect fn getenv(self: &Self, name: &[u8], into: &mut List<u8>) -> bool ! OutOfMemoryError ? &mut Allocator
+  /// Sets the environment variable `name`: 0, or a negative errno.
+  effect fn setenv(self: &Self, name: &[u8], value: &[u8]) -> i32 ! OutOfMemoryError ? &mut Allocator
+  /// Removes the environment variable `name`: 0, or a negative errno.
+  effect fn unsetenv(self: &Self, name: &[u8]) -> i32 ! OutOfMemoryError ? &mut Allocator
+  /// Appends the name of every environment variable to `into`, each followed by a NUL.
+  effect fn environmentNames(self: &Self, into: &mut List<u8>) -> () ! OutOfMemoryError ? &mut Allocator
+  /// Appends the working directory to `into`, or returns a negative errno.
+  effect fn cwd(self: &Self, into: &mut List<u8>) -> i32 ! OutOfMemoryError ? &mut Allocator
+  /// Changes the working directory: 0, or a negative errno.
+  effect fn chdir(self: &Self, path: &[u8]) -> i32 ! OutOfMemoryError ? &mut Allocator
+  /// Ends the process with `status`. An embedded runtime has ended itself before this is called.
+  fn exit(self: &Self, status: i32) -> never
+}
+
+/// The file type bits ([`ModuleResolver.kind`]) of a regular file.
+pub const MODULE_FILE: i32 = 0o100000
+/// The file type bits of a directory.
+pub const MODULE_DIRECTORY: i32 = 0o040000
+/// The file type bits of a symbolic link, when `kind` does not follow it.
+pub const MODULE_LINK: i32 = 0o120000
+
+/// Where `require` and `import` find modules: the loader resolves as Node's does and asks this
+/// for what it needs of the files, the type of a path, its real path and its source. Native id
+/// 19000 (`moduleNative`) is this capability's. There is no empty implementation: a runtime
+/// always loads its main module from somewhere.
+///
+/// `NodeResolution` (`libs/core/module_sources.silk`) reads the operating system's files;
+/// `MemoryModules` serves a graph bundled into the program. Failures are negative errno values.
+pub interface ModuleResolver {
+  /// The instance a new worker thread starts with, made from its parent's.
+  fn forWorker(self: &Self) -> Self
+  /// The file type bits of `path` (`mode & 0o170000`, [`MODULE_FILE`] and the others), following
+  /// a final symbolic link when `follow`, or a negative errno.
+  effect fn kind(self: &Self, path: &[u8], follow: bool) -> i32 ! OutOfMemoryError ? &mut Allocator
+  /// Appends the canonical path of `path` to `into`, or returns a negative errno.
+  effect fn realpath(self: &Self, path: &[u8], into: &mut List<u8>) -> i32 ! OutOfMemoryError ? &mut Allocator
+  /// Appends the contents of the file at `path` to `into`, or returns a negative errno.
+  effect fn read(self: &Self, path: &[u8], into: &mut List<u8>) -> i32 ! OutOfMemoryError ? &mut Allocator
 }
 
 /// What an embedder provides: one implementation per capability. Every field is required;
 /// a capability the program does not want is given its empty implementation.
 ///
 /// ```silk
-/// let capabilities = Capabilities { wasm: EmptyWasm {}, hostApi: EmptyHostApi {} }
+/// let capabilities = Capabilities { platform: OsPlatform {}, modules: NodeResolution {}, wasm: EmptyWasm {}, hostApi: EmptyHostApi {} }
 /// ```
-pub struct Capabilities<W, A> {
+pub struct Capabilities<P, M, W, A> {
+  pub platform: P,
+  pub modules: M,
   pub wasm: W,
   pub hostApi: A,
 }
@@ -139,8 +194,18 @@ pub struct Capabilities<W, A> {
 pub interface Composition {
   /// `Wasm.present` of the program's Wasm implementation.
   static fn wasmPresent() -> bool
-  /// The capabilities a new worker thread starts with.
-  fn forWorker() -> Self
+  /// The capabilities a new worker thread starts with, made from its parent's.
+  fn forWorker(self: &Self) -> Self
+  effect fn platformGetenv<'m>(engine: &Engine<'m, Services<Self>>, name: &[u8], into: &mut List<u8>) -> bool ! OutOfMemoryError ? &mut Allocator
+  effect fn platformSetenv<'m>(engine: &Engine<'m, Services<Self>>, name: &[u8], value: &[u8]) -> i32 ! OutOfMemoryError ? &mut Allocator
+  effect fn platformUnsetenv<'m>(engine: &Engine<'m, Services<Self>>, name: &[u8]) -> i32 ! OutOfMemoryError ? &mut Allocator
+  effect fn platformNames<'m>(engine: &Engine<'m, Services<Self>>, into: &mut List<u8>) -> () ! OutOfMemoryError ? &mut Allocator
+  effect fn platformCwd<'m>(engine: &Engine<'m, Services<Self>>, into: &mut List<u8>) -> i32 ! OutOfMemoryError ? &mut Allocator
+  effect fn platformChdir<'m>(engine: &Engine<'m, Services<Self>>, path: &[u8]) -> i32 ! OutOfMemoryError ? &mut Allocator
+  fn platformExit<'m>(engine: &Engine<'m, Services<Self>>, status: i32) -> never
+  effect fn modulesKind<'m>(engine: &Engine<'m, Services<Self>>, path: &[u8], follow: bool) -> i32 ! OutOfMemoryError ? &mut Allocator
+  effect fn modulesRealpath<'m>(engine: &Engine<'m, Services<Self>>, path: &[u8], into: &mut List<u8>) -> i32 ! OutOfMemoryError ? &mut Allocator
+  effect fn modulesRead<'m>(engine: &Engine<'m, Services<Self>>, path: &[u8], into: &mut List<u8>) -> i32 ! OutOfMemoryError ? &mut Allocator
   effect fn wasmOpen<'m>(engine: &mut Engine<'m, Services<Self>>, allocator: *mut RuntimeHeap) -> () ! OutOfMemoryError
   unsafe effect fn wasmInstall<'m>(engine: &mut Engine<'m, Services<Self>>, rt: *mut HeapHeader, namespace: &ClassIdAllocator) -> () ! OutOfMemoryError ? &mut Allocator
   unsafe fn wasmAdoptClasses<'m>(engine: &mut Engine<'m, Services<Self>>, rt: *mut HeapHeader, ids: [u32; 2]) -> ()
@@ -163,9 +228,41 @@ pub interface Composition {
 
 static fn presentOf<W: Wasm>() -> bool { return Wasm.present() }
 
-impl<W: Wasm + Copy, A: HostApi + Copy> Composition for Capabilities<W, A> {
+impl<P: Platform + Copy, M: ModuleResolver + Copy, W: Wasm + Copy, A: HostApi + Copy> Composition for Capabilities<P, M, W, A> {
   static fn wasmPresent() -> bool { return presentOf<W>() }
-  fn forWorker() -> Self { return Capabilities<W, A> { wasm: Wasm.forWorker(), hostApi: HostApi.forWorker() } }
+  fn forWorker(self: &Self) -> Self {
+    return Capabilities<P, M, W, A> { platform: self.platform.forWorker(), modules: self.modules.forWorker(), wasm: self.wasm.forWorker(), hostApi: self.hostApi.forWorker() }
+  }
+  effect fn platformGetenv<'m>(engine: &Engine<'m, Services<Self>>, name: &[u8], into: &mut List<u8>) -> bool ! OutOfMemoryError ? &mut Allocator {
+    let platform = engine.services.capabilities.platform return run platform.getenv(name, &mut into.*)
+  }
+  effect fn platformSetenv<'m>(engine: &Engine<'m, Services<Self>>, name: &[u8], value: &[u8]) -> i32 ! OutOfMemoryError ? &mut Allocator {
+    let platform = engine.services.capabilities.platform return run platform.setenv(name, value)
+  }
+  effect fn platformUnsetenv<'m>(engine: &Engine<'m, Services<Self>>, name: &[u8]) -> i32 ! OutOfMemoryError ? &mut Allocator {
+    let platform = engine.services.capabilities.platform return run platform.unsetenv(name)
+  }
+  effect fn platformNames<'m>(engine: &Engine<'m, Services<Self>>, into: &mut List<u8>) -> () ! OutOfMemoryError ? &mut Allocator {
+    let platform = engine.services.capabilities.platform run platform.environmentNames(&mut into.*)
+  }
+  effect fn platformCwd<'m>(engine: &Engine<'m, Services<Self>>, into: &mut List<u8>) -> i32 ! OutOfMemoryError ? &mut Allocator {
+    let platform = engine.services.capabilities.platform return run platform.cwd(&mut into.*)
+  }
+  effect fn platformChdir<'m>(engine: &Engine<'m, Services<Self>>, path: &[u8]) -> i32 ! OutOfMemoryError ? &mut Allocator {
+    let platform = engine.services.capabilities.platform return run platform.chdir(path)
+  }
+  fn platformExit<'m>(engine: &Engine<'m, Services<Self>>, status: i32) -> never {
+    let platform = engine.services.capabilities.platform return platform.exit(status)
+  }
+  effect fn modulesKind<'m>(engine: &Engine<'m, Services<Self>>, path: &[u8], follow: bool) -> i32 ! OutOfMemoryError ? &mut Allocator {
+    let modules = engine.services.capabilities.modules return run modules.kind(path, follow)
+  }
+  effect fn modulesRealpath<'m>(engine: &Engine<'m, Services<Self>>, path: &[u8], into: &mut List<u8>) -> i32 ! OutOfMemoryError ? &mut Allocator {
+    let modules = engine.services.capabilities.modules return run modules.realpath(path, &mut into.*)
+  }
+  effect fn modulesRead<'m>(engine: &Engine<'m, Services<Self>>, path: &[u8], into: &mut List<u8>) -> i32 ! OutOfMemoryError ? &mut Allocator {
+    let modules = engine.services.capabilities.modules return run modules.read(path, &mut into.*)
+  }
   effect fn wasmOpen<'m>(engine: &mut Engine<'m, Services<Self>>, allocator: *mut RuntimeHeap) -> () ! OutOfMemoryError {
     run engine.services.capabilities.wasm.open(allocator)
   }

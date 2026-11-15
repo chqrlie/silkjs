@@ -17,13 +17,14 @@ import silkjs.js_runtime as runtime
 import silkjs.js_gc as gc
 import silkjs.js_promise as promise
 import silkjs.js_eval as evaluation
-import silkjs.js_eval_compile as flags
 import libs.core.common as common
 import libs.core.host { Services }
 import libs.core.capabilities { Composition }
 import silk.collections.list { List }
 import silk.mem.pointer { Pointer }
 import ext.fs_async
+import ext.module_cache
+import libs.core.modules
 import ext.worker_native
 
 /// What a turn of the loop left.
@@ -213,8 +214,16 @@ impl<'e, 'm, C: Composition> Runtime<'e, 'm, C> {
   pub effect fn evaluateModule(self: &mut Self, name: &[u8], source: &[u8]) -> () ! OutOfMemoryError | JsException ? &mut Allocator {
     let context = self.context
     let memory = self.engine.memory
-    let evaluated = run evaluation.evaluate(&mut self.engine.*, memory, unsafe lendRealm(&context, context), source, name, flags.TYPE_MODULE)
-    unsafe gc.release(&mut self.engine.*, unsafe runtime.contextRuntime(context), evaluated.intoBits())
+    let rt = unsafe runtime.contextRuntime(context)
+    // As the runtime's own entry module: compiled through the module cache, with the loader's
+    // import.meta (url, filename, dirname) for its name.
+    let compiled = run unsafe module_cache.compileModule(&mut self.engine.*, context, source, name)
+    let module = match compiled { ValueBits.Module { reference } => reference _ => Intrinsic.trap("module compiler returned non-module") }
+    let callback = self.engine.services.meta
+    let metadata = run Effect.result(unsafe modules.setMeta(&mut self.engine.*, context, module, callback, name))
+    match move metadata { Result<(), JsException>.Failure { error } => { unsafe gc.release(&mut self.engine.*, rt, compiled) fail move error } _ => () }
+    let evaluated = run evaluation.evaluateFunction(&mut self.engine.*, memory, unsafe lendRealm(&context, context), unsafe Value.adoptBits(compiled))
+    unsafe gc.release(&mut self.engine.*, rt, evaluated.intoBits())
   }
 
   /// Calls `function` with `receiver` and `arguments` from the host, as the runtime calls a

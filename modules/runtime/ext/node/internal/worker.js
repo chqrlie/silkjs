@@ -472,6 +472,9 @@ function bootstrap() {
 // Symbol throws), and only plain enumerable, writable, configurable data
 // properties can be defined.
 let environmentWarned = false;
+// A Platform that keeps the environment fixed (FixedPlatform) refuses a change with EPERM.
+const environmentRefused = (syscall, key) =>
+  Object.assign(new Error(`EPERM: operation not permitted, ${syscall} '${key}'`), { errno: -1, code: 'EPERM', syscall });
 function workerEnvironment() {
   const lookup = key => host.workerNative('envGet', [key]);
   const store = (key, value) => {
@@ -482,7 +485,7 @@ function workerEnvironment() {
       process.emitWarning('Assigning any value other than a string, number, or boolean to a process.env property is deprecated. ' +
         'Please make sure to convert the value to a string before setting process.env with it.', 'DeprecationWarning', 'DEP0104');
     }
-    host.workerNative('envSet', [key, `${value}`]);
+    if (host.workerNative('envSet', [key, `${value}`]) === -1) throw environmentRefused('setenv', key);
   };
   const invalidDescriptor = message => clone().codedError('ERR_INVALID_OBJECT_DEFINE_PROPERTY', message);
   // A host interceptor object, as Node's is (node_env_var.cc), not a Proxy: util.types.isProxy
@@ -494,7 +497,10 @@ function workerEnvironment() {
       return value !== undefined ? value : Object.prototype[key];
     },
     set(target, key, value) { store(key, value); return true; },
-    deleteProperty(target, key) { if (typeof key !== 'symbol') host.workerNative('envDelete', [key]); return true; },
+    deleteProperty(target, key) {
+      if (typeof key !== 'symbol' && host.workerNative('envDelete', [key]) === -1) throw environmentRefused('unsetenv', key);
+      return true;
+    },
     ownKeys() { return host.workerNative('envKeys', []); },
     has(target, key) { return typeof key !== 'symbol' && (lookup(key) !== undefined || key in Object.prototype); },
     getOwnPropertyDescriptor(target, key) {

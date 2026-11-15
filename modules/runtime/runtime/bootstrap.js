@@ -6,6 +6,9 @@ const rawOS = { ...osNamespace };
 
 const native = globalThis.__silkNative;
 delete globalThis.__silkNative;
+// The program's Platform (platformNative): the environment, the working directory and exit, the
+// process's own or fixed by the embedder. A failure is a negative errno.
+const platformNative = native.platformNative;
 // Every exit path ends here. Node's exit handler stops and joins every worker
 // before exit(): libc exit handlers (OpenSSL's cleanup among them) must not tear
 // down shared native state while a worker thread still runs.
@@ -14,7 +17,7 @@ delete globalThis.__silkNative;
 rawStd.exit = code => {
   native.workerNative('stopThreads', []);
   if (native.embedded) native.workerNative('requestExit', [(Number(code) | 0) >>> 0]);
-  stdNamespace.exit(code);
+  platformNative(6, Number(code) | 0);
 };
 const factories = new Map();
 const modules = new Map();
@@ -306,9 +309,9 @@ host.strerror = number => rawStd.strerror(number);
 function pair(result, syscall, path) { if (result[1] !== 0) throw systemError(result[1], syscall, path); return result[0]; }
 // node_process_methods.cc Cwd: a uv_cwd UVException, worded for a removed directory.
 host.cwd = () => {
-  const result = rawOS.getcwd();
-  if (result[1] === 0) return result[0];
-  const error = systemError(result[1], 'uv_cwd');
+  const result = platformNative(4);
+  if (typeof result === 'string') return result;
+  const error = systemError(result, 'uv_cwd');
   if (error.code === 'ENOENT') {
     error.message = 'ENOENT: process.cwd failed with error ' + (errnoMessages.get(2) || rawStd.strerror(2)) +
       ', the current working directory was likely removed without changing the working directory, uv_cwd';
@@ -318,7 +321,15 @@ host.cwd = () => {
 // Node's tryGetCwd (lib/internal/process/execution.js): getcwd fails once the
 // directory is removed, so names fall back to the executable's directory.
 host.tryGetCwd = () => { try { return host.cwd(); } catch { return host.path.dirname(process.execPath); } };
-host.realpath = path => pair(rawOS.realpath(path), 'realpath', path);
+// The loader's reads of module files go to the program's ModuleResolver (moduleNative): the
+// operating system's files, or a module graph bundled into the program. Each answer is a
+// value or a negative errno.
+const moduleNative = native.moduleNative;
+host.realpath = path => {
+  const result = moduleNative(1, path, 0);
+  if (typeof result === 'number') throw systemError(-result, 'realpath', path);
+  return result;
+};
 function statResult(result, syscall, path) {
   const value = pair(result, syscall, path);
   value.isFile = () => (value.mode & 0o170000) === 0o100000;
@@ -327,35 +338,44 @@ function statResult(result, syscall, path) {
 }
 host.stat = (path, follow = true) =>
   statResult((follow ? rawOS.stat : rawOS.lstat)(path), follow ? 'stat' : 'lstat', path);
-// Node's resolver may probe existence without granting access to file contents.
-const moduleStat = osNamespace.stat, moduleLstat = osNamespace.lstat;
 // A path's file type bits, or 0 for a path that is not there: the resolver asks
 // about many of those.
 host.moduleType = (path, follow) => {
-  const result = (follow ? moduleStat : moduleLstat)(path);
-  if (result[1] === 0) return result[0].mode & 0o170000;
-  const code = errnoNames.get(Math.abs(result[1]));
+  const result = moduleNative(0, path, follow ? 1 : 0);
+  if (result >= 0) return result;
+  const code = errnoNames.get(-result);
   if (code === 'ENOENT' || code === 'ENOTDIR') return 0;
-  throw systemError(result[1], follow ? 'stat' : 'lstat', path);
+  throw systemError(-result, follow ? 'stat' : 'lstat', path);
 };
 // node_file.cc InternalModuleStat: 1 for a directory, 0 for anything else that is
 // there, and the negative errno of a failed stat. Like moduleType, it needs no read grant.
 host.internalModuleStat = path => {
-  const result = moduleStat(path);
-  if (result[1] !== 0) return -Math.abs(result[1]);
-  return (result[0].mode & 0o170000) === 0o040000 ? 1 : 0;
+  const result = moduleNative(0, path, 1);
+  if (result < 0) return result;
+  return result === 0o040000 ? 1 : 0;
 };
 // Built-ins read the environment where it lives: nothing of it is kept here.
+const getenv = key => platformNative(0, key);
 const environmentHandler = {
-  get(target, key) { return typeof key === 'string' ? rawStd.getenv(key) : undefined; },
-  has(target, key) { return typeof key === 'string' && rawStd.getenv(key) !== undefined; },
-  ownKeys() { return Object.keys(rawStd.getenviron()); },
+  get(target, key) { return typeof key === 'string' ? getenv(key) : undefined; },
+  has(target, key) { return typeof key === 'string' && getenv(key) !== undefined; },
+  ownKeys() { return platformNative(3); },
   getOwnPropertyDescriptor(target, key) {
-    const value = typeof key === 'string' ? rawStd.getenv(key) : undefined;
+    const value = typeof key === 'string' ? getenv(key) : undefined;
     if (value !== undefined) return { value, writable: true, enumerable: true, configurable: true };
   },
-  set(target, key, value) { if (typeof key === 'symbol') throw new TypeError('Cannot convert a Symbol value to a string'); rawStd.setenv(key, String(value)); return true; },
-  deleteProperty(target, key) { if (typeof key === 'string') rawStd.unsetenv(key); return true; },
+  set(target, key, value) {
+    if (typeof key === 'symbol') throw new TypeError('Cannot convert a Symbol value to a string');
+    const code = platformNative(1, key, String(value));
+    if (code < 0) throw systemError(code, 'setenv', key);
+    return true;
+  },
+  deleteProperty(target, key) {
+    if (typeof key !== 'string') return true;
+    const code = platformNative(2, key);
+    if (code < 0) throw systemError(code, 'unsetenv', key);
+    return true;
+  },
 };
 // A heap image is this bootstrap's result, saved at build time and started from
 // by later processes (src/ext/heap_image.silk). Whatever the bootstrap takes from
@@ -780,6 +800,12 @@ const copyBytes = bytes => bytes.buffer === readBuffer.buffer ? Buffer.from(byte
 const decodeBytes = bytes => bytes.toString('utf8');
 host.readFile = path => readInto(path, copyBytes);
 host.readText = path => readInto(path, decodeBytes);
+// A module's source, from the ModuleResolver. A directory fails as its read does.
+host.readModule = path => {
+  const result = moduleNative(2, path, 0);
+  if (typeof result === 'number') throw systemError(-result, errnoNames.get(-result) === 'EISDIR' ? 'read' : 'open', path);
+  return result;
+};
 function output(fd) {
   return { fd, isTTY: !!rawOS.isatty(fd), writable: true, write(chunk, encoding, callback) {
     if (typeof encoding === 'function') { callback = encoding; encoding = undefined; }
@@ -913,7 +939,7 @@ function reallyExit(code) {
 const processMethods = host.processMethods = {
   cwd: host.cwd,
   chdir(directory) {
-    const code = rawOS.chdir(directory);
+    const code = platformNative(5, directory);
     // Node reports the directory it was in as the path and the target as dest.
     if (code < 0) throw systemError(code, 'chdir', host.cwd(), directory);
   },
@@ -1967,7 +1993,7 @@ function run(restored = false) {
     if (!fromStdin && inputTypeSet) throw Object.assign(new Error('--input-type can only be used with string input via --eval, --print, or STDIN'), { code: 'ERR_INPUT_TYPE_NOT_ALLOWED' });
     const resolved = fromStdin ? null : loader.resolveMain(host.path.resolve(filename));
     const name = fromStdin ? host.path.join(host.tryGetCwd(), '[stdin]') : resolved.filename;
-    const source = loader.cleanSource(fromStdin ? rawStd.in.readAsString() : host.Buffer.from(host.readFile(name)).toString('utf8'));
+    const source = loader.cleanSource(fromStdin ? rawStd.in.readAsString() : host.readModule(name));
     const module = fromStdin ? inputType === 'module' || (!inputTypeSet && !host.detectModuleDisabled && native.detectModuleSyntax(source)) : resolved.format === 'module';
     // node:internal/main/check_syntax names piped source [stdin].
     const scriptName = fromStdin ? '[stdin]' : name;
@@ -2151,7 +2177,7 @@ function checkUnsettledTopLevelAwait() {
       const { 0: name, 1: line, 2: column } = stalled[index];
       if (!sources.has(name)) {
         let text = name === entry.name ? entry.source : undefined;
-        if (text === undefined) { try { text = host.readText(name.startsWith('file:') ? url.fileURLToPath(name) : name); } catch {} }
+        if (text === undefined) { try { text = host.readModule(name.startsWith('file:') ? url.fileURLToPath(name) : name); } catch {} }
         sources.set(name, typeof text === 'string' ? text.split(/\r\n|[\n\r\u2028\u2029]/) : []);
       }
       const sourceLine = sources.get(name)[line - 1] ?? '';

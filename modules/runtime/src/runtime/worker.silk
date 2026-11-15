@@ -498,6 +498,8 @@ unsafe effect fn configure<'m, C: Composition>(engine: &mut Engine<'m, Services<
   run unsafe function(&mut engine, context, native, b"http2", 5000)
   run unsafe function(&mut engine, context, native, b"workerNative", 6000)
   run unsafe function(&mut engine, context, native, b"sqliteNative", 7000)
+  run unsafe function(&mut engine, context, native, b"moduleNative", 19000)
+  run unsafe function(&mut engine, context, native, b"platformNative", 19100)
   run unsafe function(&mut engine, context, native, b"napiNative", 14000)
   let inspectorNames = [
     b"inspectorNative0", b"inspectorNative1", b"inspectorNative2", b"inspectorNative3",
@@ -1018,8 +1020,7 @@ pub effect fn executeMain<D: Driver, C: Composition>(arguments: &List<Bytes>, mo
   let process = run Process.make(&namespace)
   let domain = run WaiterDomain.make()
   // Worker threads of this runtime start in its own specialization.
-  let entry: extern "C" fn(?*mut u8) -> ?*mut u8 = worker_native.silkNodeWorkerEntry<C>
-  let workers = run worker_native.mainState(&process, domain.handle(), entry)
+  let workers = run worker_native.mainState(&process, domain.handle(), &capabilities)
   return run unsafe executeRuntime(workers, arguments, &process, mode, &mut driver.*, move capabilities)
 }
 /// The executable's runtime: it owns the process and runs Node's loop.
@@ -1030,9 +1031,9 @@ pub effect fn executeProgram<C: Composition>(arguments: &List<Bytes>, capabiliti
 /// A worker thread's runtime, with the capabilities a new thread starts with.
 pub effect fn executeThread<C: Composition>(start: worker_native.Start) -> i32 ! OutOfMemoryError ? &mut Allocator {
   let process = start.group.process.clone()
+  let fresh: C = worker_native.threadCapabilities<C>(&start)
   let workers = run worker_native.makeState(move start.group, start.id, start.control, move start.metadata)
   let arguments = List<Bytes>.make()
   let mut driver = session.NodeLoop {}
-  let fresh: C = Composition.forWorker()
   return run unsafe executeRuntime(workers, &arguments, &process, Mode { main: false, exiting: false, embedded: false, keepAlive: false }, &mut driver, move fresh)
 }

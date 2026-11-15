@@ -77,6 +77,8 @@ import ext.http2_native
 import ext.worker_native
 import ext.immediates
 import ext.sqlite_native
+import ext.module_native
+import ext.platform_native
 import ext.napi_native
 import ext.http_parser_native
 import ext.trace_native
@@ -811,6 +813,8 @@ impl<C: Composition> EngineServices for Services<C> {
       let napi = unsafe napiState(&engine.*)
       return run unsafe napi_native.dispatch(&mut engine, context, napi, argc, argv)
     }
+    if id == platform_native.ID { return run unsafe platform_native.dispatch(&mut engine, context, argv) }
+    if id == module_native.ID { return run unsafe module_native.dispatch(&mut engine, context, argv) }
     if id == 7000 {
       let sqlite = unsafe sqliteState(&engine.*)
       return run unsafe sqlite_native.dispatch(&mut engine, context, sqlite, argc, argv)

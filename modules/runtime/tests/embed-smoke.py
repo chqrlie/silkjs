@@ -26,7 +26,12 @@ def expected(wasm):
     return [
         'add 5',
         'wasm ' + wasm,
+        'lib 42',
+        'env EMBED_SMOKE fixed /embed-smoke',
+        'setenv EPERM',
         'fs function',
+        'cjs helpers',
+        'missing ERR_MODULE_NOT_FOUND',
         'tick 1',
         'tick 2',
         'tick 3',

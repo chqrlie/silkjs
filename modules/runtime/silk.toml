@@ -5,7 +5,7 @@ version = "0.1.0"
 # loop it turns, and the capabilities an embedder chooses (src/libs/core/capabilities.silk). The
 # real Wasm capability is ./wamr; the executable, which provides every real one, is ./cli.
 # src/embed_smoke.silk is the embedding API's smoke test, here without WebAssembly.
-exports = ["runtime.embed", "runtime.session", "runtime.worker", "libs.core.capabilities", "libs.core.host", "libs.core.common",
+exports = ["runtime.embed", "runtime.session", "runtime.worker", "libs.core.capabilities", "libs.core.module_sources", "libs.core.platforms", "libs.core.host", "libs.core.common",
   "libs.core.owners", "ext.diagnostics_fatal", "ext.vm_native", "ext.keep_exports", "ext.napi_async", "ext.napi_core", "ext.napi_values", "embed_smoke"]
 kind = "library"
 silk-version = "0.1.0-dev.78+e02346fdb3aa"

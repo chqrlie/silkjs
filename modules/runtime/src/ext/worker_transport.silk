@@ -58,16 +58,18 @@ pub struct Registry { pub nextId: u32, pub nextThreadId: u32, pub endpoints: ?*m
 impl Transferable for Registry {}
 // changed: notified whenever the diagnostics mailbox or a report changes, under the registry lock.
 /// `entry` is the C entry of this group's worker threads: `silkNodeWorkerEntry` instantiated for the
-/// runtime's capabilities, so every thread runs the specialization its parent runs.
-pub struct Group { pub registry: Arc<Mutex<Registry>>, pub changed: Arc<Condition>, pub reports: Settings, pub resources: Resources, pub process: Process, pub waiters: WaiterDomain, pub entry: extern "C" fn(?*mut u8) -> ?*mut u8 }
+/// runtime's capabilities, so every thread runs the specialization its parent runs. `seed` holds
+/// that runtime's capabilities as a new thread takes them (`Composition.forWorker`), allocated
+/// from `resources` for as long as the group lives.
+pub struct Group { pub registry: Arc<Mutex<Registry>>, pub changed: Arc<Condition>, pub reports: Settings, pub resources: Resources, pub process: Process, pub waiters: WaiterDomain, pub entry: extern "C" fn(?*mut u8) -> ?*mut u8, pub seed: ?*mut u8 }
 impl Group {
   pub effect fn make(process: &Process, domain: Domain, entry: extern "C" fn(?*mut u8) -> ?*mut u8) -> Self ! OutOfMemoryError {
     let mut allocator = Allocator.systemAllocatorProvider()
     let mutex = run Mutex<Registry>.make(Registry { nextId: 1, nextThreadId: 1, endpoints: Pointer.null<Endpoint>(), threads: Pointer.null<Thread>(), environments: Pointer.null<Environment>(), locks: Pointer.null<LockRequest>(), vmWatchdog: Option<Arc<vm_interrupt.Service>>.none(), diagnostics: Hub.make() }) |> Effect.provideMut<Allocator>(&mut allocator)
     let condition = run Condition.make() |> Effect.provideMut<Allocator>(&mut allocator)
-    return Self { registry: run Arc<Mutex<Registry>>.make(move mutex) |> Effect.provideMut<Allocator>(&mut allocator), changed: run Arc<Condition>.make(move condition) |> Effect.provideMut<Allocator>(&mut allocator), reports: run Settings.make() |> Effect.provideMut<Allocator>(&mut allocator), resources: run Resources.make(), process: process.clone(), waiters: unsafe WaiterDomain.retain(domain), entry: entry }
+    return Self { registry: run Arc<Mutex<Registry>>.make(move mutex) |> Effect.provideMut<Allocator>(&mut allocator), changed: run Arc<Condition>.make(move condition) |> Effect.provideMut<Allocator>(&mut allocator), reports: run Settings.make() |> Effect.provideMut<Allocator>(&mut allocator), resources: run Resources.make(), process: process.clone(), waiters: unsafe WaiterDomain.retain(domain), entry: entry, seed: Pointer.null<u8>() }
   }
-  pub fn clone(self: &Self) -> Self { return Self { registry: self.registry.clone(), changed: self.changed.clone(), reports: self.reports.clone(), resources: self.resources.clone(), process: self.process.clone(), waiters: unsafe WaiterDomain.retain(self.waiters.handle()), entry: self.entry } }
+  pub fn clone(self: &Self) -> Self { return Self { registry: self.registry.clone(), changed: self.changed.clone(), reports: self.reports.clone(), resources: self.resources.clone(), process: self.process.clone(), waiters: unsafe WaiterDomain.retain(self.waiters.handle()), entry: self.entry, seed: self.seed } }
 }
 pub unsafe fn nonnull<T>(pointer: ?*mut T) -> *mut T { return unsafe Intrinsic.pointerRequalify<?*mut T, *mut T>(pointer) }
 pub unsafe fn raw<T>(pointer: *mut T) -> *mut u8 { return unsafe Intrinsic.pointerReinterpret<*mut T, *mut u8>(pointer) }

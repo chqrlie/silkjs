@@ -44,7 +44,7 @@ impl WamrWasm {
 
 impl Wasm for WamrWasm {
   static fn present() -> bool { return true }
-  fn forWorker() -> Self { return WamrWasm.make() }
+  fn forWorker(self: &Self) -> Self { return WamrWasm.make() }
   effect fn open(self: &mut Self, allocator: *mut RuntimeHeap) -> () ! OutOfMemoryError {
     // The C entry points WAMR calls back are emitted only when something takes them.
     wasm_native.keepExports()

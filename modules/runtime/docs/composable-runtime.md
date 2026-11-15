@@ -517,7 +517,7 @@ a generic export's name with type arguments is the C address of that instantiati
 is written once and handed over for the runtime's own type. On that compiler the runtime is generic
 over the embedder's capabilities, `Services<C>` with `C: Composition` (`libs/core/capabilities.silk`):
 
-- `Capabilities { wasm, hostApi }` is the closed list so far; `Composition`, implemented by it alone,
+- `Capabilities { wasm, hostApi }` was the closed list then (step 3 adds `platform` and `modules`); `Composition`, implemented by it alone,
   forwards each capability's operations, so every signature carries one type parameter however
   many capabilities there are.
 - `Wasm` has `WamrWasm` (`./wamr`, the package that depends on WAMR) and `EmptyWasm` (the core).
@@ -543,6 +543,32 @@ with a callback parameter cannot be one, so the 15 Node-API functions that take 
 (`napi_define_class`, `napi_wrap` and the others) are plain functions in the core, and
 `cli/src/napi_exports.silk` declares them as the executable's C exports. An embedder that loads
 addons declares the same until the compiler roots dependency exports.
+
+**Step 3, `ModuleResolver`.** The loader asks the program's `ModuleResolver` for what it needs of
+module files: the type of a path, its real path and its source (`moduleNative`, id 19000). The
+resolution algorithm stays the loader's, so `require` and `import` resolve as Node's do against
+whatever the resolver serves. `NodeResolution` reads the operating system's files, as before;
+`MemoryModules` serves a module graph bundled into the program, with directories implied by the
+paths and nothing else there. The embedding smoke test runs on `MemoryModules`: its main module
+imports an ES module, requires a CommonJS package through its package.json, and gets
+`ERR_MODULE_NOT_FOUND` for a module that is not there. A worker thread's capabilities are now made
+from its parent's (`forWorker(self)`), so a worker sees the same bundled graph. A module the host
+evaluates (`Runtime.evaluateModule`) now has the loader's `import.meta` (`url`, `filename`,
+`dirname`), as the runtime's own entry module does. `Files.empty` comes
+with step 4, when `fs` stands on `Files`; until then `fs` still reads the operating system.
+
+**Step 3, `Platform`.** `process.env`, `process.cwd()`, `process.chdir()` and exit go through the
+program's `Platform` instead of the engine's `silk:host/std` and `silk:host/os`: the bootstrap's
+calls through `platformNative` (id 19100), and `process.env` through the environment the worker
+natives keep, where the shared one (the main thread's, and a worker's with `SHARE_ENV`) is the
+Platform's and a worker's own copy is made from it. `OsPlatform` is the process's own; `FixedPlatform` gives the runtime an environment
+and working directory of the embedder's, which it cannot change (`EPERM`). The smoke test runs on
+`FixedPlatform` and sees only its one variable. Native code that reads the environment itself, and
+child processes, still see the process's. What the bootstrap still takes from those two engine
+modules is file access (`host.readFile`, `host.stat`, the permission model's lookups), the standard
+streams' descriptors, `kill` and `getpid`, and `gc`: they move with `Files` (step 4), `Processes`
+and `SystemInfo` (step 6). Time and entropy are the engine's (`EngineServices`) and stay there
+until an embedder needs to fix them; `FixedPlatform` would then carry them.
 
 ## Risks and decisions taken
 

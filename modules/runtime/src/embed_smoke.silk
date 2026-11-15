@@ -2,7 +2,9 @@
 //! turns the loop with a bounded wait, and ends it with process.exit. The module calls a
 //! native function of the host's (`hostAdd`, its `HostApi`), and the host calls a function of
 //! the module's as a callback, whose microtask runs before the call returns. The module also
-//! reports whether WebAssembly is there.
+//! reports whether WebAssembly is there. Its modules are bundled into the program
+//! (`MemoryModules`): an ES module, a CommonJS package with a package.json, and an import of a
+//! module that is not there. Its environment and working directory are fixed (`FixedPlatform`).
 //!
 //! ./smoke runs it without WebAssembly (`EmptyWasm`): that program depends on the core alone and
 //! does not link WAMR. ./cli/src/embed_smoke_wamr.silk runs the same with `WamrWasm`.
@@ -29,8 +31,21 @@ import runtime.embed
 import runtime.session { Runtime, Turn }
 import libs.core.host { Services }
 import libs.core.capabilities { Capabilities, Composition, HostApi, HOST_API_FIRST, Wasm }
+import libs.core.module_sources { MemoryModule, MemoryModules }
+import libs.core.platforms { FixedPlatform, Variable }
 
-const SOURCE: &[u8] = b"console.log('add', hostAdd(2, 3));\nconsole.log('wasm', typeof WebAssembly);\nglobalThis.onHost = x => { queueMicrotask(() => hostAdd(x, 100)); return x * 2; };\nlet ticks = 0;\nconst timer = setInterval(() => {\n  ticks++;\n  console.log('tick', ticks);\n  if (ticks === 3) {\n    clearInterval(timer);\n    // Nothing referenced is left: a kept-alive runtime keeps turning until the host or\n    // process.exit ends it.\n    setTimeout(() => { process.exitCode = 3; process.exit(); }, 5).unref();\n  }\n}, 5);\nprocess.on('exit', code => console.log('exit', code));\nconst { readFileSync } = await import('node:fs');\nconsole.log('fs', typeof readFileSync);\n"
+const SOURCE: &[u8] = b"import { twice } from './lib.mjs';\nconsole.log('add', hostAdd(2, 3));\nconsole.log('wasm', typeof WebAssembly);\nconsole.log('lib', twice(21));\nconsole.log('env', Object.keys(process.env).join(), process.env.EMBED_SMOKE, process.cwd());\ntry { process.env.EMBED_SMOKE = 'changed'; } catch (error) { console.log('setenv', error.code); }\nglobalThis.onHost = x => { queueMicrotask(() => hostAdd(x, 100)); return x * 2; };\nlet ticks = 0;\nconst timer = setInterval(() => {\n  ticks++;\n  console.log('tick', ticks);\n  if (ticks === 3) {\n    clearInterval(timer);\n    // Nothing referenced is left: a kept-alive runtime keeps turning until the host or\n    // process.exit ends it.\n    setTimeout(() => { process.exitCode = 3; process.exit(); }, 5).unref();\n  }\n}, 5);\nprocess.on('exit', code => console.log('exit', code));\nconst { readFileSync } = await import('node:fs');\nconsole.log('fs', typeof readFileSync);\nconst { createRequire } = await import('node:module');\nconsole.log('cjs', createRequire(import.meta.url)('./helpers').name);\nconsole.log('missing', await import('./missing.mjs').then(() => 'found', error => error.code));\n"
+
+/// The runtime's whole environment (`FixedPlatform`): it does not see the process's.
+const ENVIRONMENT: [Variable; 1] = [Variable { name: b"EMBED_SMOKE", value: b"fixed" }]
+
+/// The rest of the module graph, bundled into the program.
+const MODULES: [MemoryModule; 4] = [
+  MemoryModule { path: b"/embed-smoke/lib.mjs", source: b"export const twice = x => x * 2;\n" },
+  MemoryModule { path: b"/embed-smoke/helpers/package.json", source: b"{ \"main\": \"main.js\" }\n" },
+  MemoryModule { path: b"/embed-smoke/helpers/main.js", source: b"module.exports = { name: require('./name.js') };\n" },
+  MemoryModule { path: b"/embed-smoke/helpers/name.js", source: b"module.exports = 'helpers';\n" },
+]
 
 /// What the host's native function saw: its last sum.
 pub struct Added { last: i32 }
@@ -39,7 +54,7 @@ pub struct Added { last: i32 }
 pub struct SmokeApi { added: ?*mut Added }
 impl Copy for SmokeApi {}
 impl HostApi for SmokeApi {
-  fn forWorker() -> Self { return SmokeApi { added: Pointer.null<Added>() } }
+  fn forWorker(self: &Self) -> Self { return SmokeApi { added: Pointer.null<Added>() } }
   effect fn call<'r, 'm, 'w, C: Composition>(self: &Self, engine: &mut Engine<'m, Services<C>>, id: u32, realm: Realm<'r>, argc: i32, argv: Arguments<'w>) -> ValueBits
     ! OutOfMemoryError | JsException ? &mut Allocator {
     let sum = integer(argv.get(0).view()) + integer(argv.get(1).view())
@@ -108,7 +123,7 @@ pub effect fn program<W: Wasm + Copy>(wasm: W) -> i32 ! OutOfMemoryError | Synch
   let mut added = Added { last: 0 }
   let addedAt = Pointer.fromMutRef<Added>(&mut added)
   let mut host = Smoke { turns: 0, added: addedAt, doubled: 0, afterMicrotask: 0 }
-  let capabilities = Capabilities { wasm: wasm, hostApi: SmokeApi { added: addedAt } }
+  let capabilities = Capabilities { platform: FixedPlatform.make(&ENVIRONMENT, b"/embed-smoke"), modules: MemoryModules.make(&MODULES), wasm: wasm, hostApi: SmokeApi { added: addedAt } }
   return run embed.start(move options, &mut host, move capabilities)
 }
 
