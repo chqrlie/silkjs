@@ -21,9 +21,9 @@ Verified on **Linux x64 only**. macOS arm64 is written and type-checks
 | Loop, `uv_run`, handle lifetime, ref/unref, close callbacks, `uv_walk`, idle-time metric | Silk, on epoll (Linux) and kqueue (Darwin) | `src/ext/uv_loop.silk` |
 | Async wakeups | Silk: an atomic flag and a pipe per loop | `uv_loop.silk` |
 | Signals | Silk: one `sigaction` handler, a per-loop pipe, libuv's lock discipline | `uv_loop.silk` |
-| Child processes (`uv_spawn`, kill, exit) | Silk: fork, child setup, exec, SIGCHLD reaping, as libuv's fork path | `uv_loop.silk` |
+| Child processes (`uv_spawn`, kill, exit) | Silk: posix_spawn on Darwin as libuv's, fork, child setup and exec elsewhere (and on Darwin for a user or group change), SIGCHLD reaping | `uv_loop.silk`, `src/ext/uv_spawn_darwin.silk` |
 | Descriptor poll (child IPC sockets) | Silk | `uv_loop.silk` |
-| fs events | Silk: inotify on Linux, kqueue vnode on Darwin | `uv_loop.silk` |
+| fs events | Silk: inotify on Linux; on Darwin FSEvents for directories (one CFRunLoop thread and one stream per loop, CoreServices through dlopen) and kqueue vnode for the rest | `uv_loop.silk`, `src/ext/uv_fsevents.silk` |
 | fs stat polls (`fs.watchFile`) | Silk: loop timer and `statx` | `uv_loop.silk` |
 | Timers | Not used by the runtime (its timers were already Silk); a timer handle exists for addons | `uv_loop.silk` |
 | OS queries (`uv_cpu_info`, `uv_interface_addresses`, memory, load, uptime, passwd, uname, rusage, priority, hostname, homedir, tmpdir, exepath, parallelism), `uv_hrtime`, `uv_translate_sys_error`, `uv_thread_setname` | Silk | `src/ext/uv_os.silk` |
@@ -68,8 +68,16 @@ reactor to accept the Darwin vnode filter, or fs events to move elsewhere.
   costs a pass over the loop's watchers; fine for tens or hundreds, not measured for thousands.
 - **`uv_spawn` accepts only inherited descriptors** (and ignored slots) as stdio. The runtime never
   passed libuv's pipe or stream containers.
-- **macOS child processes use fork and exec**, libuv's fallback path; libuv prefers `posix_spawn`
-  there, which is faster in a process with much mapped memory.
+- **macOS children exit through SIGCHLD.** libuv on macOS learns of a child's exit from a kqueue
+  `EVFILT_PROC` filter; the loop here uses its SIGCHLD watcher on both systems. Same callbacks and
+  statuses; the runtime installs a SIGCHLD handler on macOS where Node does not.
+- **posix_spawn on macOS**: libuv clears `O_NONBLOCK` on the descriptor number a low stdio slot was
+  moved to (some unrelated parent descriptor, or none); this clears it on the descriptor given.
+- **FSEvents**: the stream's paths array retains its strings (`kCFTypeArrayCallBacks`) and is
+  released after the stream is made, where libuv leaks the array, the strings and the C array on
+  each reschedule; an unlimited RLIMIT_STACK gives the run-loop thread the default stack where
+  libuv aborts; a null stream from FSEventStreamCreate is UV_ENOMEM where libuv asserts; on
+  allocation failures a watch is taken out of the stream's list where libuv leaves it in.
 - OS queries: where libuv aborts on malformed `/proc` data these carry on; details in the
   `uv_os.silk` header.
 - uvwasi shim: socket calls on a descriptor that is not a socket return an error where libuv
@@ -80,10 +88,11 @@ reactor to accept the Darwin vnode filter, or fs events to move elsewhere.
 Nothing was compiled for or run on macOS. Type-checking of the Darwin branches passes. Known gaps
 and risks, most serious first:
 
-1. **No FSEvents.** libuv uses FSEvents for directory watches on macOS; this has only the kqueue
-   vnode path. A directory watch reports the directory's own name instead of the changed entry,
-   and `fs.watch(dir, { recursive: true })` does not see nested changes. This is a functional
-   regression on the platform the README calls the verified one, and it is not done.
+1. **FSEvents and posix_spawn are written, not run.** `src/ext/uv_fsevents.silk` (directory
+   watches, recursive watches) and `src/ext/uv_spawn_darwin.silk` type-check and link for
+   aarch64-apple-darwin against the macOS 15.5 SDK; their constants and layouts come from its
+   headers. `tests/fs-watch-darwin-smoke.cjs` and `tests/spawn-smoke.cjs` compare them with Node
+   on the macOS runner.
 2. Every Darwin constant and layout is from headers and libuv's source, unverified: `sigaction`,
    signal numbers, `kevent`, `stat`, `sockaddr_dl`, sysctl MIBs, Mach `host_statistics` and
    `task_info`, `passwd`, `utsname`.
@@ -229,7 +238,7 @@ Reading it:
 
 ## Next
 
-- FSEvents for macOS, and a first run of anything on macOS.
+- A first run of anything on macOS, FSEvents and posix_spawn included.
 - `fs.watchFile` stats on the blocking pool.
 - Decide the extent of the addon libuv surface.
 - Rename `modules/native/libuv` (it holds only uvwasi now).
