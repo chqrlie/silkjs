@@ -57,11 +57,20 @@ def run(command, **options):
     subprocess.run(command, check=True, **options)
 
 
+def sysroot():
+    """Silk's Clang brings no macOS SDK: point it at Xcode's (or SDKROOT)."""
+    if sys.platform != 'darwin':
+        return []
+    sdk = os.environ.get('SDKROOT') or subprocess.run(['xcrun', '--show-sdk-path'], capture_output=True, text=True).stdout.strip()
+    return ['-isysroot', sdk] if sdk else []
+
+
 def compile_tests(source, objects, compiler):
     os.makedirs(objects, exist_ok=True)
     test = os.path.join(source, 'test')
     flags = ['-O1', '-g', '-w', '-D_GNU_SOURCE', '-D_FILE_OFFSET_BITS=64', '-I', os.path.join(source, 'include'),
              '-I', os.path.join(source, 'src'), '-I', test]
+    flags += sysroot()
     jobs = []
     for name in sorted(os.listdir(test)):
         if not name.endswith('.c'):
@@ -84,7 +93,7 @@ def compile_tests(source, objects, compiler):
             run([compiler, *flags, '-c', os.path.join(test, name), '-o', os.path.join(objects, name[:-2] + '.o')])
     with open(os.path.join(objects, 'entry.c'), 'w') as entry:
         entry.write(ENTRY)
-    run([compiler, '-O1', '-c', os.path.join(objects, 'entry.c'), '-o', os.path.join(objects, 'entry.o')])
+    run([compiler, '-O1', *sysroot(), '-c', os.path.join(objects, 'entry.c'), '-o', os.path.join(objects, 'entry.o')])
 
 
 def build_silk(work, objects, compiler):

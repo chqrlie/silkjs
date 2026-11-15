@@ -61,6 +61,8 @@ jobs:
         run: |
           unset NODE_OPTIONS
           export SILKJS_RUNTIME="$RUNNER_TEMP/silkjs" NODE_REFERENCE="$(which node)" CC=clang
+          # A failing fixture is reported, not a reason to stop the loop.
+          set +e
           : > "$RUNNER_TEMP/fixtures.txt"
           for t in tests/*-smoke.cjs tests/*-smoke.mjs tests/eventsource-dispatcher.cjs tests/wasm-fixtures.cjs tests/wasm-interruptions.cjs tests/wasm-memory-range.cjs tests/fixtures/wasi/smoke.cjs; do
             [ -f "$t" ] || continue
@@ -71,6 +73,7 @@ jobs:
             timeout 300 python3 "$t" "$RUNNER_TEMP/silkjs" > "$RUNNER_TEMP/fx.out" 2>&1; s=$?
             echo "$s $t $(tail -1 "$RUNNER_TEMP/fx.out" | cut -c1-160)" | tee -a "$RUNNER_TEMP/fixtures.txt"
           done
+          echo "$(grep -c '^0 ' "$RUNNER_TEMP/fixtures.txt") of $(wc -l < "$RUNNER_TEMP/fixtures.txt") fixtures passed"
       - name: Loop behavior against Node 24
         if: always()
         working-directory: modules/runtime
