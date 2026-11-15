@@ -70,7 +70,9 @@ pub unsafe fn liveInner(outer: *const u8) -> ?*mut u8 {
   let anchor = () let h = unsafe Pointer.borrow<(), Head>(&anchor, unsafe Intrinsic.pointerReinterpret<*const u8, *const Head>(outer))
   return h.inner
 }
-// Head.flags: the record's own closing state, which outlives its inner handle.
+// Head.flags is libuv's uv_handle_t.flags: the record's own closing state (libuv's
+// UV_HANDLE_CLOSING and UV_HANDLE_CLOSED), which outlives its inner handle, and the other
+// UV_HANDLE_* bits the type's module keeps there (ext.uv_api_stream), which closing keeps.
 pub const RECORD_CLOSING: u32 = 1
 pub const RECORD_CLOSED: u32 = 2
 /// libuv's uv_is_closing of a record without an inner handle: closing or closed.
@@ -108,7 +110,7 @@ export "C" fn silkUvApiInnerClosed(inner: *mut u8) -> () {
   if !Intrinsic.pointerIsNull<?extern "C" fn(*mut u8) -> ()>(finish) { let present = unsafe Intrinsic.pointerRequalify<?extern "C" fn(*mut u8) -> (), extern "C" fn(*mut u8) -> ()>(finish) unsafe present(outer) }
   // The record outlives its inner handle: later uv_is_closing and friends read its own flags.
   let mut second = () let g = unsafe Pointer.borrowMut<(), Head>(&mut second, unsafe head(outer))
-  g.inner = Pointer.null<u8>() g.flags = RECORD_CLOSING | RECORD_CLOSED drop g
+  g.inner = Pointer.null<u8>() g.flags = g.flags | RECORD_CLOSING | RECORD_CLOSED drop g
   unsafe free(inner)
   if !Intrinsic.pointerIsNull<?extern "C" fn(*mut u8) -> ()>(closed) { let present = unsafe Intrinsic.pointerRequalify<?extern "C" fn(*mut u8) -> (), extern "C" fn(*mut u8) -> ()>(closed) unsafe present(outer) }
 }
@@ -117,7 +119,7 @@ export "C" fn silkUvApiInnerClosed(inner: *mut u8) -> () {
 pub unsafe fn closeRecord(outer: *mut u8, callback: ?extern "C" fn(*mut u8) -> ()) -> () {
   let mut anchor = () let h = unsafe Pointer.borrowMut<(), Head>(&mut anchor, unsafe head(outer))
   if Pointer.isNull<u8>(h.inner) { return }
-  h.closed = callback h.flags = RECORD_CLOSING let inner = unsafe nn(h.inner) drop h
+  h.closed = callback h.flags = h.flags | RECORD_CLOSING let inner = unsafe nn(h.inner) drop h
   unsafe uvl.uv_close(inner, silkUvApiInnerClosed)
 }
 
