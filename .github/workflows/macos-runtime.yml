@@ -16,7 +16,7 @@ concurrency:
 jobs:
   runtime:
     runs-on: macos-15
-    timeout-minutes: 120
+    timeout-minutes: 180
     strategy:
       fail-fast: false
       matrix:
@@ -80,7 +80,8 @@ jobs:
             echo "$s $t $(tail -1 "$RUNNER_TEMP/fx.out" | cut -c1-160)" | tee -a "$RUNNER_TEMP/fixtures.txt"
           done
           for t in tests/*.py; do
-            timeout 300 python3 "$t" "$RUNNER_TEMP/silkjs" > "$RUNNER_TEMP/fx.out" 2>&1; s=$?
+            # embed-smoke.py builds an executable of its own: give the Python fixtures more time.
+            timeout 2400 python3 "$t" "$RUNNER_TEMP/silkjs" > "$RUNNER_TEMP/fx.out" 2>&1; s=$?
             cp "$RUNNER_TEMP/fx.out" "$RUNNER_TEMP/fx/$(basename "$t").out"
             echo "$s $t $(tail -1 "$RUNNER_TEMP/fx.out" | cut -c1-160)" | tee -a "$RUNNER_TEMP/fixtures.txt"
           done
