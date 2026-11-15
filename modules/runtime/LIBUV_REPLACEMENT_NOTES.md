@@ -14,9 +14,7 @@ addons, written in Silk with libuv's record layouts (`src/ext/uv_api_*.silk`). l
 suite, linked once against real libuv and once against these exports (`tools/libuv_suite.py`),
 passes the same 438 of 442 tests with each on Linux x64.
 
-Verified on Linux x64. macOS arm64 is written, type-checks and passes code generation
-(`silk build --target aarch64-apple-darwin`); the macOS runner (`.github/workflows/macos-runtime.yml`)
-is the first place it runs: see "macOS arm64" below.
+Verified on Linux x64 and on macOS arm64 (the CI runner): see "macOS arm64" below.
 
 ## What replaced what
 
@@ -95,22 +93,37 @@ reactor to accept the Darwin vnode filter, or fs events to move elsewhere.
 - uvwasi shim: socket calls on a descriptor that is not a socket return an error where libuv
   crashed; the wait is `poll(2)`.
 
-## macOS arm64: written, first run on the CI runner
+## macOS arm64: run on the CI runner
 
-The Darwin branches type-check and pass code generation here (the link needs the SDK); the
-`macOS runtime` workflow builds the runtime on an Apple Silicon runner and runs the differential
-cases, the fixtures and libuv's own suite against the exports. Until a run of it passes, treat
-everything below as unverified:
+Two workflows run on an Apple Silicon runner (macos-15, Xcode 16.4 SDK): `macos-runtime.yml` builds
+the runtime from this branch and, as the baseline, from `main` at f3d5ea8 (libuv linked), and runs
+the differential cases and the fixtures with each; `macos-libuv-suite.yml` runs libuv's own suite
+against real libuv and against the exports, with `tools/libuv_diagnostic.c` beside it.
 
-1. **FSEvents and posix_spawn are written, not run.** `src/ext/uv_fsevents.silk` (directory
-   watches, recursive watches) and `src/ext/uv_spawn_darwin.silk` type-check and link for
-   aarch64-apple-darwin against the macOS 15.5 SDK; their constants and layouts come from its
-   headers. `tests/fs-watch-darwin-smoke.cjs` and `tests/spawn-smoke.cjs` compare them with Node
-   on the macOS runner.
-2. Every Darwin constant and layout is from headers and libuv's source, unverified: `sigaction`,
-   signal numbers, `kevent`, `stat`, `sockaddr_dl`, sysctl MIBs, Mach `host_statistics` and
-   `task_info`, `passwd`, `utsname`.
-3. The kqueue backend of the loop, the signal handler and the fork path have never executed there.
+Fixtures and differential cases: run of branch commit 29938a7; libuv's suite: run of cf9a9a5 (the
+fixes below came between them; a full run of the final commit is queued).
+
+| Check on macOS | main f3d5ea8 | this branch |
+| --- | --- | --- |
+| Build | passes | passes |
+| Differential cases against Node 24 (`tests/compat.mjs`) | 75 passed, 0 failed | 75 passed, 0 failed |
+| Fixtures | 77 of 96 | 79 of 98: the same 77, and the two new ones (`fs-watch-darwin-smoke.cjs` with FSEvents, `spawn-smoke.cjs` with posix_spawn, both equal to Node). Every fixture the two share has the same result |
+| libuv 1.51's own suite | real libuv: 436 of 441 | Silk exports: 436 of 441; the same five fail with both (`tcp_connect6_link_local`, four UDP multicast tests: the runner's network) |
+
+The 19 fixtures that fail on macOS fail on `main` there too (among them `sea-smoke.py`, the
+Node-API smokes, `embed-smoke.py` within the old five-minute limit).
+
+libuv's suite found seven differences on macOS that Linux could not show, all fixed:
+posix_spawn children got an empty environment when `options.env` was null; `uv_loop_fork` closed
+its own new kqueue (a kqueue is not inherited, so the old descriptor's number is free and the new
+queue may take it); `ENOBUFS` and `ENOSYS` had Linux's values; `uv_poll_init` set nonblocking
+mode with `fcntl`, which a kqueue descriptor refuses (libuv tries `ioctl(FIONBIO)` first); and
+`UV_PRIORITIZED` behaved as on Linux where libuv on macOS reports the kernel's refusal of its
+`EV_OOBAND` filter as one priority event ahead of the batch (replayed now with a one-shot
+`EVFILT_USER` event, first in its batch).
+
+Not covered by any run: Linux arm64 (type-checked only), the select() thread libuv starts for
+descriptors kqueue refuses (`/dev/tty`; not done), and a fork after FSEvents started.
 
 ## Compiler walls and tooling issues
 
