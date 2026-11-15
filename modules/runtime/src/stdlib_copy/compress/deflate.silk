@@ -18,9 +18,11 @@
 //! greedy matching for levels 1 to 3, lazy matching for levels 4 to 9, and blocks that use stored,
 //! fixed Huffman, or dynamic Huffman codes, whichever is smallest. Level 0 writes stored blocks.
 //! [`Encoder.make`] allocates all storage one time. Later calls do not allocate and do not keep a
-//! borrow of your buffers. The output is deterministic: gzip uses timestamp zero, no optional
-//! fields, and OS byte 255. The bytes are a valid stream but are not the same bytes that zlib
-//! writes.
+//! borrow of your buffers. The output is deterministic, and with the same options, input and
+//! flushes it is byte for byte what zlib 1.3.1 writes, in steps that consume and write what zlib's
+//! `deflate` does with the same input and output lengths. Gzip uses timestamp zero, no optional
+//! fields, and operating system byte 255, which zlib sets to the system it was built for;
+//! [`Encoder.setGzipSystem`] changes it.
 //!
 //! # Examples
 //! ## Compress a buffer with zlib framing

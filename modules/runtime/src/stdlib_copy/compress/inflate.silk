@@ -335,6 +335,11 @@ pub struct Decoder {
   // Whether the decoder just reached the start of a block, where a block stop returns.
   boundary: bool,
   literal: u8,
+  // What the bytes read so far of a header unit already prove wrong. The unit is checked when
+  // it is complete; if the final input ends inside it, this is the failure.
+  early: bool,
+  earlyKind: ErrorKind,
+  earlyDetail: ErrorDetail,
   totalInput: u64,
   totalOutput: u64,
   totalHeaders: u64,
@@ -409,6 +414,9 @@ impl Decoder {
       blockStop: false,
       boundary: false,
       literal: 0,
+      early: false,
+      earlyKind: ErrorKind.InvalidUse,
+      earlyDetail: ErrorDetail.None,
       totalInput: 0,
       totalOutput: 0,
       totalHeaders: 0,
@@ -478,6 +486,7 @@ impl Decoder {
     self.reach = reachOf(self.windowBits)
     self.boundary = false
     self.literal = 0
+    self.early = false
     self.totalInput = 0
     self.totalOutput = 0
     self.totalHeaders = 0
@@ -668,6 +677,11 @@ impl Decoder {
       commit(&mut self, &output)
       if action == NEED_INPUT {
         if self.finalSeen {
+          if self.early {
+            let kind = self.earlyKind
+            self.detail = self.earlyDetail
+            return failure(&mut self, kind)
+          }
           return failure(&mut self, ErrorKind.TruncatedInput)
         }
         return success(&mut self, Status.NeedInput)
@@ -856,6 +870,14 @@ fn failure(state: &mut Decoder, kind: ErrorKind) -> Result<Progress, DecodeError
   return Result<Progress, DecodeError>.failResult(
     DecodeError {kind: kind, consumed: state.inputPosition, written: state.outputPosition},
   )
+}
+
+// Notes a failure that the first bytes of a header unit prove, for a final input that ends
+// inside the unit.
+fn foresee(state: &mut Decoder, kind: ErrorKind, detail: ErrorDetail) -> () {
+  state.early = true
+  state.earlyKind = kind
+  state.earlyDetail = detail
 }
 
 fn reject(state: &mut Decoder, kind: ErrorKind, detail: ErrorDetail) -> u32 {
@@ -1247,6 +1269,15 @@ fn header(state: &mut Decoder, input: &[u8]) -> u32 {
     // the flags.
     if state.index == 0 || state.index == 2 {
       state.first = state.value
+      state.early = false
+      if state.index == 0 && state.value != 31 {
+        foresee(&mut state, ErrorKind.InvalidHeader, ErrorDetail.HeaderCheck)
+      }
+      if state.index == 2 && state.value != 8 {
+        foresee(&mut state, ErrorKind.UnsupportedMethod, ErrorDetail.Method)
+      }
+    } else {
+      state.early = false
     }
     if state.index == 1 && (state.first != 31 || state.value != 139) {
       return reject(&mut state, ErrorKind.InvalidHeader, ErrorDetail.HeaderCheck)
@@ -1311,12 +1342,23 @@ fn header(state: &mut Decoder, input: &[u8]) -> u32 {
   }
   if phase == PHASE_ZLIB_METHOD {
     state.first = state.value
+    if u32.bitAnd(state.first, 15) != 8 {
+      foresee(&mut state, ErrorKind.UnsupportedMethod, ErrorDetail.Method)
+    } else if state.first >= 128 {
+      foresee(&mut state, ErrorKind.InvalidHeader, ErrorDetail.WindowSize)
+    }
     state.phase = PHASE_ZLIB_FLAGS
     return GO
   }
   if phase == PHASE_ZLIB_FLAGS {
+    state.early = false
     // The two bytes are checked together and in zlib's order.
     if u32.remainder(state.first * 256 + state.value, 31) != 0 {
+      // zlib names the check first. The kind stays the more specific one when the method is
+      // wrong too.
+      if u32.bitAnd(state.first, 15) != 8 {
+        return reject(&mut state, ErrorKind.UnsupportedMethod, ErrorDetail.HeaderCheck)
+      }
       return reject(&mut state, ErrorKind.InvalidHeader, ErrorDetail.HeaderCheck)
     }
     if u32.bitAnd(state.first, 15) != 8 {
@@ -1337,6 +1379,9 @@ fn header(state: &mut Decoder, input: &[u8]) -> u32 {
       return reject(&mut state, ErrorKind.InvalidHeader, ErrorDetail.WindowSize)
     }
     if u32.bitAnd(state.value, 32) != 0 {
+      if state.dictionaryLength == 0 {
+        foresee(&mut state, ErrorKind.MissingDictionary, ErrorDetail.DictionaryNeeded)
+      }
       state.index = 0
       state.trailer = 0
       state.phase = PHASE_ZLIB_DICTIONARY
@@ -1353,6 +1398,7 @@ fn header(state: &mut Decoder, input: &[u8]) -> u32 {
   state.trailer = u32.shiftLeft(state.trailer, 8) | state.value
   state.index = state.index + 1
   if state.index == 4 {
+    state.early = false
     if state.dictionaryLength == 0 {
       return reject(&mut state, ErrorKind.MissingDictionary, ErrorDetail.DictionaryNeeded)
     }
