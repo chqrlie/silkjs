@@ -141,13 +141,26 @@ pub unsafe export "C" fn loopDelete(loop: *mut u8) -> () as "uv_loop_delete" {
   if !wasDefault { unsafe free(loop) }
 }
 pub unsafe export "C" fn loopAlive(loop: *const u8) -> i32 as "uv_loop_alive" { return unsafe uvl.uv_loop_alive(loop) }
-/// Silk cannot define a variadic C function (compiler wall in LIBUV_REPLACEMENT_NOTES.md), so the
-/// option's argument is the third fixed parameter. On Linux that is where a variadic caller puts
-/// it; on Darwin arm64 a variadic argument is on the stack, so UV_LOOP_BLOCK_SIGNAL there takes
-/// SIGPROF for granted instead of reading the argument.
-pub unsafe export "C" fn loopConfigure(loop: *mut u8, option: i32, argument: i32) -> i32 as "uv_loop_configure" {
-  static if Intrinsic.targetOperatingSystem() == "darwin" { return unsafe uvl.uv_loop_configure(loop, option, 27) }
-  else { return unsafe uvl.uv_loop_configure(loop, option, argument) }
+/// libuv's `int uv_loop_configure(uv_loop_t*, uv_loop_option, ...)`. Silk has no variadic exports
+/// (a compiler wall, LIBUV_REPLACEMENT_NOTES.md), so the variadic argument is reached through the
+/// calling convention instead:
+/// - x86-64 (System V) and GNU arm64 pass a variadic int where the third fixed parameter goes, in
+///   a register: the export takes it as `argument`.
+/// - Darwin arm64 passes every variadic argument on the stack, the first at the caller's stack
+///   pointer, which is where a function's ninth integer parameter is read from; the eight
+///   registers before it carry nothing it uses. The export there takes six unused parameters and
+///   the argument ninth. It is read only for UV_LOOP_BLOCK_SIGNAL, the one option that has one, so
+///   a call without it never reads the slot.
+static if Intrinsic.targetOperatingSystem() == "darwin" && Intrinsic.targetArchitecture() == "aarch64" {
+  pub unsafe export "C" fn loopConfigure(loop: *mut u8, option: i32, x2: usize, x3: usize, x4: usize, x5: usize, x6: usize, x7: usize, stacked: i32) -> i32 as "uv_loop_configure" {
+    // UV_LOOP_BLOCK_SIGNAL is option 0.
+    if option != 0 { return unsafe uvl.uv_loop_configure(loop, option, 0) }
+    return unsafe uvl.uv_loop_configure(loop, option, stacked)
+  }
+} else {
+  pub unsafe export "C" fn loopConfigure(loop: *mut u8, option: i32, argument: i32) -> i32 as "uv_loop_configure" {
+    return unsafe uvl.uv_loop_configure(loop, option, argument)
+  }
 }
 pub unsafe export "C" fn loopFork(loop: *mut u8) -> i32 as "uv_loop_fork" { return unsafe uvl.uv_loop_fork(loop) }
 pub unsafe export "C" fn loopGetData(loop: *const u8) -> ?*mut u8 as "uv_loop_get_data" { return unsafe uvl.uv_loop_get_data(loop) }
@@ -717,7 +730,11 @@ pub fn keepExports() -> () {
   let _loopClose: extern "C" fn(*mut u8) -> i32 = loopClose
   let _loopDelete: extern "C" fn(*mut u8) -> () = loopDelete
   let _loopAlive: extern "C" fn(*const u8) -> i32 = loopAlive
-  let _loopConfigure: extern "C" fn(*mut u8, i32, i32) -> i32 = loopConfigure
+  static if Intrinsic.targetOperatingSystem() == "darwin" && Intrinsic.targetArchitecture() == "aarch64" {
+    let _loopConfigure: extern "C" fn(*mut u8, i32, usize, usize, usize, usize, usize, usize, i32) -> i32 = loopConfigure
+  } else {
+    let _loopConfigure: extern "C" fn(*mut u8, i32, i32) -> i32 = loopConfigure
+  }
   let _loopFork: extern "C" fn(*mut u8) -> i32 = loopFork
   let _loopGetData: extern "C" fn(*const u8) -> ?*mut u8 = loopGetData
   let _loopSetData: extern "C" fn(*mut u8, ?*mut u8) -> () = loopSetData

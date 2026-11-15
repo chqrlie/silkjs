@@ -3,6 +3,7 @@
  * Covers the cases where libuv's suite found the two apart on macOS. */
 #include <uv.h>
 #include <errno.h>
+#include <signal.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <string.h>
@@ -87,6 +88,16 @@ int uv_suite_diagnostic(void) {
     r = uv_run(loop, UV_RUN_DEFAULT); printf("run %d\n", r);
   }
 #endif
+  /* uv_loop_configure is variadic: its signal argument must arrive on every target. */
+  {
+    uv_loop_t other;
+    uv_loop_init(&other);
+    r = uv_loop_configure(&other, UV_LOOP_BLOCK_SIGNAL, SIGPROF); printf("configure(BLOCK_SIGNAL, SIGPROF) %d\n", r);
+    r = uv_loop_configure(&other, UV_LOOP_BLOCK_SIGNAL, SIGINT); printf("configure(BLOCK_SIGNAL, SIGINT) %d\n", r);
+    r = uv_loop_configure(&other, UV_LOOP_BLOCK_SIGNAL, 0); printf("configure(BLOCK_SIGNAL, 0) %d\n", r);
+    r = uv_loop_configure(&other, UV_METRICS_IDLE_TIME); printf("configure(METRICS_IDLE_TIME) %d\n", r);
+    r = uv_loop_close(&other); printf("other loop_close %d\n", r);
+  }
   r = uv_loop_close(loop); printf("loop_close %d\n", r);
   fflush(stdout);
   return 0;
