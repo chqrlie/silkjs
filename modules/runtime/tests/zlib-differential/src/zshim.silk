@@ -7,6 +7,8 @@ import silk.mem.layout { Layout }
 import silk.num.i32
 import silk.num.usize
 import ext.zlib_stream { Call, Deflater, Inflater, message }
+import silk.compress.checksum { CompressionChecksum }
+import silk.num.u32
 
 unsafe extern "C" fn calloc(count: usize, size: usize) -> ?*mut u8
 unsafe extern "C" fn free(pointer: ?*mut u8) -> ()
@@ -123,5 +125,9 @@ export "C" fn zs_inflate_dictionary(handle: ?*mut u8, dictionary: ?*mut u8, leng
   let stream = unsafe Pointer.borrowMut<(), Inflater>(&mut anchor, unsafe Intrinsic.pointerReinterpret<*mut u8, *mut Inflater>(unsafe nonnull(handle)))
   let held = ()
   return Inflater.setDictionary(&mut stream, unsafe bytes(&held, dictionary, length))
+}
+export "C" fn zs_crc32(crc: u32, data: ?*mut u8, length: usize) -> u32 {
+  let held = ()
+  return CompressionChecksum.crc32Update(crc, unsafe bytes(&held, data, length))
 }
 pub fn main() -> i32 { return 0 }

@@ -149,40 +149,23 @@ class CompressionHandle {
     if (typeof this.onerror === 'function') this.onerror(text, errno, code);
   }
 
-  // One write() runs native steps until the output range is full, the input is
-  // consumed, or the codec reports that the stream ended. Every step resumes the
-  // codec's retained copy of the remaining input.
-  _step(sync, state, done) {
-    const args = [this._id, state.input, state.flush, state.outLength - state.written];
-    state.input = undefined;
-    const finish = (value) => {
-      const result = decode(value);
-      if (result.output.length) {
-        state.out.set(result.output, state.outOffset + state.written);
-        state.written += result.output.length;
-      }
-      state.consumed += result.consumed;
-      if (result.status !== 0) { done(result.status, result.message); return; }
-      const progressed = result.consumed !== 0 || result.output.length !== 0;
-      if (result.again && progressed && state.written < state.outLength && this._id) {
-        this._step(sync, state, done);
-        return;
-      }
-      done(0);
-    };
-    if (sync) finish(call('process', args));
-    else asyncCall('process', args, (err, value) => {
-      if (err) { done(constants.Z_STREAM_ERROR, err.message); return; }
-      if (!this._id) { done(0); return; }
-      finish(value);
-    });
-  }
-
+  // One write() is one native 'write': the codec reads the caller's input range and writes the
+  // caller's output range in place, calling itself again while it has more to do and the output
+  // has room, as node_zlib.cc's Write does. Nothing is copied on the way.
   _write(sync, flush, input, inOffset, inLength, out, outOffset, outLength) {
     this._check(sync ? 'writeSync' : 'write');
     if (!Number.isInteger(flush)) throw new ERR_INVALID_ARG_TYPE('flush', 'number', flush);
-    const source = input === undefined || input === null ? new ArrayBuffer(0) :
-      snapshot(byteView(input, 'in'), inOffset, inLength, 'in');
+    let source, start = 0, length = 0;
+    if (input !== undefined && input !== null) {
+      const bytes = range(byteView(input, 'in'));
+      if (!Number.isInteger(inOffset) || inOffset < 0 || inOffset > bytes.length) {
+        throw new ERR_OUT_OF_RANGE('in_off', `>= 0 && <= ${bytes.length}`, inOffset);
+      }
+      if (!Number.isInteger(inLength) || inLength < 0 || inLength > bytes.length - inOffset) {
+        throw new ERR_OUT_OF_RANGE('in_len', `>= 0 && <= ${bytes.length - inOffset}`, inLength);
+      }
+      source = bytes.buffer; start = bytes.offset + inOffset; length = inLength;
+    }
     out = byteView(out, 'out');
     const target = range(out);
     if (!Number.isInteger(outOffset) || outOffset < 0 || outOffset > target.length) {
@@ -191,19 +174,27 @@ class CompressionHandle {
     if (!Number.isInteger(outLength) || outLength < 1 || outLength > target.length - outOffset) {
       throw new ERR_OUT_OF_RANGE('out_len', `>= 1 && <= ${target.length - outOffset}`, outLength);
     }
-    const state = {
-      input: source, flush, consumed: 0, written: 0,
-      out: new Uint8Array(target.buffer, target.offset, target.length), outOffset, outLength,
-    };
-    const inBefore = source.byteLength;
+    const args = [this._id, flush, source, start, length, target.buffer, target.offset + outOffset, outLength];
     this._writeInProgress = true;
-    this._step(sync, state, (status, message) => {
+    const done = (value) => {
       this._writeInProgress = false;
-      this._writeState[0] = outLength - state.written;
-      this._writeState[1] = inBefore - state.consumed;
+      const view = new DataView(value);
+      const status = view.getInt32(0, true);
+      const consumed = view.getUint32(4, true), written = view.getUint32(8, true);
+      this._writeState[0] = outLength - written;
+      this._writeState[1] = length - consumed;
       if (this._pendingClose) this.close();
-      if (status !== 0) { this._error(status, message); return; }
+      if (status !== 0) {
+        const message = value.byteLength > 20 ? Buffer.from(value, 20).toString('latin1') : undefined;
+        this._error(status, message);
+        return;
+      }
       if (!sync) this._callback.call(this);
+    };
+    if (sync) { done(call('write', args)); return; }
+    asyncCall('write', args, (err, value) => {
+      if (err) { this._writeInProgress = false; this._error(constants.Z_STREAM_ERROR, err.message); return; }
+      done(value);
     });
   }
 

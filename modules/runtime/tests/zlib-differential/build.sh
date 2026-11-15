@@ -32,7 +32,7 @@ ln -sfn "$runtime/src/ext/zlib_stream.silk" package/src/ext/zlib_stream.silk
 rm -f zshim.o
 (cd package && silk build src/zshim.silk --emit object -o "$out/zshim.o")
 objcopy --redefine-sym main=zs_unused_main zshim.o zshim_lib.o
-for name in fuzz_deflate fuzz_inflate bench_codec; do
+for name in fuzz_deflate fuzz_inflate bench_codec bench_crc; do
   gcc -O2 -w -no-pie -o "$name" "$here/$name.c" zshim_lib.o libzref.a
 done
 echo "built $out"
