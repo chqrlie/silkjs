@@ -7,12 +7,16 @@ status and benchmark numbers.
 
 No libuv C is compiled or linked. `modules/native/libuv/silk.toml` has no `[native.archive]` and
 compiles only uvwasi, against a header of its own; no Silk file declares an `extern "C" fn uv_*`.
-The only C symbols named `uv_*` in the executable are the 17 that `src/ext/uv_addon.silk` exports
-for Node-API addons.
 
-Verified on **Linux x64 only**. macOS arm64 is written and type-checks
-(`silk check --target aarch64-apple-darwin`), and has never been compiled, linked or run: see
-"macOS arm64" below for what that means.
+The executable exports **libuv 1.51's whole public C API** (318 `uv_*` functions: every public
+function of libuv 1.51 on Unix, and 1.52's `uv_tcp_keepalive_ex` and `uv_udp_open_ex`) for Node-API
+addons, written in Silk with libuv's record layouts (`src/ext/uv_api_*.silk`). libuv's own test
+suite, linked once against real libuv and once against these exports (`tools/libuv_suite.py`),
+passes the same 438 of 442 tests with each on Linux x64.
+
+Verified on Linux x64. macOS arm64 is written, type-checks and passes code generation
+(`silk build --target aarch64-apple-darwin`); the macOS runner (`.github/workflows/macos-runtime.yml`)
+is the first place it runs: see "macOS arm64" below.
 
 ## What replaced what
 
@@ -29,7 +33,9 @@ Verified on **Linux x64 only**. macOS arm64 is written and type-checks
 | OS queries (`uv_cpu_info`, `uv_interface_addresses`, memory, load, uptime, passwd, uname, rusage, priority, hostname, homedir, tmpdir, exepath, parallelism), `uv_hrtime`, `uv_translate_sys_error`, `uv_thread_setname` | Silk | `src/ext/uv_os.silk` |
 | `uv_ip4_addr`, `uv_ip6_addr`, `uv_ip4_name`, `uv_ip6_name` | Silk | `src/ext/uv_inet.silk` |
 | What uvwasi calls (63 functions) | Silk, under `silk_uvwasi_*` names | `src/ext/uvwasi_host.silk`, `modules/native/libuv/uvwasi/shim/uv.h` |
-| What a Node-API addon may call on the loop | Silk, C symbols with libuv's names | `src/ext/uv_addon.silk` |
+| libuv's C API for addons: loops (the default loop included), handles, timers, idle/prepare/check, async, poll, signal, process (pipe and stream stdio), fs event and fs poll handles, `uv_walk`, `uv_print_*` | Silk, libuv's C symbols on the addon's libuv-sized records | `src/ext/uv_api_loop.silk`, `src/ext/uv_api_abi.silk` (record conventions) |
+| libuv's threads, locks, once, keys, errors, allocator, OS and address functions, process title, WTF-8 | Silk | `src/ext/uv_api_sys.silk`, `src/ext/uv_errno.silk` |
+| libuv's streams, TCP, pipes, TTY and UDP for addons | Silk, on the loop's descriptor handles | `src/ext/uv_api_stream.silk` |
 | What an addon may call for fs requests, `uv_queue_work`, `uv_cancel`, `uv_getaddrinfo`/`uv_freeaddrinfo`/`uv_getnameinfo` (with libuv's IDNA) and `uv_random` | Silk, libuv's C symbols and record layouts, on the loop's thread pool | `src/ext/uv_api_fs.silk` |
 | TCP, pipes, TTY, UDP, streams, fs requests, the thread pool, DNS, `setImmediate`, loop turns | Already Silk before this branch (`net_native`, `fs_ops`, `blocking_pool`, `dns_native`, `runtime/session`) | unchanged |
 
@@ -58,17 +64,22 @@ reactor to accept the Darwin vnode filter, or fs events to move elsewhere.
 | --- | --- |
 | `src/ext/inspector_transport.c` | Never used libuv (pthreads and `poll(2)`). Nothing changed. |
 | uvwasi | Its C is unchanged. It compiles against `uvwasi/shim/uv.h`, a header only, which declares the part of libuv's interface uvwasi uses with layouts of our own (asserted in the header, and again at run time on the Silk side) and renames every function to `silk_uvwasi_*`. `poll_oneoff` gets a private loop over `poll(2)`. |
-| Node-API | `napi_get_uv_event_loop` returns the runtime's loop, which is not a `uv_loop_t`. An addon can use it through the functions `uv_addon.silk` exports: `uv_timer_init/start/stop`, `uv_async_init/send`, `uv_close`, `uv_ref`, `uv_unref`, `uv_has_ref`, `uv_is_active`, `uv_is_closing`, `uv_handle_get_data/set_data`, `uv_now`, `uv_hrtime`, `uv_thread_create/join`. The addon's own `uv_timer_t`/`uv_async_t` memory keeps libuv's public head (`data`, `loop`, `type`). **This is a subset.** An addon that calls any other libuv function fails to load with an undefined symbol; before, it worked. Owner's call whether to grow the subset or document the limit. |
+| Node-API | `napi_get_uv_event_loop` returns the runtime's loop, placed in libuv's `uv_loop_t` size (848 bytes Linux, 1072 Darwin). An addon can call any libuv function on it. Its records (`uv_timer_t`, `uv_tcp_t`, `uv_fs_t`...) have libuv's sizes; their public fields (`data`, `loop`, `type`, `close_cb`, a timer's `timeout`/`repeat`, a process's `pid`, a signal's `signum`, a stream's `write_queue_size`, an fs request's `result`/`ptr`/`path`/`statbuf`...) are kept current, and the private part holds the record's loop handle. `uv_default_loop()` is a separate loop, as it was when the runtime linked libuv (the runtime never ran libuv's default loop). |
 
 ## Behavior that differs from libuv, knowingly
 
-- **`fs.watchFile` stats on the loop thread.** libuv ran each stat on its thread pool. Same results
-  and ordering; a stat of a slow (network) file system now delays the loop for its duration. To do:
-  run it on `ext.blocking_pool`.
-- **fs event watchers are found by a list scan.** libuv keeps inotify watches in a tree. One event
-  costs a pass over the loop's watchers; fine for tens or hundreds, not measured for thousands.
-- **`uv_spawn` accepts only inherited descriptors** (and ignored slots) as stdio. The runtime never
-  passed libuv's pipe or stream containers.
+- **inotify watches are found by a hash table** where libuv keeps a red-black tree: same results,
+  constant-time lookup.
+- **`uv_loop_configure` on Darwin arm64** cannot read its variadic argument (compiler wall 9), so
+  `UV_LOOP_BLOCK_SIGNAL` takes SIGPROF for granted there.
+- **Records outlive their loop handles.** A closed record keeps libuv's closing flags in its own
+  `flags` field, so `uv_is_closing` and friends answer after the close callback, as in libuv.
+- **Addon API, smaller differences** (each in its module's header): threads start through a Silk
+  trampoline (exit value null); no pre-2.21 glibc semaphore fallback; `uv_library_shutdown` frees
+  only the `uv_setup_args` copy; no io_uring (libuv 1.51 uses it only when `UV_USE_IO_URING` is
+  set); one EMFILE reserve descriptor per process rather than per loop; macOS's select() thread
+  for descriptors kqueue refuses (`/dev/tty`) is not done; `uv_tcp_keepalive_ex` and
+  `uv_udp_open_ex` follow 1.52's documented interface (1.52's source was not available here).
 - **macOS children exit through SIGCHLD.** libuv on macOS learns of a child's exit from a kqueue
   `EVFILT_PROC` filter; the loop here uses its SIGCHLD watcher on both systems. Same callbacks and
   statuses; the runtime installs a SIGCHLD handler on macOS where Node does not.
@@ -84,10 +95,12 @@ reactor to accept the Darwin vnode filter, or fs events to move elsewhere.
 - uvwasi shim: socket calls on a descriptor that is not a socket return an error where libuv
   crashed; the wait is `poll(2)`.
 
-## macOS arm64: written, not run
+## macOS arm64: written, first run on the CI runner
 
-Nothing was compiled for or run on macOS. Type-checking of the Darwin branches passes. Known gaps
-and risks, most serious first:
+The Darwin branches type-check and pass code generation here (the link needs the SDK); the
+`macOS runtime` workflow builds the runtime on an Apple Silicon runner and runs the differential
+cases, the fixtures and libuv's own suite against the exports. Until a run of it passes, treat
+everything below as unverified:
 
 1. **FSEvents and posix_spawn are written, not run.** `src/ext/uv_fsevents.silk` (directory
    watches, recursive watches) and `src/ext/uv_spawn_darwin.silk` type-check and link for
@@ -147,9 +160,11 @@ None blocked the work, and no C was added. Reported for the compiler's owner:
 | Suite | Result |
 | --- | --- |
 | `silk task compat` cases against Node 24.22 (`tests/compat.mjs`) | 75 passed, 0 failed (main: 75, 0) |
-| Fixtures in `tests/` (`*-smoke.cjs`, `*-smoke.mjs`, the wasm and WASI fixtures, the Python ones) | 81 of 94 pass. The same 13 fail on the `main` binary built here, with the same last line of output, so they predate this branch or need a setup this container lacks: crypto-public, error-stack, gc-profiler, inspector-transport, inspector-websocket, iterable-streams, module-compile-cache, permission-matrix, process-report-fatal, util-abort-transfer, util-call-sites, vm-diagnostic-offsets, wasm-memory-range |
+| Fixtures in `tests/` (`*-smoke.cjs`, `*-smoke.mjs`, the wasm and WASI fixtures, the Python ones) | 83 of 96 pass: the 81 that pass on `main` and the two new ones. The same 13 fail on the `main` binary built here, with the same last line of output, so they predate this branch or need a setup this container lacks: crypto-public, error-stack, gc-profiler, inspector-transport, inspector-websocket, iterable-streams, module-compile-cache, permission-matrix, process-report-fatal, util-abort-transfer, util-call-sites, vm-diagnostic-offsets, wasm-memory-range |
 | Not run | `embed-smoke.py`, `sea-smoke.py` (each builds another executable), Node's own suite under `tests/node-suite` |
-| Standalone harness of `uv_loop.silk` and `uv_addon.silk` (async, signal, spawn, kill, missing program, fs event, stat poll, close order, addon timer and thread) | passes; it lives outside the repository and is not committed |
+| Fixtures added on this branch: `tests/spawn-smoke.cjs` (9 scenarios), `tests/fs-watch-darwin-smoke.cjs` (7 directory-watch scenarios), each compared with Node 24 | pass (Linux: fork and exec, inotify) |
+| **libuv 1.51's own test suite** (`tools/libuv_suite.py`: libuv's `test/*.c` linked with libuv built from source, and with `ext.uv_api_*`), run as `nobody` | libuv 438 of 442, Silk 438 of 442; the same four fail with both, for this container: `fs_copyfile`, `tcp_close_while_connecting` and `tcp_connect_timeout` (no outside network), `thread_priority` (unprivileged). The four `test-idna.c` tests exercise libuv's internal IDNA code, not its interface, and are left out. It found five differences on the way (a timer overflow, closed records, poll `EEXIST`, signal counts after `uv_loop_fork`, the thread pool after fork), all fixed |
+| Standalone harness of `uv_loop.silk` (async, signal, spawn, kill, missing program, fs event, stat poll, close order, pool, phases, timers, walk) | passes; outside the repository |
 | OS queries against real libuv 1.51 (same program, both libraries): real machine, 23 substituted `/proc` and cgroup scenarios, synthetic `getifaddrs`, 89,118 address texts | identical output |
 | uvwasi driver against real libuv 1.51 and against the shim (about 140 lines: fs, `poll_oneoff`, sockets) | identical but for four expected lines |
 | libuv 1.51's own fs, thread-pool, cancel, getaddrinfo, getnameinfo, IDNA and random tests (80 on Linux), linked against `uv_api_fs.silk` and against real libuv, run as `nobody`; plus a differential program (about 170 lines of results, fields and cleanup) | all 80 pass on both; differential output identical. Harness outside the repository (`/home/user/dl/uvapi-tests/fs`) |
@@ -240,8 +255,6 @@ Reading it:
 
 ## Next
 
-- A first run of anything on macOS, FSEvents and posix_spawn included.
-- `fs.watchFile` stats on the blocking pool.
-- Decide the extent of the addon libuv surface.
+- A passing run of the macOS workflow, FSEvents and posix_spawn included.
 - Rename `modules/native/libuv` (it holds only uvwasi now).
 - Put the standalone loop harness in the repository as a test package.
