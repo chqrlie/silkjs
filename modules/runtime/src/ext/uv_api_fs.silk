@@ -298,7 +298,8 @@ static if Intrinsic.targetOperatingSystem() == "darwin" {
   const EAI_PROTOCOL: i32 = 13
   const EAI_OVERFLOW: i32 = 14
   unsafe extern "C" fn mkdir(path: ?[*]const u8, mode: u16) -> i32
-  unsafe extern "C" fn fchmod(fd: i32, mode: u16) -> i32
+  // mode_t is 16 bits on Darwin; declared as the standard library does, with the conversion here.
+  unsafe extern "C" fn fchmod(fd: i32, mode: u32) -> i32
   unsafe extern "C" fn darwinPoll(fds: [*]mut PollFd, count: u32, timeout: i32) -> i32 as "poll"
   unsafe fn pollOne(fds: *mut PollFd) -> i32 { return unsafe darwinPoll(unsafe Pointer.assumeManyMut<PollFd>(fds), 1, -1) }
   unsafe extern "C" fn closeNocancel(fd: i32) -> i32 as "close$NOCANCEL"
@@ -308,7 +309,7 @@ static if Intrinsic.targetOperatingSystem() == "darwin" {
   // mode_t is 16 bits: libuv's req->mode keeps the low half of what the caller passed.
   fn modeOf(mode: i32) -> u32 { return i32.wrappingToU32(mode) & 65535 }
   unsafe fn makeDirectory(path: ?[*]const u8, mode: u32) -> i32 { return unsafe mkdir(path, u32.wrappingToU16(mode)) }
-  unsafe fn changeMode(fd: i32, mode: u32) -> i32 { return unsafe fchmod(fd, u32.wrappingToU16(mode)) }
+  unsafe fn changeMode(fd: i32, mode: u32) -> i32 { return unsafe fchmod(fd, mode & 65535) }
   // The address family of a sockaddr (sa_len comes first).
   unsafe fn familyOf(address: *const u8) -> u32 { return u8.toU32(unsafe Pointer.read<u8>(unsafe constAt(address, 1))) }
   // The kernel's `struct stat` (64-bit inodes), which stat, lstat and fstat fill.

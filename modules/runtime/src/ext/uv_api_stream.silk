@@ -154,7 +154,7 @@ static if Intrinsic.targetOperatingSystem() == "darwin" {
   unsafe extern "C" fn __error() -> *mut i32
   unsafe fn errno() -> i32 { return unsafe Pointer.read<i32>(unsafe __error()) }
   unsafe fn setErrno(value: i32) -> () { unsafe Pointer.write<i32>(unsafe __error(), value) }
-  unsafe extern "C" fn fchmod(fd: i32, mode: u16) -> i32
+  unsafe extern "C" fn fchmod(fd: i32, mode: u32) -> i32
   unsafe extern "C" fn recvmsg_x(fd: i32, messages: *mut u8, count: u32, flags: i32) -> isize
   unsafe extern "C" fn sendmsg_x(fd: i32, messages: *const u8, count: u32, flags: i32) -> isize
   const EAGAIN: i32 = 35
@@ -1797,7 +1797,7 @@ pub export "C" fn uv_pipe_chmod(pipe: ?*mut u8, mode: i32) -> i32 {
   if (mode & UV_READABLE) != 0 { desired = desired | 292 }
   if (mode & UV_WRITABLE) != 0 { desired = desired | 146 }
   static if Intrinsic.targetOperatingSystem() == "darwin" {
-    if unsafe fchmod(fd, u32.toU16(desired)) != 0 { let code = unsafe errno() if code != EINVAL && code != EOPNOTSUPP { return -code } }
+    if unsafe fchmod(fd, desired) != 0 { let code = unsafe errno() if code != EINVAL && code != EOPNOTSUPP { return -code } }
   } else {
     if unsafe fchmod(fd, desired) != 0 { let code = unsafe errno() if code != EINVAL && code != EOPNOTSUPP { return -code } }
   }

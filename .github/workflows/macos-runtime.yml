@@ -84,8 +84,9 @@ jobs:
         working-directory: modules/runtime
         run: |
           curl --fail --location https://dist.libuv.org/dist/v1.51.0/libuv-v1.51.0.tar.gz | tar xz -C "$RUNNER_TEMP"
+          set +e
           python3 tools/libuv_suite.py --libuv-src "$RUNNER_TEMP/libuv-v1.51.0" --work "$RUNNER_TEMP/uvsuite" > "$RUNNER_TEMP/libuv-suite.log" 2>&1; s=$?
-          tail -8 "$RUNNER_TEMP/libuv-suite.log"
+          if [ $s -eq 0 ]; then tail -8 "$RUNNER_TEMP/libuv-suite.log"; else tail -150 "$RUNNER_TEMP/libuv-suite.log"; fi
           cp "$RUNNER_TEMP/uvsuite/real.tap" "$RUNNER_TEMP/uvsuite/silk.tap" "$RUNNER_TEMP/" 2>/dev/null || true
           exit $s
       - uses: actions/upload-artifact@v4
