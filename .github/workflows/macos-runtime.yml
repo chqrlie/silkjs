@@ -11,7 +11,8 @@ permissions:
   contents: read
 concurrency:
   group: macos-runtime-${{ github.ref }}
-  cancel-in-progress: true
+  # A run takes longer than the gap between pushes: finish it, and keep only the newest waiting.
+  cancel-in-progress: false
 jobs:
   runtime:
     runs-on: macos-15
