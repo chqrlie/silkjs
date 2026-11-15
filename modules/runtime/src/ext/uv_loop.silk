@@ -398,6 +398,20 @@ static if Intrinsic.targetOperatingSystem() == "darwin" {
       ready[index] = Ready { tag: usize.toU64(item.udata), events: events }
       index = index + 1
     }
+    // A replayed priority refusal goes first, where libuv receives it: kevent reports the errors
+    // of its change list ahead of the ready events.
+    let mut front: usize = 0
+    index = 0
+    while index < i32.toUsize(count) {
+      if raw[index].filter == FILTER_USER {
+        let moved = ready[index]
+        let mut back = index
+        while back > front { ready[back] = ready[back - 1] back = back - 1 }
+        ready[front] = moved
+        front = front + 1
+      }
+      index = index + 1
+    }
     return count
   }
 } else {
