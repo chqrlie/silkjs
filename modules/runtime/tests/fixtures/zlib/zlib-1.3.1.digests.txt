@@ -1,0 +1,1089 @@
+sync deflate level=-1 text 48664 852e2aa286713930cdd35eab
+sync deflate level=0 text 200036 9798b3970e6bd55c056d1f30
+sync deflate level=1 text 62856 324fafb24b2903f76db0d89f
+sync deflate level=2 text 61340 0be35b4c39e09b1a3ef8445d
+sync deflate level=3 text 57161 0efc09ce32b0e77192ac428e
+sync deflate level=4 text 55894 75116415db6e196f6a70ad8f
+sync deflate level=5 text 53046 59be93b5493cc1a0be94598c
+sync deflate level=6 text 48664 852e2aa286713930cdd35eab
+sync deflate level=7 text 48246 32f89054079d41212395816e
+sync deflate level=8 text 48192 42d583d27def91de21653eec
+sync deflate level=9 text 48192 42d583d27def91de21653eec
+sync raw level=-1 text 48658 d534939079f47f9adb4d0c14
+sync raw level=0 text 200030 25c7d676a6538e6ae75d3255
+sync raw level=1 text 62850 28a1f7ede6cb72b75e976285
+sync raw level=2 text 61334 211da6d439eca3df09b92371
+sync raw level=3 text 57155 29f04e7881f56732bbb283ca
+sync raw level=4 text 55888 e800129cc2a79e0b9ae56cbe
+sync raw level=5 text 53040 eb1f16a3f919c2e322b99ab3
+sync raw level=6 text 48658 d534939079f47f9adb4d0c14
+sync raw level=7 text 48240 5a83f43143d7b66e37b28c8a
+sync raw level=8 text 48186 78c8ef14f90e3ea12b71ea7f
+sync raw level=9 text 48186 78c8ef14f90e3ea12b71ea7f
+sync gzip level=-1 text 48676 9ebac76497ea64ec765049e8
+sync gzip level=0 text 200048 c44e5f0b8ad1dc08ceae5353
+sync gzip level=1 text 62868 66818838fc2a77e20721a7fa
+sync gzip level=2 text 61352 bfaec0e354ac36d93522815a
+sync gzip level=3 text 57173 9d8f2eacce4e49434668392a
+sync gzip level=4 text 55906 830c31d5f955957072064405
+sync gzip level=5 text 53058 ba1593a618f5f20b1f67eb15
+sync gzip level=6 text 48676 9ebac76497ea64ec765049e8
+sync gzip level=7 text 48258 26e3bf599a59a5873e07b7a9
+sync gzip level=8 text 48204 60ddec1126e2e936bde67858
+sync gzip level=9 text 48204 69c00f7e60667aa5b5736177
+sync deflate level=-1 json 16822 e433289b35f4801eee30266f
+sync deflate level=0 json 150026 d29466aafb1fe997874647dd
+sync deflate level=1 json 21833 3c784d28e94131fe3f9b6b3c
+sync deflate level=2 json 19813 3081058ddd254f7847c9f281
+sync deflate level=3 json 19629 2b3c5ef440775a9fa1a6b63e
+sync deflate level=4 json 18184 7517acd7776b7bec48ea9ab9
+sync deflate level=5 json 17430 404426562e16e5309b2d5fec
+sync deflate level=6 json 16822 e433289b35f4801eee30266f
+sync deflate level=7 json 16746 83fdcea04ba6b727ed7f1629
+sync deflate level=8 json 16460 e1c9337c364d2b670d32f25f
+sync deflate level=9 json 16423 ee2b77a4bc62d5bcd5d85f4c
+sync raw level=-1 json 16816 690490332e20c7881ac5a75d
+sync raw level=0 json 150020 3e4c89d78dbd429b440c7e1f
+sync raw level=1 json 21827 3191a33281ebdb54983efe6e
+sync raw level=2 json 19807 5ea0b31f7ec82c154255de12
+sync raw level=3 json 19623 8bdd013c0758f678ef563092
+sync raw level=4 json 18178 dbb6e8359b69b4fbaee0282e
+sync raw level=5 json 17424 2696420939c878c658e465fc
+sync raw level=6 json 16816 690490332e20c7881ac5a75d
+sync raw level=7 json 16740 177f11980263f26a21ec52f2
+sync raw level=8 json 16454 66d8dd7167f51850e617589f
+sync raw level=9 json 16417 64fea49e25c48f09f662f648
+sync gzip level=-1 json 16834 57500f33ea79b8a442e60f32
+sync gzip level=0 json 150038 86717759e12a070d8eddea23
+sync gzip level=1 json 21845 d8398d5160bff3c0cdb6738b
+sync gzip level=2 json 19825 8a0338b57b2f3cdc9d5dfed4
+sync gzip level=3 json 19641 2a7f4186300a9ef4658c8ab7
+sync gzip level=4 json 18196 3e18377d769d0ac145c9c1be
+sync gzip level=5 json 17442 a43f43438c1772207d768ad3
+sync gzip level=6 json 16834 57500f33ea79b8a442e60f32
+sync gzip level=7 json 16758 e1bcc070480f4c4744063547
+sync gzip level=8 json 16472 dda1375436cc5906085e24a4
+sync gzip level=9 json 16435 65bba8e11a817506a886a45a
+sync deflate level=-1 random 70031 f57e90ba5a72dc32e04070f9
+sync deflate level=0 random 70016 0249aa7b0816bab9c2e7e01b
+sync deflate level=1 random 70031 cc39c6f7658fe5491fe59d87
+sync deflate level=2 random 70031 eceff21928ab8db4373dd23c
+sync deflate level=3 random 70031 eceff21928ab8db4373dd23c
+sync deflate level=4 random 70031 ad55b437e9ae8926025b0f65
+sync deflate level=5 random 70031 ad55b437e9ae8926025b0f65
+sync deflate level=6 random 70031 f57e90ba5a72dc32e04070f9
+sync deflate level=7 random 70031 64c0005dc005b9da952ea197
+sync deflate level=8 random 70031 64c0005dc005b9da952ea197
+sync deflate level=9 random 70031 64c0005dc005b9da952ea197
+sync raw level=-1 random 70025 356c10fea3469866a06cb39b
+sync raw level=0 random 70010 d9fbf7126cc3d83154a90590
+sync raw level=1 random 70025 a3ebb66a735dd7b7c937ca82
+sync raw level=2 random 70025 a3ebb66a735dd7b7c937ca82
+sync raw level=3 random 70025 a3ebb66a735dd7b7c937ca82
+sync raw level=4 random 70025 356c10fea3469866a06cb39b
+sync raw level=5 random 70025 356c10fea3469866a06cb39b
+sync raw level=6 random 70025 356c10fea3469866a06cb39b
+sync raw level=7 random 70025 356c10fea3469866a06cb39b
+sync raw level=8 random 70025 356c10fea3469866a06cb39b
+sync raw level=9 random 70025 356c10fea3469866a06cb39b
+sync gzip level=-1 random 70043 601a10fdeb7735e6d200b924
+sync gzip level=0 random 70028 61b5536bf097b0db1e9a30b2
+sync gzip level=1 random 70043 10f2fafd09c5f673c480c49e
+sync gzip level=2 random 70043 610841f95cf4285f6422342f
+sync gzip level=3 random 70043 610841f95cf4285f6422342f
+sync gzip level=4 random 70043 601a10fdeb7735e6d200b924
+sync gzip level=5 random 70043 601a10fdeb7735e6d200b924
+sync gzip level=6 random 70043 601a10fdeb7735e6d200b924
+sync gzip level=7 random 70043 601a10fdeb7735e6d200b924
+sync gzip level=8 random 70043 601a10fdeb7735e6d200b924
+sync gzip level=9 random 70043 137caa124d1eb2fbd187a412
+sync deflate level=-1 runs 2254 6f0e86b58afc6921eef4b046
+sync deflate level=0 runs 100021 8a2b6cbca2aa4a6f668f55b7
+sync deflate level=1 runs 2873 c7c061f5341419e8a6d115c3
+sync deflate level=2 runs 2839 c58b4e7abd505980ffe45667
+sync deflate level=3 runs 2827 1f648c51f5f65461eab35948
+sync deflate level=4 runs 2428 7b34d276966c8ba3b87635b1
+sync deflate level=5 runs 2261 ca6ca1ec1864abe2f3d10a76
+sync deflate level=6 runs 2254 6f0e86b58afc6921eef4b046
+sync deflate level=7 runs 2254 77559a3d62a57b29e1ffefbd
+sync deflate level=8 runs 2213 9a2898787d4e5ed35504f2b0
+sync deflate level=9 runs 2199 1419147200fa503f6b2ac1b4
+sync raw level=-1 runs 2248 e6804dfe42d51aa4fa8a030c
+sync raw level=0 runs 100015 5cb34510a3c1a032f60792ec
+sync raw level=1 runs 2867 010ece7df5fed1e1b11afd6b
+sync raw level=2 runs 2833 6136e5fe0e3c75cbef800e63
+sync raw level=3 runs 2821 464bc2e071e03c891a07c643
+sync raw level=4 runs 2422 686a543d5195d4331d6fddbd
+sync raw level=5 runs 2255 de733d7b7c092353a951712a
+sync raw level=6 runs 2248 e6804dfe42d51aa4fa8a030c
+sync raw level=7 runs 2248 0fbf6316667132d904c21926
+sync raw level=8 runs 2207 f3ade41faedce3d4b1c0fecb
+sync raw level=9 runs 2193 26048a34b9c8d42f75d89a8d
+sync gzip level=-1 runs 2266 ca9f154dee7b311d082d829b
+sync gzip level=0 runs 100033 88199a948831018fade4c383
+sync gzip level=1 runs 2885 a0415949a04819b24804600b
+sync gzip level=2 runs 2851 a70b4b05a364d4377f05d385
+sync gzip level=3 runs 2839 e9ed1d9be435ac5e3a974a2b
+sync gzip level=4 runs 2440 3a43385fe985558db2b26411
+sync gzip level=5 runs 2273 b2a49708a68151f2a61ed896
+sync gzip level=6 runs 2266 ca9f154dee7b311d082d829b
+sync gzip level=7 runs 2266 78e33b7546d9ade4f5273630
+sync gzip level=8 runs 2225 f6d5be0208c733b93d2fee6b
+sync gzip level=9 runs 2211 9ac77ab7e62ed11b45f404e0
+sync deflate level=-1 mixed 118296 521b40dff179bba51fe22178
+sync deflate level=0 mixed 300051 384545d766374905d21d09e5
+sync deflate level=1 mixed 125653 0fdf1aff8d4a175000a0c469
+sync deflate level=2 mixed 124200 9ab6a6c6111046c0b2e7ced8
+sync deflate level=3 mixed 122798 4c264288ec86d70ecde4558e
+sync deflate level=4 mixed 120142 1705b2c093d817cea2989324
+sync deflate level=5 mixed 118788 6151dfb5ee6909cb3a358f7c
+sync deflate level=6 mixed 118296 521b40dff179bba51fe22178
+sync deflate level=7 mixed 118260 700af2db1c0fb6b044b379d9
+sync deflate level=8 mixed 118138 eb3b78683e26946863caa6fc
+sync deflate level=9 mixed 118129 b4047aeddefd4a73a2767b43
+sync raw level=-1 mixed 118290 636d81eaf08f92e9fa4d0be6
+sync raw level=0 mixed 300045 a93838de8ac57e46f8d2f46f
+sync raw level=1 mixed 125647 25ab002e073554a432c0545c
+sync raw level=2 mixed 124194 519d71b9d85a3a74090c08ba
+sync raw level=3 mixed 122792 af31c2f93525a1aa124f5e98
+sync raw level=4 mixed 120136 a57361e88b3ca97384341605
+sync raw level=5 mixed 118782 84bf3b666d9f15551b4dce67
+sync raw level=6 mixed 118290 636d81eaf08f92e9fa4d0be6
+sync raw level=7 mixed 118254 71fd193c0d218ebe6de98405
+sync raw level=8 mixed 118132 12604e58dbd87a1fff8f1ad2
+sync raw level=9 mixed 118123 8473eca76915f5a24bff1cbd
+sync gzip level=-1 mixed 118308 6933902e8f8faa70792da81e
+sync gzip level=0 mixed 300063 ba7cd3df9beb2faa75eb608b
+sync gzip level=1 mixed 125665 1bc1cf5e334afc8b5a617ed8
+sync gzip level=2 mixed 124212 05fd422a3b94d7a95ded7868
+sync gzip level=3 mixed 122810 4ab30908b11f5379c56f4a4d
+sync gzip level=4 mixed 120154 e4dd5b19c35bab6b4a536b29
+sync gzip level=5 mixed 118800 fb8f2cbfa523bbb82357b848
+sync gzip level=6 mixed 118308 6933902e8f8faa70792da81e
+sync gzip level=7 mixed 118272 121dbefd95dd543109c3810e
+sync gzip level=8 mixed 118150 1e1124046e565d32fe629e07
+sync gzip level=9 mixed 118141 7c5f0fb1951f2300c81b9e7a
+sync deflate level=-1 binary 8330 0047c49f586383a21281ed5e
+sync deflate level=0 binary 180031 92e40b4adb4948b40ca9d810
+sync deflate level=1 binary 17295 0dd5af49e26b4b7901ba2755
+sync deflate level=2 binary 15100 af0e42502a5582e8609cce92
+sync deflate level=3 binary 12263 ad4715daec1c7f1feba66447
+sync deflate level=4 binary 12042 c8195934d678f6b7efddc049
+sync deflate level=5 binary 10354 f05b467b26b41818d01c6aa1
+sync deflate level=6 binary 8330 0047c49f586383a21281ed5e
+sync deflate level=7 binary 8092 cd17140e50037320bbdf8a27
+sync deflate level=8 binary 6765 bc859223f3ff625778cb0cca
+sync deflate level=9 binary 4821 4e75f8c09223422c965c6e1b
+sync raw level=-1 binary 8324 ddd54e8068f44a5c571d8458
+sync raw level=0 binary 180025 a6695232202f27959f954a5a
+sync raw level=1 binary 17289 98216331732f2acc78dbad1c
+sync raw level=2 binary 15094 0aa72597969b96a95b031a20
+sync raw level=3 binary 12257 1e05eb113eb57a5a6d7a47ec
+sync raw level=4 binary 12036 054b8bbdcad072c18f26cc5e
+sync raw level=5 binary 10348 e1eee8eb230e18ccacd0fde4
+sync raw level=6 binary 8324 ddd54e8068f44a5c571d8458
+sync raw level=7 binary 8086 13301b11caf7f80da3540d96
+sync raw level=8 binary 6759 912ae53a886815888c654b76
+sync raw level=9 binary 4815 95d8bd557ff09ef412b1789d
+sync gzip level=-1 binary 8342 f737caa75c8bd4ccb1e530d9
+sync gzip level=0 binary 180043 2a382b24d8e117338abf7e08
+sync gzip level=1 binary 17307 6bf084eb0e5f3ae41bf966c4
+sync gzip level=2 binary 15112 68e50320c02e1436b1677371
+sync gzip level=3 binary 12275 456e9d85dd7cec696e0d72ab
+sync gzip level=4 binary 12054 d0a1520d1cbf3f1441872d62
+sync gzip level=5 binary 10366 6e7ba4b959e333ff0c527e2d
+sync gzip level=6 binary 8342 f737caa75c8bd4ccb1e530d9
+sync gzip level=7 binary 8104 dc2b19e3f6a5ac48b0f91b1b
+sync gzip level=8 binary 6777 a2c57af8c12ba6a7c44118e6
+sync gzip level=9 binary 4833 0222fa808b4ff23f9a0ea42a
+sync deflate level=-1 empty 8 aca503def43dc086a5aaa5c3
+sync deflate level=0 empty 11 b8f45bcbd81d3edbe2fe2ead
+sync deflate level=1 empty 8 09d469dfeeaf4c436fd3f80b
+sync deflate level=2 empty 8 4124a9b34347a1f878716df4
+sync deflate level=3 empty 8 4124a9b34347a1f878716df4
+sync deflate level=4 empty 8 4124a9b34347a1f878716df4
+sync deflate level=5 empty 8 4124a9b34347a1f878716df4
+sync deflate level=6 empty 8 aca503def43dc086a5aaa5c3
+sync deflate level=7 empty 8 b171e283c6145acf2b923098
+sync deflate level=8 empty 8 b171e283c6145acf2b923098
+sync deflate level=9 empty 8 b171e283c6145acf2b923098
+sync raw level=-1 empty 2 9b4fb24edd6d1d8830e27239
+sync raw level=0 empty 5 f067985d352d2da6dfaef484
+sync raw level=1 empty 2 9b4fb24edd6d1d8830e27239
+sync raw level=2 empty 2 9b4fb24edd6d1d8830e27239
+sync raw level=3 empty 2 9b4fb24edd6d1d8830e27239
+sync raw level=4 empty 2 9b4fb24edd6d1d8830e27239
+sync raw level=5 empty 2 9b4fb24edd6d1d8830e27239
+sync raw level=6 empty 2 9b4fb24edd6d1d8830e27239
+sync raw level=7 empty 2 9b4fb24edd6d1d8830e27239
+sync raw level=8 empty 2 9b4fb24edd6d1d8830e27239
+sync raw level=9 empty 2 9b4fb24edd6d1d8830e27239
+sync gzip level=-1 empty 20 ac73670af3abed54ac6fb469
+sync gzip level=0 empty 23 81da0491c5af5635831f6a3f
+sync gzip level=1 empty 20 458c5a203299dd326aa747fe
+sync gzip level=2 empty 20 ac73670af3abed54ac6fb469
+sync gzip level=3 empty 20 ac73670af3abed54ac6fb469
+sync gzip level=4 empty 20 ac73670af3abed54ac6fb469
+sync gzip level=5 empty 20 ac73670af3abed54ac6fb469
+sync gzip level=6 empty 20 ac73670af3abed54ac6fb469
+sync gzip level=7 empty 20 ac73670af3abed54ac6fb469
+sync gzip level=8 empty 20 ac73670af3abed54ac6fb469
+sync gzip level=9 empty 20 9ceffb7310338057cfe71a4a
+sync deflate level=-1 one 9 8ecacf17e3a7f86d1b03a301
+sync deflate level=0 one 12 fe97b7a0de74f93664f6a3a8
+sync deflate level=1 one 9 8697003ea5c8f20f906cf3e1
+sync deflate level=2 one 9 713ac2c2c11b299a2e2b9c7b
+sync deflate level=3 one 9 713ac2c2c11b299a2e2b9c7b
+sync deflate level=4 one 9 713ac2c2c11b299a2e2b9c7b
+sync deflate level=5 one 9 713ac2c2c11b299a2e2b9c7b
+sync deflate level=6 one 9 8ecacf17e3a7f86d1b03a301
+sync deflate level=7 one 9 324b3f61040f09ab50dce3ff
+sync deflate level=8 one 9 324b3f61040f09ab50dce3ff
+sync deflate level=9 one 9 324b3f61040f09ab50dce3ff
+sync raw level=-1 one 3 59fced9a2ff83dabdd7055cf
+sync raw level=0 one 6 0b96b18b4f7c1dcc466400c2
+sync raw level=1 one 3 59fced9a2ff83dabdd7055cf
+sync raw level=2 one 3 59fced9a2ff83dabdd7055cf
+sync raw level=3 one 3 59fced9a2ff83dabdd7055cf
+sync raw level=4 one 3 59fced9a2ff83dabdd7055cf
+sync raw level=5 one 3 59fced9a2ff83dabdd7055cf
+sync raw level=6 one 3 59fced9a2ff83dabdd7055cf
+sync raw level=7 one 3 59fced9a2ff83dabdd7055cf
+sync raw level=8 one 3 59fced9a2ff83dabdd7055cf
+sync raw level=9 one 3 59fced9a2ff83dabdd7055cf
+sync gzip level=-1 one 21 94992c9e182d4a5387b07e69
+sync gzip level=0 one 24 fac6517fd2ec001655a88195
+sync gzip level=1 one 21 f4530a2c79dcfc4b133f0fd6
+sync gzip level=2 one 21 94992c9e182d4a5387b07e69
+sync gzip level=3 one 21 94992c9e182d4a5387b07e69
+sync gzip level=4 one 21 94992c9e182d4a5387b07e69
+sync gzip level=5 one 21 94992c9e182d4a5387b07e69
+sync gzip level=6 one 21 94992c9e182d4a5387b07e69
+sync gzip level=7 one 21 94992c9e182d4a5387b07e69
+sync gzip level=8 one 21 94992c9e182d4a5387b07e69
+sync gzip level=9 one 21 a74d8daa33d9079c97a1c693
+sync deflate level=-1 three 11 32c466a222e2a30f1a0f2f1c
+sync deflate level=0 three 14 48ea33620be05008414b8838
+sync deflate level=1 three 11 8dd83873ab843c9be27056b0
+sync deflate level=2 three 11 42a100a4d61f6f15eca41d32
+sync deflate level=3 three 11 42a100a4d61f6f15eca41d32
+sync deflate level=4 three 11 42a100a4d61f6f15eca41d32
+sync deflate level=5 three 11 42a100a4d61f6f15eca41d32
+sync deflate level=6 three 11 32c466a222e2a30f1a0f2f1c
+sync deflate level=7 three 11 8b8614a11b174bb73a4d746e
+sync deflate level=8 three 11 8b8614a11b174bb73a4d746e
+sync deflate level=9 three 11 8b8614a11b174bb73a4d746e
+sync raw level=-1 three 5 7ce573d21753aedbe7d6d1f5
+sync raw level=0 three 8 a8bbdab8949681033eb6a11e
+sync raw level=1 three 5 7ce573d21753aedbe7d6d1f5
+sync raw level=2 three 5 7ce573d21753aedbe7d6d1f5
+sync raw level=3 three 5 7ce573d21753aedbe7d6d1f5
+sync raw level=4 three 5 7ce573d21753aedbe7d6d1f5
+sync raw level=5 three 5 7ce573d21753aedbe7d6d1f5
+sync raw level=6 three 5 7ce573d21753aedbe7d6d1f5
+sync raw level=7 three 5 7ce573d21753aedbe7d6d1f5
+sync raw level=8 three 5 7ce573d21753aedbe7d6d1f5
+sync raw level=9 three 5 7ce573d21753aedbe7d6d1f5
+sync gzip level=-1 three 23 0b3b82379e00a1994a46452e
+sync gzip level=0 three 26 3781fe2a4fa6d51fb51a5a08
+sync gzip level=1 three 23 ec63b6797071fd64290b8c26
+sync gzip level=2 three 23 0b3b82379e00a1994a46452e
+sync gzip level=3 three 23 0b3b82379e00a1994a46452e
+sync gzip level=4 three 23 0b3b82379e00a1994a46452e
+sync gzip level=5 three 23 0b3b82379e00a1994a46452e
+sync gzip level=6 three 23 0b3b82379e00a1994a46452e
+sync gzip level=7 three 23 0b3b82379e00a1994a46452e
+sync gzip level=8 three 23 0b3b82379e00a1994a46452e
+sync gzip level=9 three 23 a2d96298062e688d500a061e
+sync deflate level=-1 short 16 98437c7b782ac27a3898e0b4
+sync deflate level=0 short 28 524df310d3026ec051abd152
+sync deflate level=1 short 16 a8dd09a49f9395d116de51c9
+sync deflate level=2 short 16 fc118b84662893f6027c60ed
+sync deflate level=3 short 16 fc118b84662893f6027c60ed
+sync deflate level=4 short 16 fc118b84662893f6027c60ed
+sync deflate level=5 short 16 fc118b84662893f6027c60ed
+sync deflate level=6 short 16 98437c7b782ac27a3898e0b4
+sync deflate level=7 short 16 6aaa41661d84369f624b9ca1
+sync deflate level=8 short 16 6aaa41661d84369f624b9ca1
+sync deflate level=9 short 16 6aaa41661d84369f624b9ca1
+sync raw level=-1 short 10 ebe97f1d83ffb16471edb5cb
+sync raw level=0 short 22 a53aa2a11fd1a55e3a085d08
+sync raw level=1 short 10 ebe97f1d83ffb16471edb5cb
+sync raw level=2 short 10 ebe97f1d83ffb16471edb5cb
+sync raw level=3 short 10 ebe97f1d83ffb16471edb5cb
+sync raw level=4 short 10 ebe97f1d83ffb16471edb5cb
+sync raw level=5 short 10 ebe97f1d83ffb16471edb5cb
+sync raw level=6 short 10 ebe97f1d83ffb16471edb5cb
+sync raw level=7 short 10 ebe97f1d83ffb16471edb5cb
+sync raw level=8 short 10 ebe97f1d83ffb16471edb5cb
+sync raw level=9 short 10 ebe97f1d83ffb16471edb5cb
+sync gzip level=-1 short 28 726b5e203a83366ac434dc9f
+sync gzip level=0 short 40 c7b524717d19e84fb69af49e
+sync gzip level=1 short 28 ac87883f6e3cd8d87bd2426c
+sync gzip level=2 short 28 726b5e203a83366ac434dc9f
+sync gzip level=3 short 28 726b5e203a83366ac434dc9f
+sync gzip level=4 short 28 726b5e203a83366ac434dc9f
+sync gzip level=5 short 28 726b5e203a83366ac434dc9f
+sync gzip level=6 short 28 726b5e203a83366ac434dc9f
+sync gzip level=7 short 28 726b5e203a83366ac434dc9f
+sync gzip level=8 short 28 726b5e203a83366ac434dc9f
+sync gzip level=9 short 28 8109d219ca198935e173c558
+sync deflate level=1 strategy=1 text 62856 324fafb24b2903f76db0d89f
+sync deflate level=1 strategy=2 text 106995 21a16ee6baaa53c4da481add
+sync deflate level=1 strategy=3 text 106995 21a16ee6baaa53c4da481add
+sync deflate level=1 strategy=4 text 84251 56ea118c5390fc6f6e290bfa
+sync deflate level=6 strategy=1 text 48930 29d09c4b904bdc64e6185ec9
+sync deflate level=6 strategy=2 text 106995 21a16ee6baaa53c4da481add
+sync deflate level=6 strategy=3 text 106995 21a16ee6baaa53c4da481add
+sync deflate level=6 strategy=4 text 60950 ef2b97537968ddd82f397f05
+sync deflate level=9 strategy=1 text 48395 d851ffa82931571285f12ed2
+sync deflate level=9 strategy=2 text 106995 21a16ee6baaa53c4da481add
+sync deflate level=9 strategy=3 text 106995 21a16ee6baaa53c4da481add
+sync deflate level=9 strategy=4 text 60303 67ea76a29dc4de4f6812fea5
+sync raw level=1 strategy=1 text 62850 28a1f7ede6cb72b75e976285
+sync raw level=1 strategy=2 text 106989 e6269b5c2f163c69ba2b3a61
+sync raw level=1 strategy=3 text 106989 e6269b5c2f163c69ba2b3a61
+sync raw level=1 strategy=4 text 84245 b1aebd5f85e9f2471da1a781
+sync raw level=6 strategy=1 text 48924 3217a641a2a8139c9543f21d
+sync raw level=6 strategy=2 text 106989 e6269b5c2f163c69ba2b3a61
+sync raw level=6 strategy=3 text 106989 e6269b5c2f163c69ba2b3a61
+sync raw level=6 strategy=4 text 60944 691f6ff8d5267ee6d425d936
+sync raw level=9 strategy=1 text 48389 e799fa3661a0b5e68f6f41dd
+sync raw level=9 strategy=2 text 106989 e6269b5c2f163c69ba2b3a61
+sync raw level=9 strategy=3 text 106989 e6269b5c2f163c69ba2b3a61
+sync raw level=9 strategy=4 text 60297 3005af208ab0dd60897b00ea
+sync gzip level=1 strategy=1 text 62868 66818838fc2a77e20721a7fa
+sync gzip level=1 strategy=2 text 107007 422651ead397f3d1ba6d34da
+sync gzip level=1 strategy=3 text 107007 422651ead397f3d1ba6d34da
+sync gzip level=1 strategy=4 text 84263 01f0acca211ba8d22a326f04
+sync gzip level=6 strategy=1 text 48942 15b883388dc4bc5323249287
+sync gzip level=6 strategy=2 text 107007 422651ead397f3d1ba6d34da
+sync gzip level=6 strategy=3 text 107007 422651ead397f3d1ba6d34da
+sync gzip level=6 strategy=4 text 60962 bc47c6e5ef8fe71993776a8a
+sync gzip level=9 strategy=1 text 48407 d59149e52b86c9db555eef87
+sync gzip level=9 strategy=2 text 107007 61d9c65023f8d62538a9e4cd
+sync gzip level=9 strategy=3 text 107007 61d9c65023f8d62538a9e4cd
+sync gzip level=9 strategy=4 text 60315 3c1412b028f272515524e592
+sync deflate level=1 strategy=1 runs 2873 c7c061f5341419e8a6d115c3
+sync deflate level=1 strategy=2 runs 63852 f6a0ecee140b4bd308b6f44b
+sync deflate level=1 strategy=3 runs 1997 1dc03f62bc95f80493e6a6dc
+sync deflate level=1 strategy=4 runs 3296 dfd969b945f3feb96f5b7143
+sync deflate level=6 strategy=1 runs 2654 341407b628d50f3ada904a26
+sync deflate level=6 strategy=2 runs 63852 f6a0ecee140b4bd308b6f44b
+sync deflate level=6 strategy=3 runs 1997 1dc03f62bc95f80493e6a6dc
+sync deflate level=6 strategy=4 runs 2791 1ed01b4ff9b5ad39d1d0d63e
+sync deflate level=9 strategy=1 runs 2593 472b6661ee49306eaef6b57f
+sync deflate level=9 strategy=2 runs 63852 f6a0ecee140b4bd308b6f44b
+sync deflate level=9 strategy=3 runs 1997 1dc03f62bc95f80493e6a6dc
+sync deflate level=9 strategy=4 runs 2729 a6d358ef4e98342e7cc6b783
+sync raw level=1 strategy=1 runs 2867 010ece7df5fed1e1b11afd6b
+sync raw level=1 strategy=2 runs 63846 2bd3dfd4a37cb404d27c49b0
+sync raw level=1 strategy=3 runs 1991 862bf3288db64fc811e19a79
+sync raw level=1 strategy=4 runs 3290 edee733d3a976f983af29cf5
+sync raw level=6 strategy=1 runs 2648 658158acda6bc5c0b1c9adf2
+sync raw level=6 strategy=2 runs 63846 2bd3dfd4a37cb404d27c49b0
+sync raw level=6 strategy=3 runs 1991 862bf3288db64fc811e19a79
+sync raw level=6 strategy=4 runs 2785 c450b0ebaed27cac33390d41
+sync raw level=9 strategy=1 runs 2587 fd533d64871c05238896b2ea
+sync raw level=9 strategy=2 runs 63846 2bd3dfd4a37cb404d27c49b0
+sync raw level=9 strategy=3 runs 1991 862bf3288db64fc811e19a79
+sync raw level=9 strategy=4 runs 2723 50740c3d1cde726d0e879a94
+sync gzip level=1 strategy=1 runs 2885 a0415949a04819b24804600b
+sync gzip level=1 strategy=2 runs 63864 220b7092a160d7fd4a68172e
+sync gzip level=1 strategy=3 runs 2009 aebb474f9f32004d367f7216
+sync gzip level=1 strategy=4 runs 3308 c9a9bee70925467b061f1c43
+sync gzip level=6 strategy=1 runs 2666 dd60992a5d15a43a76aea40f
+sync gzip level=6 strategy=2 runs 63864 220b7092a160d7fd4a68172e
+sync gzip level=6 strategy=3 runs 2009 aebb474f9f32004d367f7216
+sync gzip level=6 strategy=4 runs 2803 8d4f62e446017c9d620ac6a9
+sync gzip level=9 strategy=1 runs 2605 3e568b8cb35126ea4a41c9da
+sync gzip level=9 strategy=2 runs 63864 3befa648fffeaabd91e62b11
+sync gzip level=9 strategy=3 runs 2009 c298b562550e1f71788d5a48
+sync gzip level=9 strategy=4 runs 2741 6c140ed5b86d3e3009274fd5
+sync deflate level=1 strategy=1 binary 17295 0dd5af49e26b4b7901ba2755
+sync deflate level=1 strategy=2 binary 66217 8ad4d59e3c89d3190fc1e925
+sync deflate level=1 strategy=3 binary 66266 f271680783f6902033bf3cdb
+sync deflate level=1 strategy=4 binary 20213 8c2b0aa0addc0ac73a1c3138
+sync deflate level=6 strategy=1 binary 8221 b6c538effa1c4f328f9888de
+sync deflate level=6 strategy=2 binary 66217 8ad4d59e3c89d3190fc1e925
+sync deflate level=6 strategy=3 binary 66266 f271680783f6902033bf3cdb
+sync deflate level=6 strategy=4 binary 9465 c0d3ba0e8ce5b4208ced4552
+sync deflate level=9 strategy=1 binary 4821 4b1a22f1936e34f684cd24b4
+sync deflate level=9 strategy=2 binary 66217 8ad4d59e3c89d3190fc1e925
+sync deflate level=9 strategy=3 binary 66266 f271680783f6902033bf3cdb
+sync deflate level=9 strategy=4 binary 5666 2f7cd2ac76be7df7a7e09238
+sync raw level=1 strategy=1 binary 17289 98216331732f2acc78dbad1c
+sync raw level=1 strategy=2 binary 66211 0f97a26328e315770a1e5c80
+sync raw level=1 strategy=3 binary 66260 92523f3ab299e5d2ae9575c1
+sync raw level=1 strategy=4 binary 20207 d4d4277a8a33cb03361a4ff8
+sync raw level=6 strategy=1 binary 8215 caa23467d5bab3098bcb14ea
+sync raw level=6 strategy=2 binary 66211 0f97a26328e315770a1e5c80
+sync raw level=6 strategy=3 binary 66260 92523f3ab299e5d2ae9575c1
+sync raw level=6 strategy=4 binary 9459 0bfe3726bf36e2ee44e2cc0f
+sync raw level=9 strategy=1 binary 4815 b6f1ce3f35882dafc92bf94c
+sync raw level=9 strategy=2 binary 66211 0f97a26328e315770a1e5c80
+sync raw level=9 strategy=3 binary 66260 92523f3ab299e5d2ae9575c1
+sync raw level=9 strategy=4 binary 5660 15881134046ea28c92311f53
+sync gzip level=1 strategy=1 binary 17307 6bf084eb0e5f3ae41bf966c4
+sync gzip level=1 strategy=2 binary 66229 c949fbcb81c68243824ad0f3
+sync gzip level=1 strategy=3 binary 66278 03fce989abedba81a0113b6c
+sync gzip level=1 strategy=4 binary 20225 7efb62d0100a3bd91de9bb9f
+sync gzip level=6 strategy=1 binary 8233 9366683ec13f092fde8b6c7c
+sync gzip level=6 strategy=2 binary 66229 c949fbcb81c68243824ad0f3
+sync gzip level=6 strategy=3 binary 66278 03fce989abedba81a0113b6c
+sync gzip level=6 strategy=4 binary 9477 c9d4c05f18de20702e7cd11a
+sync gzip level=9 strategy=1 binary 4833 783d652a11037c5f866c4c3a
+sync gzip level=9 strategy=2 binary 66229 95e01ebd37c5387bd9e6f712
+sync gzip level=9 strategy=3 binary 66278 d06b434a676e5678f200d254
+sync gzip level=9 strategy=4 binary 5678 d8ab413e26d34f9abdf41009
+sync deflate level=1 strategy=1 random 70031 cc39c6f7658fe5491fe59d87
+sync deflate level=1 strategy=2 random 70031 ecebfa0a66d3291a3068ac03
+sync deflate level=1 strategy=3 random 70031 ecebfa0a66d3291a3068ac03
+sync deflate level=1 strategy=4 random 70031 cc39c6f7658fe5491fe59d87
+sync deflate level=6 strategy=1 random 70031 d9c953d22aa896fcf3d72825
+sync deflate level=6 strategy=2 random 70031 ecebfa0a66d3291a3068ac03
+sync deflate level=6 strategy=3 random 70031 ecebfa0a66d3291a3068ac03
+sync deflate level=6 strategy=4 random 70031 514df37dc9bdf4d0dfe25897
+sync deflate level=9 strategy=1 random 70031 6809e681da9b235472f78994
+sync deflate level=9 strategy=2 random 70031 ecebfa0a66d3291a3068ac03
+sync deflate level=9 strategy=3 random 70031 ecebfa0a66d3291a3068ac03
+sync deflate level=9 strategy=4 random 70031 514df37dc9bdf4d0dfe25897
+sync raw level=1 strategy=1 random 70025 a3ebb66a735dd7b7c937ca82
+sync raw level=1 strategy=2 random 70025 f9b37e1e2127ab2292c26022
+sync raw level=1 strategy=3 random 70025 f9b37e1e2127ab2292c26022
+sync raw level=1 strategy=4 random 70025 a3ebb66a735dd7b7c937ca82
+sync raw level=6 strategy=1 random 70025 f9b37e1e2127ab2292c26022
+sync raw level=6 strategy=2 random 70025 f9b37e1e2127ab2292c26022
+sync raw level=6 strategy=3 random 70025 f9b37e1e2127ab2292c26022
+sync raw level=6 strategy=4 random 70025 356c10fea3469866a06cb39b
+sync raw level=9 strategy=1 random 70025 f9b37e1e2127ab2292c26022
+sync raw level=9 strategy=2 random 70025 f9b37e1e2127ab2292c26022
+sync raw level=9 strategy=3 random 70025 f9b37e1e2127ab2292c26022
+sync raw level=9 strategy=4 random 70025 356c10fea3469866a06cb39b
+sync gzip level=1 strategy=1 random 70043 10f2fafd09c5f673c480c49e
+sync gzip level=1 strategy=2 random 70043 1ec9d70023237071496fc5f1
+sync gzip level=1 strategy=3 random 70043 1ec9d70023237071496fc5f1
+sync gzip level=1 strategy=4 random 70043 10f2fafd09c5f673c480c49e
+sync gzip level=6 strategy=1 random 70043 9fad52fd2ef84be38d093ca3
+sync gzip level=6 strategy=2 random 70043 1ec9d70023237071496fc5f1
+sync gzip level=6 strategy=3 random 70043 1ec9d70023237071496fc5f1
+sync gzip level=6 strategy=4 random 70043 feb3807fe9a43faeba43c22a
+sync gzip level=9 strategy=1 random 70043 ef27defcb4d282f4b6271066
+sync gzip level=9 strategy=2 random 70043 ef27defcb4d282f4b6271066
+sync gzip level=9 strategy=3 random 70043 ef27defcb4d282f4b6271066
+sync gzip level=9 strategy=4 random 70043 137caa124d1eb2fbd187a412
+sync deflate level=1 windowBits=8 memLevel=1 mixed 166666 711df6d7dd6cd4c1cec51190
+sync deflate level=6 windowBits=8 memLevel=1 mixed 161498 023b97e712e0d92ab63565b3
+sync deflate level=1 windowBits=8 memLevel=4 mixed 163897 bab2a858444262323b566135
+sync deflate level=6 windowBits=8 memLevel=4 mixed 159845 12f556a5335e797e263bb524
+sync deflate level=1 windowBits=8 memLevel=8 mixed 163952 e5475fd234e34bcc4b939cc8
+sync deflate level=6 windowBits=8 memLevel=8 mixed 160237 68adb7693cfe9c5fdecded5f
+sync deflate level=1 windowBits=8 memLevel=9 mixed 165272 00d2860a83ee6400c777ef6d
+sync deflate level=6 windowBits=8 memLevel=9 mixed 161298 6422d1c50a7840623fa57808
+sync deflate level=1 windowBits=9 memLevel=1 mixed 166666 711df6d7dd6cd4c1cec51190
+sync deflate level=6 windowBits=9 memLevel=1 mixed 161498 023b97e712e0d92ab63565b3
+sync deflate level=1 windowBits=9 memLevel=4 mixed 163897 bab2a858444262323b566135
+sync deflate level=6 windowBits=9 memLevel=4 mixed 159845 12f556a5335e797e263bb524
+sync deflate level=1 windowBits=9 memLevel=8 mixed 163952 e5475fd234e34bcc4b939cc8
+sync deflate level=6 windowBits=9 memLevel=8 mixed 160237 68adb7693cfe9c5fdecded5f
+sync deflate level=1 windowBits=9 memLevel=9 mixed 165272 00d2860a83ee6400c777ef6d
+sync deflate level=6 windowBits=9 memLevel=9 mixed 161298 6422d1c50a7840623fa57808
+sync deflate level=1 windowBits=11 memLevel=1 mixed 152314 edf19effd83efa5361afa269
+sync deflate level=6 windowBits=11 memLevel=1 mixed 147970 faabb83875d6b7f3de2f54a8
+sync deflate level=1 windowBits=11 memLevel=4 mixed 149401 d2bb543cc22bd248e2ad8d8f
+sync deflate level=6 windowBits=11 memLevel=4 mixed 145649 e19d898373703a2532e4c073
+sync deflate level=1 windowBits=11 memLevel=8 mixed 151673 da0650e2917c9efa978fbf0d
+sync deflate level=6 windowBits=11 memLevel=8 mixed 147862 22ecfcc69f3fd68717bab916
+sync deflate level=1 windowBits=11 memLevel=9 mixed 152385 c7ce75dee3de1a14e823dcc5
+sync deflate level=6 windowBits=11 memLevel=9 mixed 148486 759e3830dc57464633492f46
+sync deflate level=1 windowBits=13 memLevel=1 mixed 145495 2db4b1b6987414da502b5357
+sync deflate level=6 windowBits=13 memLevel=1 mixed 136846 b90458daede523cc56b70944
+sync deflate level=1 windowBits=13 memLevel=4 mixed 139410 60b014c19d5a6b9585eebaf8
+sync deflate level=6 windowBits=13 memLevel=4 mixed 135090 d621af958dd27c277a1cd806
+sync deflate level=1 windowBits=13 memLevel=8 mixed 141996 f5899ba3301985dd114f4c82
+sync deflate level=6 windowBits=13 memLevel=8 mixed 137294 ed0c0ca300d271e504852131
+sync deflate level=1 windowBits=13 memLevel=9 mixed 142543 3a263010bc89a96c3e8105d5
+sync deflate level=6 windowBits=13 memLevel=9 mixed 137657 ed5b7016ce0620204517e4ac
+sync deflate level=1 windowBits=15 memLevel=1 mixed 144270 d91b792118ca6afa65960aed
+sync deflate level=6 windowBits=15 memLevel=1 mixed 118091 feee7dbad7c767b167b047c7
+sync deflate level=1 windowBits=15 memLevel=4 mixed 124291 30ba69b746fdf64f49c171fa
+sync deflate level=6 windowBits=15 memLevel=4 mixed 115991 1f9a75adebab2b3b202615d3
+sync deflate level=1 windowBits=15 memLevel=8 mixed 125653 0fdf1aff8d4a175000a0c469
+sync deflate level=6 windowBits=15 memLevel=8 mixed 118296 521b40dff179bba51fe22178
+sync deflate level=1 windowBits=15 memLevel=9 mixed 126570 547117d0c50b269e36d9228d
+sync deflate level=6 windowBits=15 memLevel=9 mixed 118787 baaba4f6bc5bedf035e634ca
+sync raw level=1 windowBits=9 memLevel=1 mixed 166660 56da6532bece7cb2464e2bd5
+sync raw level=6 windowBits=9 memLevel=1 mixed 161492 32660b41bbba12c8ecc63fa4
+sync raw level=1 windowBits=9 memLevel=4 mixed 163891 fb9140f6d947f5433dc9a2b4
+sync raw level=6 windowBits=9 memLevel=4 mixed 159839 ddc8bc30c21e0646f231da97
+sync raw level=1 windowBits=9 memLevel=8 mixed 163946 c8dd03556eb137cc4c4408e1
+sync raw level=6 windowBits=9 memLevel=8 mixed 160231 3172ffb3b18a079b89a48439
+sync raw level=1 windowBits=9 memLevel=9 mixed 165266 e8b83148bed9031a72a88135
+sync raw level=6 windowBits=9 memLevel=9 mixed 161292 d4f22c6d90098831a0cacb7d
+sync raw level=1 windowBits=11 memLevel=1 mixed 152308 a00c1b69d21572474d1580a5
+sync raw level=6 windowBits=11 memLevel=1 mixed 147964 894a3ff91f86ce118cbdb5da
+sync raw level=1 windowBits=11 memLevel=4 mixed 149395 d9e8c510a58832465788aa4c
+sync raw level=6 windowBits=11 memLevel=4 mixed 145643 65af89531fdf310c166b2bc5
+sync raw level=1 windowBits=11 memLevel=8 mixed 151667 a3f19ac1f714121977a245f0
+sync raw level=6 windowBits=11 memLevel=8 mixed 147856 64d58554fdac518a9e0f6361
+sync raw level=1 windowBits=11 memLevel=9 mixed 152379 5a964e9c0df500235f40c7b6
+sync raw level=6 windowBits=11 memLevel=9 mixed 148480 75657d5af88c7be0ea1f4ff1
+sync raw level=1 windowBits=13 memLevel=1 mixed 145489 539494c8516a514aa65c9dda
+sync raw level=6 windowBits=13 memLevel=1 mixed 136840 a44b3bdc964e233f39f0abeb
+sync raw level=1 windowBits=13 memLevel=4 mixed 139404 4ef3de9b38a38535bfa76f0a
+sync raw level=6 windowBits=13 memLevel=4 mixed 135084 a0c524839f9c1b980d3eba3b
+sync raw level=1 windowBits=13 memLevel=8 mixed 141990 ee998720bbf20a8f2338dc8a
+sync raw level=6 windowBits=13 memLevel=8 mixed 137288 45585dc8b2c4ac6867c14946
+sync raw level=1 windowBits=13 memLevel=9 mixed 142537 c3156c5e8208e278e2f3edc5
+sync raw level=6 windowBits=13 memLevel=9 mixed 137651 3cc409d8a809a956b3b8df14
+sync raw level=1 windowBits=15 memLevel=1 mixed 144264 59f7ef88844585cd18f18ab7
+sync raw level=6 windowBits=15 memLevel=1 mixed 118085 df7cab4c670c03d4a32e0e4f
+sync raw level=1 windowBits=15 memLevel=4 mixed 124285 4b9508e45ba4c62bcf0dccc9
+sync raw level=6 windowBits=15 memLevel=4 mixed 115985 0635a9f612cdbcd6fd163d6c
+sync raw level=1 windowBits=15 memLevel=8 mixed 125647 25ab002e073554a432c0545c
+sync raw level=6 windowBits=15 memLevel=8 mixed 118290 636d81eaf08f92e9fa4d0be6
+sync raw level=1 windowBits=15 memLevel=9 mixed 126564 b2a011c8054c49e65ebb9585
+sync raw level=6 windowBits=15 memLevel=9 mixed 118781 7f15ae5aa099fdb04e9c02fc
+sync gzip level=1 windowBits=9 memLevel=1 mixed 166678 28398923fd44267c81e16d07
+sync gzip level=6 windowBits=9 memLevel=1 mixed 161510 40d7a7878323eceb9e1a6ef8
+sync gzip level=1 windowBits=9 memLevel=4 mixed 163909 441dd4bb04aed05917e11b12
+sync gzip level=6 windowBits=9 memLevel=4 mixed 159857 e3a06c968ce9725e4f6eba01
+sync gzip level=1 windowBits=9 memLevel=8 mixed 163964 ea6e1172b572775083e21515
+sync gzip level=6 windowBits=9 memLevel=8 mixed 160249 07dbdb38efb255513df0898f
+sync gzip level=1 windowBits=9 memLevel=9 mixed 165284 9359d453ba46957635e0fb52
+sync gzip level=6 windowBits=9 memLevel=9 mixed 161310 a8225ff343bea801f26bb65e
+sync gzip level=1 windowBits=11 memLevel=1 mixed 152326 473ae2d2f9d8a079645d0a46
+sync gzip level=6 windowBits=11 memLevel=1 mixed 147982 31dc1c280dc6ba485391acf6
+sync gzip level=1 windowBits=11 memLevel=4 mixed 149413 5b2105afe7c0f6de4b7ee51d
+sync gzip level=6 windowBits=11 memLevel=4 mixed 145661 3f36422a2a9453e10d4b3cd1
+sync gzip level=1 windowBits=11 memLevel=8 mixed 151685 709c6917ad2a511c3233f1dd
+sync gzip level=6 windowBits=11 memLevel=8 mixed 147874 72906f67cc30ca455293014b
+sync gzip level=1 windowBits=11 memLevel=9 mixed 152397 80818aa5d8b7d58a8bc643fa
+sync gzip level=6 windowBits=11 memLevel=9 mixed 148498 7f9526626f1e09408c4259c4
+sync gzip level=1 windowBits=13 memLevel=1 mixed 145507 2325c40c9d42aa77f8be0471
+sync gzip level=6 windowBits=13 memLevel=1 mixed 136858 4ff2b8c9ca46726312b61eaf
+sync gzip level=1 windowBits=13 memLevel=4 mixed 139422 61c105580c05d6c33aed30c2
+sync gzip level=6 windowBits=13 memLevel=4 mixed 135102 85b8e55e9e8c6e07cfcc5f1d
+sync gzip level=1 windowBits=13 memLevel=8 mixed 142008 d145f04614d8802dc1383836
+sync gzip level=6 windowBits=13 memLevel=8 mixed 137306 94966281bb89bdb1fc237cf9
+sync gzip level=1 windowBits=13 memLevel=9 mixed 142555 e58506a8daf7fa5f622179b6
+sync gzip level=6 windowBits=13 memLevel=9 mixed 137669 88d7fe4c66d9cca6a3fe690e
+sync gzip level=1 windowBits=15 memLevel=1 mixed 144282 6a8819b2f9dbfb2adbfa690c
+sync gzip level=6 windowBits=15 memLevel=1 mixed 118103 a7f2687004b666f43020093b
+sync gzip level=1 windowBits=15 memLevel=4 mixed 124303 f3b1ee78d6d75f19d0ed5439
+sync gzip level=6 windowBits=15 memLevel=4 mixed 116003 6d1166642157c119426abd43
+sync gzip level=1 windowBits=15 memLevel=8 mixed 125665 1bc1cf5e334afc8b5a617ed8
+sync gzip level=6 windowBits=15 memLevel=8 mixed 118308 6933902e8f8faa70792da81e
+sync gzip level=1 windowBits=15 memLevel=9 mixed 126582 172afdd34a97afb8ee18340a
+sync gzip level=6 windowBits=15 memLevel=9 mixed 118799 1ea7283edd667b0ccb1c8d76
+sync deflate level=1 windowBits=8 memLevel=1 json 33557 9b17e7bef3924f5497be40cd
+sync deflate level=6 windowBits=8 memLevel=1 json 21419 acaaf6d50bfd20538a257aba
+sync deflate level=1 windowBits=8 memLevel=4 json 26046 4704f8c0e2422335af624a9e
+sync deflate level=6 windowBits=8 memLevel=4 json 17747 09d6088535d13f68343de5c8
+sync deflate level=1 windowBits=8 memLevel=8 json 24991 96c6eddbfbc213d62705a12d
+sync deflate level=6 windowBits=8 memLevel=8 json 17183 f93896da02c54973635699a9
+sync deflate level=1 windowBits=8 memLevel=9 json 24898 1715c64d3a3ba2cf8b1b6830
+sync deflate level=6 windowBits=8 memLevel=9 json 17155 808767ca323064edb8ea4eff
+sync deflate level=1 windowBits=9 memLevel=1 json 33557 9b17e7bef3924f5497be40cd
+sync deflate level=6 windowBits=9 memLevel=1 json 21419 acaaf6d50bfd20538a257aba
+sync deflate level=1 windowBits=9 memLevel=4 json 26046 4704f8c0e2422335af624a9e
+sync deflate level=6 windowBits=9 memLevel=4 json 17747 09d6088535d13f68343de5c8
+sync deflate level=1 windowBits=9 memLevel=8 json 24991 96c6eddbfbc213d62705a12d
+sync deflate level=6 windowBits=9 memLevel=8 json 17183 f93896da02c54973635699a9
+sync deflate level=1 windowBits=9 memLevel=9 json 24898 1715c64d3a3ba2cf8b1b6830
+sync deflate level=6 windowBits=9 memLevel=9 json 17155 808767ca323064edb8ea4eff
+sync deflate level=1 windowBits=11 memLevel=1 json 23834 5f063d1353e93a62f6473ca3
+sync deflate level=6 windowBits=11 memLevel=1 json 19854 9612605d54289b9e9345ba24
+sync deflate level=1 windowBits=11 memLevel=4 json 20815 e9af42a9cdde9d00b6054497
+sync deflate level=6 windowBits=11 memLevel=4 json 17338 51c1138373473c89f91dfb1f
+sync deflate level=1 windowBits=11 memLevel=8 json 20374 47d4a81379614cb025881f11
+sync deflate level=6 windowBits=11 memLevel=8 json 16985 d8112dae23cc4eff11eec375
+sync deflate level=1 windowBits=11 memLevel=9 json 20384 1584d09d1f200ec40d08c2f7
+sync deflate level=6 windowBits=11 memLevel=9 json 16988 ac3a9c2dabf269640b07ad44
+sync deflate level=1 windowBits=13 memLevel=1 json 24351 0a450f984a529851da59d5d8
+sync deflate level=6 windowBits=13 memLevel=1 json 19620 18e360e4d08817b94439664f
+sync deflate level=1 windowBits=13 memLevel=4 json 21703 ffa38def54f5ac2807e635e8
+sync deflate level=6 windowBits=13 memLevel=4 json 17339 a30d2cb69faf9f4840932929
+sync deflate level=1 windowBits=13 memLevel=8 json 21303 21c5325e87a11176074a2e91
+sync deflate level=6 windowBits=13 memLevel=8 json 16954 08672a00b5fe97f6d9ab966a
+sync deflate level=1 windowBits=13 memLevel=9 json 21376 2febbada0459b90a10f6be59
+sync deflate level=6 windowBits=13 memLevel=9 json 17023 3baaa9f3773875c70aa9aba2
+sync deflate level=1 windowBits=15 memLevel=1 json 24931 fd7c47dedf2f0bcc14834bfe
+sync deflate level=6 windowBits=15 memLevel=1 json 19367 6ebc27e027bf0eb2daa75183
+sync deflate level=1 windowBits=15 memLevel=4 json 22167 60d9a4e1f74d59a68486b462
+sync deflate level=6 windowBits=15 memLevel=4 json 17133 bfce30f789d5e7abf03f9274
+sync deflate level=1 windowBits=15 memLevel=8 json 21833 3c784d28e94131fe3f9b6b3c
+sync deflate level=6 windowBits=15 memLevel=8 json 16822 e433289b35f4801eee30266f
+sync deflate level=1 windowBits=15 memLevel=9 json 21899 75da74192f6ba76d1013a205
+sync deflate level=6 windowBits=15 memLevel=9 json 16892 23442cbb5f80180f97dbaded
+sync raw level=1 windowBits=9 memLevel=1 json 33551 1c4c3e564ebe3f9c3e3ac3b8
+sync raw level=6 windowBits=9 memLevel=1 json 21413 f8087143b3a3f779f2f35dd4
+sync raw level=1 windowBits=9 memLevel=4 json 26040 c93f925dbb18b0f2973dc808
+sync raw level=6 windowBits=9 memLevel=4 json 17741 92700623e053d3d84b5c6cd5
+sync raw level=1 windowBits=9 memLevel=8 json 24985 a56ac7295caa61f96da21d16
+sync raw level=6 windowBits=9 memLevel=8 json 17177 0da5caa7f57e4216ce75057c
+sync raw level=1 windowBits=9 memLevel=9 json 24892 a9a5543fc7030a65ea8a0349
+sync raw level=6 windowBits=9 memLevel=9 json 17149 2013ec42cdd94e19aa1a7d02
+sync raw level=1 windowBits=11 memLevel=1 json 23828 fa418fa57b61f1212883867a
+sync raw level=6 windowBits=11 memLevel=1 json 19848 26abf14657edde66d21ab8ed
+sync raw level=1 windowBits=11 memLevel=4 json 20809 661aeb723160523f263bcecb
+sync raw level=6 windowBits=11 memLevel=4 json 17332 01e144ad5e32346333a5942a
+sync raw level=1 windowBits=11 memLevel=8 json 20368 cdfcaf1177e94a620d207507
+sync raw level=6 windowBits=11 memLevel=8 json 16979 019bc285b6baccfa52a3efa6
+sync raw level=1 windowBits=11 memLevel=9 json 20378 227dd05a898111673c49c185
+sync raw level=6 windowBits=11 memLevel=9 json 16982 4ce1fdad3127c4de77157286
+sync raw level=1 windowBits=13 memLevel=1 json 24345 f2e33b5a57589aef52793d69
+sync raw level=6 windowBits=13 memLevel=1 json 19614 fe110884b9c35b23ce96e862
+sync raw level=1 windowBits=13 memLevel=4 json 21697 5abe8d3379f616c889fe6bfe
+sync raw level=6 windowBits=13 memLevel=4 json 17333 ce1133532d89affec52a3092
+sync raw level=1 windowBits=13 memLevel=8 json 21297 4bfa8e40afce195e0d5ad9ea
+sync raw level=6 windowBits=13 memLevel=8 json 16948 91c711ceded97d27fd232d55
+sync raw level=1 windowBits=13 memLevel=9 json 21370 a834673884326f303382a101
+sync raw level=6 windowBits=13 memLevel=9 json 17017 4f34d82635a411f03531231d
+sync raw level=1 windowBits=15 memLevel=1 json 24925 8da1539f1311a8898e5a0a11
+sync raw level=6 windowBits=15 memLevel=1 json 19361 c1ea57634930eabe0c6fc451
+sync raw level=1 windowBits=15 memLevel=4 json 22161 cc64b8802bb14b38a52757b5
+sync raw level=6 windowBits=15 memLevel=4 json 17127 adcfc9888e8d51c4fc1b84a3
+sync raw level=1 windowBits=15 memLevel=8 json 21827 3191a33281ebdb54983efe6e
+sync raw level=6 windowBits=15 memLevel=8 json 16816 690490332e20c7881ac5a75d
+sync raw level=1 windowBits=15 memLevel=9 json 21893 cdaf9ad024f955baea8b40de
+sync raw level=6 windowBits=15 memLevel=9 json 16886 b6d2db284dc67eb145bff0d4
+sync gzip level=1 windowBits=9 memLevel=1 json 33569 94b1d89ed7c951ef4d5d34a0
+sync gzip level=6 windowBits=9 memLevel=1 json 21431 1bb5929d2c5a0c02727602e5
+sync gzip level=1 windowBits=9 memLevel=4 json 26058 c2dadafea896139e2f6c2a2d
+sync gzip level=6 windowBits=9 memLevel=4 json 17759 a90bbbb4d67acb6c4617df41
+sync gzip level=1 windowBits=9 memLevel=8 json 25003 4d9f837f89d19b0c76653a35
+sync gzip level=6 windowBits=9 memLevel=8 json 17195 ef4b68d633de8cef3427dec6
+sync gzip level=1 windowBits=9 memLevel=9 json 24910 806c6a7ea6aa0e85f772dc4e
+sync gzip level=6 windowBits=9 memLevel=9 json 17167 2b0a2d63b1100ca3488e9e39
+sync gzip level=1 windowBits=11 memLevel=1 json 23846 8a62f7a90fc122b1806c719c
+sync gzip level=6 windowBits=11 memLevel=1 json 19866 fce78d5e68a6e032ecf0e56f
+sync gzip level=1 windowBits=11 memLevel=4 json 20827 a4309f0fcbeaa980cd07c5ea
+sync gzip level=6 windowBits=11 memLevel=4 json 17350 da1612dd7d02b6bb4159e9cc
+sync gzip level=1 windowBits=11 memLevel=8 json 20386 4783d793518cbf6b3b97c79f
+sync gzip level=6 windowBits=11 memLevel=8 json 16997 71f59addf41bef8d65ebf669
+sync gzip level=1 windowBits=11 memLevel=9 json 20396 f8cac073c110c13583fc185f
+sync gzip level=6 windowBits=11 memLevel=9 json 17000 1c788529b7253990e94d93c7
+sync gzip level=1 windowBits=13 memLevel=1 json 24363 bc5b2d22f80e19e7a8a442ff
+sync gzip level=6 windowBits=13 memLevel=1 json 19632 7d93158f7cc958718e09b077
+sync gzip level=1 windowBits=13 memLevel=4 json 21715 d12e5e19123f8f50ec826fdb
+sync gzip level=6 windowBits=13 memLevel=4 json 17351 68602db9268670ecce1521f8
+sync gzip level=1 windowBits=13 memLevel=8 json 21315 713f66c5839814b6464e708e
+sync gzip level=6 windowBits=13 memLevel=8 json 16966 9db3b88cb3864d65103290f0
+sync gzip level=1 windowBits=13 memLevel=9 json 21388 195b0768a97dd38f3e08b8c7
+sync gzip level=6 windowBits=13 memLevel=9 json 17035 47fa252e656e6ed912ba013b
+sync gzip level=1 windowBits=15 memLevel=1 json 24943 1c1bb5c3df3d8d357490a342
+sync gzip level=6 windowBits=15 memLevel=1 json 19379 048ceb531fd8743a87e74321
+sync gzip level=1 windowBits=15 memLevel=4 json 22179 aa0cf343f086ad9f39d2244d
+sync gzip level=6 windowBits=15 memLevel=4 json 17145 b078fb69b5df1e746a1fe4d6
+sync gzip level=1 windowBits=15 memLevel=8 json 21845 d8398d5160bff3c0cdb6738b
+sync gzip level=6 windowBits=15 memLevel=8 json 16834 57500f33ea79b8a442e60f32
+sync gzip level=1 windowBits=15 memLevel=9 json 21911 b73bf6c249a3624736bd13c0
+sync gzip level=6 windowBits=15 memLevel=9 json 16904 a2bbe2348b4c2e55c594e437
+sync deflate level=0 windowBits=10 dictionary=small 150105 709fae99fde26411f6436ac0
+sync deflate level=0 windowBits=15 dictionary=small 150030 5431578c41f05dfde353266a
+sync deflate level=1 windowBits=10 dictionary=small 20850 0b2990da8c4a97dfb2ab03c6
+sync deflate level=1 windowBits=15 dictionary=small 21836 3f04e3621f85e0c3dd1212a3
+sync deflate level=6 windowBits=10 dictionary=small 16769 e34a554ec91ae49b5ba53f46
+sync deflate level=6 windowBits=15 dictionary=small 16825 ee35610aa305a5cd6bd407bb
+sync deflate level=9 windowBits=10 dictionary=small 16728 e21b8dc8c5658fb125cb6db0
+sync deflate level=9 windowBits=15 dictionary=small 16424 76100220cc192a3513fee950
+sync raw level=0 windowBits=10 dictionary=small 150095 06334bcd7fb9edf71c66df72
+sync raw level=0 windowBits=15 dictionary=small 150020 8c0501972d2ee78463553450
+sync raw level=1 windowBits=10 dictionary=small 20840 35e2f34ccfd57b1e73d9cc6f
+sync raw level=1 windowBits=15 dictionary=small 21826 0c6d24bb6c8ea017fd9e2653
+sync raw level=6 windowBits=10 dictionary=small 16759 590bd5cf1f8624af5678a3e2
+sync raw level=6 windowBits=15 dictionary=small 16815 6b80a2b4f0011f5b7965175a
+sync raw level=9 windowBits=10 dictionary=small 16718 1126f3ad527996c15594f797
+sync raw level=9 windowBits=15 dictionary=small 16414 e866b386ac0f1a93c80959fe
+sync deflate level=0 windowBits=10 dictionary=large 150105 6f74e1dcc657f3d17943b1ad
+sync deflate level=0 windowBits=15 dictionary=large 150030 2ee707026dbb0c45e1d68e38
+sync deflate level=1 windowBits=10 dictionary=large 20804 e45e632b7338c46016cb585a
+sync deflate level=1 windowBits=15 dictionary=large 21574 0df49cb7e77ff277d335058a
+sync deflate level=6 windowBits=10 dictionary=large 16669 bd60c26b34147835d104c7c0
+sync deflate level=6 windowBits=15 dictionary=large 16535 8be958ca455e4069e9b84a05
+sync deflate level=9 windowBits=10 dictionary=large 16629 9854d5566d3f9a141d7fa3d5
+sync deflate level=9 windowBits=15 dictionary=large 16126 6bf85da0f0668b08a5b5213d
+sync raw level=0 windowBits=10 dictionary=large 150095 06334bcd7fb9edf71c66df72
+sync raw level=0 windowBits=15 dictionary=large 150020 3e4c89d78dbd429b440c7e1f
+sync raw level=1 windowBits=10 dictionary=large 20794 6c12a883e1053e750237daf3
+sync raw level=1 windowBits=15 dictionary=large 21564 7752c268e67797e6000639c6
+sync raw level=6 windowBits=10 dictionary=large 16659 5173c88ff1721fb7d4084028
+sync raw level=6 windowBits=15 dictionary=large 16525 5ffae64353cd4997e0e4ec1a
+sync raw level=9 windowBits=10 dictionary=large 16619 10f3aa7925adcfab5e18a325
+sync raw level=9 windowBits=15 dictionary=large 16116 6785fc8c39dc0c39e62d9115
+sync deflate level=0 chunkSize=64 text 200036 9798b3970e6bd55c056d1f30
+sync deflate level=0 chunkSize=64 random 70016 0249aa7b0816bab9c2e7e01b
+sync deflate level=0 chunkSize=64 short 28 524df310d3026ec051abd152
+sync deflate level=0 chunkSize=100 text 200036 9798b3970e6bd55c056d1f30
+sync deflate level=0 chunkSize=100 random 70016 0249aa7b0816bab9c2e7e01b
+sync deflate level=0 chunkSize=100 short 28 524df310d3026ec051abd152
+sync deflate level=0 chunkSize=1000 text 200036 9798b3970e6bd55c056d1f30
+sync deflate level=0 chunkSize=1000 random 70016 0249aa7b0816bab9c2e7e01b
+sync deflate level=0 chunkSize=1000 short 28 524df310d3026ec051abd152
+sync deflate level=0 chunkSize=4096 text 200036 9798b3970e6bd55c056d1f30
+sync deflate level=0 chunkSize=4096 random 70016 0249aa7b0816bab9c2e7e01b
+sync deflate level=0 chunkSize=4096 short 28 524df310d3026ec051abd152
+sync deflate level=0 chunkSize=70000 text 200026 4b3a1c5a5e52c6616cb01799
+sync deflate level=0 chunkSize=70000 random 70016 d172de6496eb4cc8556e772e
+sync deflate level=0 chunkSize=70000 short 28 524df310d3026ec051abd152
+sync deflate level=1 chunkSize=64 text 62856 324fafb24b2903f76db0d89f
+sync deflate level=1 chunkSize=64 random 70031 cc39c6f7658fe5491fe59d87
+sync deflate level=1 chunkSize=64 short 16 a8dd09a49f9395d116de51c9
+sync deflate level=1 chunkSize=100 text 62856 324fafb24b2903f76db0d89f
+sync deflate level=1 chunkSize=100 random 70031 cc39c6f7658fe5491fe59d87
+sync deflate level=1 chunkSize=100 short 16 a8dd09a49f9395d116de51c9
+sync deflate level=1 chunkSize=1000 text 62856 324fafb24b2903f76db0d89f
+sync deflate level=1 chunkSize=1000 random 70031 cc39c6f7658fe5491fe59d87
+sync deflate level=1 chunkSize=1000 short 16 a8dd09a49f9395d116de51c9
+sync deflate level=1 chunkSize=4096 text 62856 324fafb24b2903f76db0d89f
+sync deflate level=1 chunkSize=4096 random 70031 cc39c6f7658fe5491fe59d87
+sync deflate level=1 chunkSize=4096 short 16 a8dd09a49f9395d116de51c9
+sync deflate level=1 chunkSize=70000 text 62856 324fafb24b2903f76db0d89f
+sync deflate level=1 chunkSize=70000 random 70031 cc39c6f7658fe5491fe59d87
+sync deflate level=1 chunkSize=70000 short 16 a8dd09a49f9395d116de51c9
+sync deflate level=6 chunkSize=64 text 48664 852e2aa286713930cdd35eab
+sync deflate level=6 chunkSize=64 random 70031 f57e90ba5a72dc32e04070f9
+sync deflate level=6 chunkSize=64 short 16 98437c7b782ac27a3898e0b4
+sync deflate level=6 chunkSize=100 text 48664 852e2aa286713930cdd35eab
+sync deflate level=6 chunkSize=100 random 70031 f57e90ba5a72dc32e04070f9
+sync deflate level=6 chunkSize=100 short 16 98437c7b782ac27a3898e0b4
+sync deflate level=6 chunkSize=1000 text 48664 852e2aa286713930cdd35eab
+sync deflate level=6 chunkSize=1000 random 70031 f57e90ba5a72dc32e04070f9
+sync deflate level=6 chunkSize=1000 short 16 98437c7b782ac27a3898e0b4
+sync deflate level=6 chunkSize=4096 text 48664 852e2aa286713930cdd35eab
+sync deflate level=6 chunkSize=4096 random 70031 f57e90ba5a72dc32e04070f9
+sync deflate level=6 chunkSize=4096 short 16 98437c7b782ac27a3898e0b4
+sync deflate level=6 chunkSize=70000 text 48664 852e2aa286713930cdd35eab
+sync deflate level=6 chunkSize=70000 random 70031 f57e90ba5a72dc32e04070f9
+sync deflate level=6 chunkSize=70000 short 16 98437c7b782ac27a3898e0b4
+sync raw level=0 chunkSize=64 text 200030 25c7d676a6538e6ae75d3255
+sync raw level=0 chunkSize=64 random 70010 d9fbf7126cc3d83154a90590
+sync raw level=0 chunkSize=64 short 22 a53aa2a11fd1a55e3a085d08
+sync raw level=0 chunkSize=100 text 200030 25c7d676a6538e6ae75d3255
+sync raw level=0 chunkSize=100 random 70010 d9fbf7126cc3d83154a90590
+sync raw level=0 chunkSize=100 short 22 a53aa2a11fd1a55e3a085d08
+sync raw level=0 chunkSize=1000 text 200030 25c7d676a6538e6ae75d3255
+sync raw level=0 chunkSize=1000 random 70010 d9fbf7126cc3d83154a90590
+sync raw level=0 chunkSize=1000 short 22 a53aa2a11fd1a55e3a085d08
+sync raw level=0 chunkSize=4096 text 200030 25c7d676a6538e6ae75d3255
+sync raw level=0 chunkSize=4096 random 70010 d9fbf7126cc3d83154a90590
+sync raw level=0 chunkSize=4096 short 22 a53aa2a11fd1a55e3a085d08
+sync raw level=0 chunkSize=70000 text 200020 1abd3a70ae37234f7b49f87e
+sync raw level=0 chunkSize=70000 random 70010 ccd96ffcf4da9c19a126983d
+sync raw level=0 chunkSize=70000 short 22 a53aa2a11fd1a55e3a085d08
+sync raw level=1 chunkSize=64 text 62850 28a1f7ede6cb72b75e976285
+sync raw level=1 chunkSize=64 random 70025 a3ebb66a735dd7b7c937ca82
+sync raw level=1 chunkSize=64 short 10 ebe97f1d83ffb16471edb5cb
+sync raw level=1 chunkSize=100 text 62850 28a1f7ede6cb72b75e976285
+sync raw level=1 chunkSize=100 random 70025 a3ebb66a735dd7b7c937ca82
+sync raw level=1 chunkSize=100 short 10 ebe97f1d83ffb16471edb5cb
+sync raw level=1 chunkSize=1000 text 62850 28a1f7ede6cb72b75e976285
+sync raw level=1 chunkSize=1000 random 70025 a3ebb66a735dd7b7c937ca82
+sync raw level=1 chunkSize=1000 short 10 ebe97f1d83ffb16471edb5cb
+sync raw level=1 chunkSize=4096 text 62850 28a1f7ede6cb72b75e976285
+sync raw level=1 chunkSize=4096 random 70025 a3ebb66a735dd7b7c937ca82
+sync raw level=1 chunkSize=4096 short 10 ebe97f1d83ffb16471edb5cb
+sync raw level=1 chunkSize=70000 text 62850 28a1f7ede6cb72b75e976285
+sync raw level=1 chunkSize=70000 random 70025 a3ebb66a735dd7b7c937ca82
+sync raw level=1 chunkSize=70000 short 10 ebe97f1d83ffb16471edb5cb
+sync raw level=6 chunkSize=64 text 48658 d534939079f47f9adb4d0c14
+sync raw level=6 chunkSize=64 random 70025 356c10fea3469866a06cb39b
+sync raw level=6 chunkSize=64 short 10 ebe97f1d83ffb16471edb5cb
+sync raw level=6 chunkSize=100 text 48658 d534939079f47f9adb4d0c14
+sync raw level=6 chunkSize=100 random 70025 356c10fea3469866a06cb39b
+sync raw level=6 chunkSize=100 short 10 ebe97f1d83ffb16471edb5cb
+sync raw level=6 chunkSize=1000 text 48658 d534939079f47f9adb4d0c14
+sync raw level=6 chunkSize=1000 random 70025 356c10fea3469866a06cb39b
+sync raw level=6 chunkSize=1000 short 10 ebe97f1d83ffb16471edb5cb
+sync raw level=6 chunkSize=4096 text 48658 d534939079f47f9adb4d0c14
+sync raw level=6 chunkSize=4096 random 70025 356c10fea3469866a06cb39b
+sync raw level=6 chunkSize=4096 short 10 ebe97f1d83ffb16471edb5cb
+sync raw level=6 chunkSize=70000 text 48658 d534939079f47f9adb4d0c14
+sync raw level=6 chunkSize=70000 random 70025 356c10fea3469866a06cb39b
+sync raw level=6 chunkSize=70000 short 10 ebe97f1d83ffb16471edb5cb
+sync gzip level=0 chunkSize=64 text 200048 c44e5f0b8ad1dc08ceae5353
+sync gzip level=0 chunkSize=64 random 70028 61b5536bf097b0db1e9a30b2
+sync gzip level=0 chunkSize=64 short 40 c7b524717d19e84fb69af49e
+sync gzip level=0 chunkSize=100 text 200048 c44e5f0b8ad1dc08ceae5353
+sync gzip level=0 chunkSize=100 random 70028 61b5536bf097b0db1e9a30b2
+sync gzip level=0 chunkSize=100 short 40 c7b524717d19e84fb69af49e
+sync gzip level=0 chunkSize=1000 text 200048 c44e5f0b8ad1dc08ceae5353
+sync gzip level=0 chunkSize=1000 random 70028 61b5536bf097b0db1e9a30b2
+sync gzip level=0 chunkSize=1000 short 40 c7b524717d19e84fb69af49e
+sync gzip level=0 chunkSize=4096 text 200048 c44e5f0b8ad1dc08ceae5353
+sync gzip level=0 chunkSize=4096 random 70028 61b5536bf097b0db1e9a30b2
+sync gzip level=0 chunkSize=4096 short 40 c7b524717d19e84fb69af49e
+sync gzip level=0 chunkSize=70000 text 200038 0a6e9e1b8c9de276d5b25481
+sync gzip level=0 chunkSize=70000 random 70028 382c13e14e1eba1d88682893
+sync gzip level=0 chunkSize=70000 short 40 c7b524717d19e84fb69af49e
+sync gzip level=1 chunkSize=64 text 62868 66818838fc2a77e20721a7fa
+sync gzip level=1 chunkSize=64 random 70043 10f2fafd09c5f673c480c49e
+sync gzip level=1 chunkSize=64 short 28 ac87883f6e3cd8d87bd2426c
+sync gzip level=1 chunkSize=100 text 62868 66818838fc2a77e20721a7fa
+sync gzip level=1 chunkSize=100 random 70043 10f2fafd09c5f673c480c49e
+sync gzip level=1 chunkSize=100 short 28 ac87883f6e3cd8d87bd2426c
+sync gzip level=1 chunkSize=1000 text 62868 66818838fc2a77e20721a7fa
+sync gzip level=1 chunkSize=1000 random 70043 10f2fafd09c5f673c480c49e
+sync gzip level=1 chunkSize=1000 short 28 ac87883f6e3cd8d87bd2426c
+sync gzip level=1 chunkSize=4096 text 62868 66818838fc2a77e20721a7fa
+sync gzip level=1 chunkSize=4096 random 70043 10f2fafd09c5f673c480c49e
+sync gzip level=1 chunkSize=4096 short 28 ac87883f6e3cd8d87bd2426c
+sync gzip level=1 chunkSize=70000 text 62868 66818838fc2a77e20721a7fa
+sync gzip level=1 chunkSize=70000 random 70043 10f2fafd09c5f673c480c49e
+sync gzip level=1 chunkSize=70000 short 28 ac87883f6e3cd8d87bd2426c
+sync gzip level=6 chunkSize=64 text 48676 9ebac76497ea64ec765049e8
+sync gzip level=6 chunkSize=64 random 70043 601a10fdeb7735e6d200b924
+sync gzip level=6 chunkSize=64 short 28 726b5e203a83366ac434dc9f
+sync gzip level=6 chunkSize=100 text 48676 9ebac76497ea64ec765049e8
+sync gzip level=6 chunkSize=100 random 70043 601a10fdeb7735e6d200b924
+sync gzip level=6 chunkSize=100 short 28 726b5e203a83366ac434dc9f
+sync gzip level=6 chunkSize=1000 text 48676 9ebac76497ea64ec765049e8
+sync gzip level=6 chunkSize=1000 random 70043 601a10fdeb7735e6d200b924
+sync gzip level=6 chunkSize=1000 short 28 726b5e203a83366ac434dc9f
+sync gzip level=6 chunkSize=4096 text 48676 9ebac76497ea64ec765049e8
+sync gzip level=6 chunkSize=4096 random 70043 601a10fdeb7735e6d200b924
+sync gzip level=6 chunkSize=4096 short 28 726b5e203a83366ac434dc9f
+sync gzip level=6 chunkSize=70000 text 48676 9ebac76497ea64ec765049e8
+sync gzip level=6 chunkSize=70000 random 70043 601a10fdeb7735e6d200b924
+sync gzip level=6 chunkSize=70000 short 28 726b5e203a83366ac434dc9f
+sync raw level=0 finishFlush=2 200035 42267d4952ecb279aaf1cbe8
+sync raw level=6 finishFlush=2 48663 2d0a51edb82ad574b2044a2a
+sync raw level=0 finishFlush=3 200035 42267d4952ecb279aaf1cbe8
+sync raw level=6 finishFlush=3 48663 2d0a51edb82ad574b2044a2a
+sync raw level=0 finishFlush=1 200031 59ad8c1b4c430cf6a98c075f
+sync raw level=6 finishFlush=1 48659 01bbc4d6adce297273cdeaf0
+sync raw level=0 finishFlush=5 200030 e2e4b441dc629e6b77773fbb
+sync raw level=6 finishFlush=5 48658 daf67d1dc7e6dc45a071b25b
+stream 0 deflate {"level":7,"strategy":0,"memLevel":8,"windowBits":12,"chunkSize":77,"kind":"mixed","size":25257,"dictionary":0} 12884 60c729fd36806a833322b95a d586e9df903f2d4f42d77718
+stream 1 raw {"level":3,"strategy":3,"memLevel":8,"windowBits":15,"chunkSize":65536,"kind":"text","size":30970,"dictionary":0} 16590 175463655331cd6b7e2df253 1e9bf363fcf712d6dbba513e
+stream 2 deflate {"level":8,"strategy":3,"memLevel":8,"windowBits":11,"chunkSize":65536,"kind":"text","size":29103,"dictionary":0} 15657 279fa890adf5db9d5f90ab96 176ee90288d2c6beb99c1508
+stream 3 gzip {"level":9,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":1024,"kind":"json","size":16398,"dictionary":0} 2094 b147d139b19c6e3fc1e29cd8 fb2dc2839bc3eadeb77c6980
+stream 4 gzip {"level":1,"strategy":0,"memLevel":8,"windowBits":10,"chunkSize":65536,"kind":"binary","size":28327,"dictionary":0} 2595 80de384a3ef33516eb8a676b 0925b8753b8b3387b8a5b360
+stream 5 deflate {"level":7,"strategy":0,"memLevel":6,"windowBits":15,"chunkSize":16384,"kind":"runs","size":42715,"dictionary":0} 2284 9b08984635dbf0f49f1d260d 02b076fc47b65adf805f04f6
+stream 6 deflate {"level":8,"strategy":0,"memLevel":3,"windowBits":10,"chunkSize":1024,"kind":"json","size":39438,"dictionary":323} 18907 e628711115fccf8445885a16 7c7ea3d6d33bbae3496ab68f
+stream 7 gzip {"level":8,"strategy":0,"memLevel":8,"windowBits":12,"chunkSize":64,"kind":"mixed","size":47324,"dictionary":0} 24370 d398507109ce2eb479004a49 02898b8faf3fceef874858fb
+stream 8 gzip {"level":4,"strategy":2,"memLevel":8,"windowBits":14,"chunkSize":256,"kind":"binary","size":14881,"dictionary":0} 5416 9fe54f134d1cde30a4ca3bdf 596407fdb4414c7bcb232817
+stream 9 gzip {"level":5,"strategy":0,"memLevel":8,"windowBits":11,"chunkSize":16384,"kind":"mixed","size":55066,"dictionary":0} 27741 26b28e8e2dbf1163ba90faa5 d6ae39856bc5149c1eeeb95f
+stream 10 deflate {"level":9,"strategy":0,"memLevel":8,"windowBits":10,"chunkSize":16384,"kind":"binary","size":46875,"dictionary":0} 5986 69bc8535047a200474e805e0 0dfbb691c214764020d4923f
+stream 11 deflate {"level":5,"strategy":4,"memLevel":8,"windowBits":15,"chunkSize":16384,"kind":"binary","size":1923,"dictionary":0} 92 efa364f8dc1a9ee8522c0053 beb73fa8f0fe210a5aab98bd
+stream 12 raw {"level":3,"strategy":3,"memLevel":8,"windowBits":15,"chunkSize":16384,"kind":"runs","size":100000,"dictionary":0} 90186 5217797498e79588ba914842 1c080f58d6784d9f42b94a83
+stream 13 gzip {"level":9,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":1024,"kind":"runs","size":21971,"dictionary":0} 669 1cebf1c4760b0747bd004c4b 1e5a16b2e51c8347d1a68771
+stream 14 deflate {"level":3,"strategy":2,"memLevel":8,"windowBits":15,"chunkSize":64,"kind":"json","size":39245,"dictionary":0} 21500 1de5dd18eafc1cc31da282c8 3678e9658bb299f33fab5e97
+stream 15 deflate {"level":9,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":16384,"kind":"runs","size":100000,"dictionary":0} 2576 1a4963439ec7e6b47c97a073 781802da35a887046841e9f1
+stream 16 raw {"level":2,"strategy":0,"memLevel":7,"windowBits":14,"chunkSize":1024,"kind":"binary","size":180000,"dictionary":0} 18780 9293e4a8b0a5fdc5c39e9d6e a82d02399160d5418a158414
+stream 17 raw {"level":8,"strategy":1,"memLevel":6,"windowBits":15,"chunkSize":16384,"kind":"json","size":45109,"dictionary":0} 5120 c485426ff4b8b0d44a8d16c3 532e655e8a408f39e36c8c3e
+stream 18 raw {"level":1,"strategy":0,"memLevel":8,"windowBits":13,"chunkSize":65536,"kind":"random","size":70000,"dictionary":0} 70148 4d5613d786984891e665a504 97345aa227188bcabdf90945
+stream 19 deflate {"level":5,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":77,"kind":"random","size":23218,"dictionary":1230} 23238 9d836b63dfa4d9c7455a139a 532cb29302f822780bcf6d86
+stream 20 raw {"level":6,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":16384,"kind":"json","size":10237,"dictionary":0} 1292 50e9369bf1472f4f477a06fe be895ad6802b17871e583e2f
+stream 21 raw {"level":7,"strategy":0,"memLevel":2,"windowBits":15,"chunkSize":64,"kind":"binary","size":180000,"dictionary":0} 10781 df372266f7625dccb0ebc37a e20861af84813b88417c204c
+stream 22 deflate {"level":8,"strategy":0,"memLevel":8,"windowBits":11,"chunkSize":1024,"kind":"mixed","size":300000,"dictionary":0} 147602 83e9b91f44f25212d9ab7126 db8e3e9b79fac9ec7a75da99
+stream 23 deflate {"level":0,"strategy":0,"memLevel":9,"windowBits":15,"chunkSize":16384,"kind":"json","size":30929,"dictionary":0} 30940 fe2c70dff83e321f7103cb35 b55cd86d769d78c76cc842c3
+stream 24 raw {"level":2,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":64,"kind":"random","size":57813,"dictionary":0} 57839 1553b0d670feb9252c111d96 6ee9d160964abc66e824762e
+stream 25 gzip {"level":4,"strategy":2,"memLevel":9,"windowBits":15,"chunkSize":65536,"kind":"runs","size":9415,"dictionary":0} 4963 2bec99682b6684106bcd4dcd 5821019c4c21855bf3ce68b1
+stream 26 gzip {"level":3,"strategy":0,"memLevel":5,"windowBits":9,"chunkSize":16384,"kind":"mixed","size":300000,"dictionary":0} 177783 5b3fa4e9274649a76e8d7371 04dff4bb9100562056e29f53
+stream 27 gzip {"level":8,"strategy":2,"memLevel":8,"windowBits":15,"chunkSize":64,"kind":"runs","size":100000,"dictionary":0} 30652 58ad47fdc5bf82f234373e75 0f82d12d68718bf67f3171cc
+stream 28 raw {"level":6,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":256,"kind":"random","size":42909,"dictionary":0} 42934 9fe2592e0230f0dbf91faf53 c18b2bfeb61da73cd9a7b786
+stream 29 raw {"level":5,"strategy":3,"memLevel":8,"windowBits":15,"chunkSize":64,"kind":"random","size":70000,"dictionary":0} 70041 77ff22d452e8da4b51f35f38 8cc1d6ac2835b9a16d470790
+stream 30 gzip {"level":5,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":64,"kind":"mixed","size":39035,"dictionary":0} 17952 0a467b666a5de6c79b26ee01 c1fa6e113213717b39a51ba7
+stream 31 gzip {"level":8,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":64,"kind":"binary","size":13706,"dictionary":0} 371 2b834f54ef542b267bbe0560 4ae530584b01269bc5a48a66
+stream 32 gzip {"level":6,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":16384,"kind":"binary","size":34209,"dictionary":0} 1892 40a46bc5a2396ac1eabab531 c20b2c533f6d697d6e0ec966
+stream 33 gzip {"level":9,"strategy":0,"memLevel":5,"windowBits":15,"chunkSize":16384,"kind":"random","size":10054,"dictionary":0} 10112 ff8d494a2a029d171ef375fc afe85b03d6361351c8ff6f20
+stream 34 deflate {"level":3,"strategy":0,"memLevel":4,"windowBits":10,"chunkSize":1024,"kind":"json","size":150000,"dictionary":0} 18746 687ac13b5b056b7902d7346c dd094fbe45df66c01dea2a72
+stream 35 gzip {"level":2,"strategy":4,"memLevel":1,"windowBits":11,"chunkSize":1024,"kind":"text","size":200000,"dictionary":0} 89917 ddf0b7724e84cec583fe2d13 99089c7b662ca0d54c84acca
+stream 36 raw {"level":6,"strategy":0,"memLevel":3,"windowBits":15,"chunkSize":64,"kind":"mixed","size":300000,"dictionary":0} 133219 ea9527d2b58f2bd87a610689 5b6ff6a0540fb9903c712550
+stream 37 raw {"level":5,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":16384,"kind":"json","size":22886,"dictionary":0} 2782 fb4f670348cc3aef25bc8638 4b8ea4d315a5603a927da4cb
+stream 38 raw {"level":0,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":16384,"kind":"mixed","size":300000,"dictionary":0} 155675 4ca24762831df8ec4cc92b85 defae3a407ff26c3cdf74c69
+stream 39 gzip {"level":7,"strategy":4,"memLevel":8,"windowBits":15,"chunkSize":16384,"kind":"json","size":150000,"dictionary":0} 22334 a71b83cb0d622ed22d2beebb ed3c98e2d502ae7de449a441
+stream 40 deflate {"level":2,"strategy":0,"memLevel":1,"windowBits":15,"chunkSize":64,"kind":"random","size":6370,"dictionary":0} 6660 ad81594dbf5d36fcd5da27a6 01ec8798ec12cef1b199cb52
+stream 41 deflate {"level":1,"strategy":4,"memLevel":8,"windowBits":15,"chunkSize":77,"kind":"random","size":43164,"dictionary":0} 43185 46dacafdbb31d029ff285373 32874476b88b0cc5ec0b9021
+stream 42 gzip {"level":0,"strategy":3,"memLevel":8,"windowBits":15,"chunkSize":256,"kind":"binary","size":180000,"dictionary":0} 57807 8cab4ba55490c5c71a6e0e5e 180cb03f7cd61c4255809709
+stream 43 gzip {"level":0,"strategy":0,"memLevel":1,"windowBits":15,"chunkSize":77,"kind":"mixed","size":56178,"dictionary":0} 47854 f42494fb16c429a179c50813 df354c362b618e96676717d0
+stream 44 raw {"level":2,"strategy":0,"memLevel":5,"windowBits":14,"chunkSize":64,"kind":"json","size":150000,"dictionary":0} 44042 646cc0a2d0537e1c38ee18bb 6e8e7cd839ab6385b71983cf
+stream 45 deflate {"level":9,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":16384,"kind":"text","size":38532,"dictionary":0} 10026 182504bbd2e0e9539b62801f beff72cee6681f3292645e3e
+stream 46 deflate {"level":-1,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":1024,"kind":"json","size":150000,"dictionary":0} 17354 f2d6316967134a36e6621383 5b4c4287c491c3ea1f2c45be
+stream 47 gzip {"level":1,"strategy":3,"memLevel":8,"windowBits":15,"chunkSize":65536,"kind":"runs","size":19621,"dictionary":0} 417 72280f110bba1f660131bb12 ab81c11ddac6c448d766b684
+stream 48 gzip {"level":5,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":1024,"kind":"runs","size":100000,"dictionary":0} 3010 824c8e260dad170acbfbd4b9 d67aee0413e532658c1f0824
+stream 49 gzip {"level":7,"strategy":0,"memLevel":2,"windowBits":15,"chunkSize":16384,"kind":"binary","size":23470,"dictionary":0} 813 5c1013438e5c7086d699a59e 8e4ecb2a0af2c8ac5f5ee9d5
+stream 50 deflate {"level":1,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":16384,"kind":"json","size":5965,"dictionary":0} 918 1ce0cb990d5fb3d39a69d61d 119c1518303be3eb9bb3ad64
+stream 51 deflate {"level":1,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":256,"kind":"text","size":200000,"dictionary":0} 102757 5837d0b5a883b0b4b765e662 8954a99e13db053f91e4aeea
+stream 52 gzip {"level":1,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":256,"kind":"binary","size":25239,"dictionary":0} 1917 0024e3e5776e8871f600d875 8143f17430a240799f56aea9
+stream 53 raw {"level":3,"strategy":3,"memLevel":8,"windowBits":15,"chunkSize":16384,"kind":"random","size":21209,"dictionary":0} 21219 5f8b8c5d0a8e98db9439663e 7c36657888a6592e0ff0bb32
+stream 54 deflate {"level":0,"strategy":0,"memLevel":3,"windowBits":15,"chunkSize":16384,"kind":"binary","size":510,"dictionary":1940} 525 faa4cdea634c600fdc2a30a7 d21f2a7f4f6512c25041022f
+stream 55 deflate {"level":8,"strategy":3,"memLevel":8,"windowBits":15,"chunkSize":1024,"kind":"text","size":46242,"dictionary":0} 24790 e946bdca4b4ee0738bd30497 1b03fcbce993cfd17e9f5505
+stream 56 raw {"level":5,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":77,"kind":"json","size":150000,"dictionary":0} 17490 cba52511ed63c34224f2816b 5dee977928b59b050307ebfa
+stream 57 deflate {"level":4,"strategy":4,"memLevel":7,"windowBits":15,"chunkSize":256,"kind":"text","size":49772,"dictionary":2237} 18196 55f9094691fc891fb0f34f6d 7d850370de9c9c4dff121f8d
+stream 58 raw {"level":2,"strategy":1,"memLevel":8,"windowBits":15,"chunkSize":16384,"kind":"mixed","size":47159,"dictionary":0} 19151 4e98dcc76dafe01113838a9e 8400eb91c169d9f2ef96737f
+stream 59 raw {"level":3,"strategy":3,"memLevel":8,"windowBits":14,"chunkSize":65536,"kind":"binary","size":45133,"dictionary":0} 30208 7a021bc0211ff2a6517d473b 824c28e8bc6017c65663ea18
+stream 60 gzip {"level":4,"strategy":3,"memLevel":8,"windowBits":15,"chunkSize":16384,"kind":"binary","size":48114,"dictionary":0} 17586 c0d4df62aece10f524d76204 f002115882a483c95742e917
+stream 61 raw {"level":0,"strategy":0,"memLevel":8,"windowBits":12,"chunkSize":1024,"kind":"runs","size":100000,"dictionary":0} 12545 de5a17fe78b2893c100a8998 9675c76fef93275e4f9f555e
+stream 62 deflate {"level":5,"strategy":1,"memLevel":9,"windowBits":11,"chunkSize":16384,"kind":"text","size":200000,"dictionary":0} 106089 aa2fd29df30dde9b99b9ffec 589480c308f25e8a96958ded
+stream 63 raw {"level":4,"strategy":4,"memLevel":8,"windowBits":15,"chunkSize":77,"kind":"runs","size":5679,"dictionary":0} 154 cfedcbde3fafb8e68aae93e5 530c4d1f440ccc42034a096d
+stream 64 gzip {"level":4,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":16384,"kind":"random","size":70000,"dictionary":0} 70129 0bc27269fd6dd02133b588aa 2e3a3ff3b870a353ea51c01b
+stream 65 gzip {"level":7,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":16384,"kind":"random","size":3241,"dictionary":0} 3264 df6beb12eb9f5ee7739ae1e2 44d1253d3863841551020bcc
+stream 66 gzip {"level":6,"strategy":0,"memLevel":8,"windowBits":12,"chunkSize":64,"kind":"binary","size":1510,"dictionary":0} 68 077138de1f6017ea43b91073 ea21345f86ffc7fce6904e0a
+stream 67 deflate {"level":7,"strategy":0,"memLevel":5,"windowBits":15,"chunkSize":1024,"kind":"runs","size":55066,"dictionary":1643} 1386 52c76285b95a40c2c28600c5 296f8d1326b1ee1a7dfdd6de
+stream 68 deflate {"level":5,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":65536,"kind":"binary","size":2487,"dictionary":0} 108 148307d586375e946e9f173a 3124bced4d6143089241b6f9
+stream 69 gzip {"level":-1,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":77,"kind":"json","size":150000,"dictionary":0} 81132 682a6ce543048c9d7129cb06 ccf3ea699db578f201990cf0
+stream 70 raw {"level":4,"strategy":0,"memLevel":8,"windowBits":10,"chunkSize":64,"kind":"runs","size":18027,"dictionary":1039} 357 7e7d183ac022fd8403cd7bba bd1dc2deee3109bb955f4c96
+stream 71 gzip {"level":9,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":1024,"kind":"runs","size":55105,"dictionary":0} 1306 f271902275010045e33914b2 4996d127b5c5186cd92040f3
+stream 72 gzip {"level":3,"strategy":0,"memLevel":8,"windowBits":10,"chunkSize":64,"kind":"random","size":59769,"dictionary":0} 59939 8b1e8192c399ab84e3c28521 349f84f85117368ba6e4d9f7
+stream 73 deflate {"level":3,"strategy":0,"memLevel":3,"windowBits":10,"chunkSize":64,"kind":"mixed","size":23579,"dictionary":0} 15109 20380a07cac11c684af670ff 4654b985b6e5d3ef4033bdbf
+stream 74 gzip {"level":2,"strategy":0,"memLevel":8,"windowBits":12,"chunkSize":65536,"kind":"runs","size":18454,"dictionary":0} 479 2f0c392013882b64918611c6 0dfa8fb027b5e44c268a81a1
+stream 75 gzip {"level":1,"strategy":0,"memLevel":1,"windowBits":15,"chunkSize":65536,"kind":"random","size":1791,"dictionary":0} 1896 e237366587fe26a1a1055981 034a234fc9c33e1eb0fa8141
+stream 76 gzip {"level":4,"strategy":3,"memLevel":1,"windowBits":15,"chunkSize":64,"kind":"mixed","size":1627,"dictionary":0} 93 6e92f0e96a589296d835a770 374e361063a002159f50639a
+stream 77 raw {"level":3,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":1024,"kind":"binary","size":12376,"dictionary":0} 630 611534c54b495fcc248e26d9 8706c1286f3819b133b97e67
+stream 78 gzip {"level":5,"strategy":0,"memLevel":8,"windowBits":12,"chunkSize":256,"kind":"json","size":18770,"dictionary":0} 2316 124929cc8f92983724905a74 53e6955f602a6205d6bee3ed
+stream 79 gzip {"level":6,"strategy":0,"memLevel":8,"windowBits":11,"chunkSize":65536,"kind":"random","size":10394,"dictionary":0} 10462 f471a3556a165c9a3f49d2cf d29366f7cb8cc11daee4f0c8
+stream 80 raw {"level":3,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":65536,"kind":"random","size":1307,"dictionary":2616} 1312 8704ae40e6374ba40d886f5a 712dca40936b39ce670dc803
+stream 81 deflate {"level":1,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":65536,"kind":"json","size":50157,"dictionary":0} 11815 0a15d7ac104b8e6fa6fce0a8 1081f933a9113bd77c3d775f
+stream 82 gzip {"level":9,"strategy":0,"memLevel":8,"windowBits":11,"chunkSize":77,"kind":"text","size":54606,"dictionary":0} 16514 37018458b8b6ca04a0e861bd 7394f3c0a772622b687c866d
+stream 83 gzip {"level":5,"strategy":0,"memLevel":5,"windowBits":15,"chunkSize":16384,"kind":"binary","size":1589,"dictionary":0} 93 9bad8812cc5b0a35d9617339 e5ecbce65c0cad882d462b42
+stream 84 deflate {"level":6,"strategy":4,"memLevel":4,"windowBits":15,"chunkSize":64,"kind":"json","size":49954,"dictionary":0} 8173 dfb2310e9637b18696bc182f 9a47fb64f29fdda414958320
+stream 85 deflate {"level":0,"strategy":0,"memLevel":8,"windowBits":12,"chunkSize":1024,"kind":"random","size":53422,"dictionary":0} 53537 b1d423f9828c32ad49f3707e 79e3c49ad45a29ba2f3774d4
+stream 86 raw {"level":7,"strategy":3,"memLevel":8,"windowBits":15,"chunkSize":256,"kind":"random","size":10049,"dictionary":0} 10054 bab505c528f92fb93b9edf64 5e2c018d9d918c5d6d061570
+stream 87 deflate {"level":9,"strategy":0,"memLevel":2,"windowBits":15,"chunkSize":64,"kind":"binary","size":51401,"dictionary":0} 18828 239aa0cb65e6ebbe1dd60a2c ffb13529701b02f356cc0fc4
+stream 88 deflate {"level":2,"strategy":0,"memLevel":8,"windowBits":9,"chunkSize":77,"kind":"binary","size":180000,"dictionary":0} 23791 c118fdae5b581c10f603cd55 2e8f6d4d06285db8194a4624
+stream 89 raw {"level":9,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":64,"kind":"text","size":22806,"dictionary":0} 6190 b8b0af6c5f584f39b5197742 8abec458df2a514f5ff0d294
+stream 90 gzip {"level":5,"strategy":0,"memLevel":8,"windowBits":11,"chunkSize":256,"kind":"mixed","size":34573,"dictionary":0} 20026 c3da709dd416172087d250c5 186719f67749979154fd9a30
+stream 91 gzip {"level":9,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":16384,"kind":"text","size":37590,"dictionary":0} 9650 14236e6df45e233b5c670f38 8068f42dc90b443eec83be67
+stream 92 deflate {"level":9,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":64,"kind":"text","size":2708,"dictionary":0} 922 91f97c971ca30d5977bd2920 77f7418780242ede981b23eb
+stream 93 deflate {"level":5,"strategy":2,"memLevel":8,"windowBits":15,"chunkSize":77,"kind":"runs","size":5246,"dictionary":0} 2252 3302fa76ab4a3fc2d3c35e07 339d9b48ebe35aed7599825c
+stream 94 raw {"level":5,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":256,"kind":"runs","size":100000,"dictionary":0} 3613 10bdb025d9538dbdbe6b5be1 3dd1d2acf1f69f25de693485
+stream 95 deflate {"level":9,"strategy":1,"memLevel":8,"windowBits":13,"chunkSize":16384,"kind":"runs","size":100000,"dictionary":0} 2634 464dfa5c0591e4c4a714cb04 c99d5e161082955a5d6b9ddd
+stream 96 raw {"level":9,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":64,"kind":"text","size":23026,"dictionary":0} 6252 96f9fd04075aa08e5f3bef3d c950e5712df7c4955689d3e5
+stream 97 deflate {"level":0,"strategy":0,"memLevel":8,"windowBits":13,"chunkSize":1024,"kind":"binary","size":180000,"dictionary":0} 62634 f8d945086addc0f4e2ea70b0 10dbcd5bd6951e58e29eec5a
+stream 98 deflate {"level":2,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":256,"kind":"json","size":150000,"dictionary":0} 40522 883befbe404f0704e33351e3 77bea0bd529b7cadb159c919
+stream 99 raw {"level":0,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":65536,"kind":"mixed","size":300000,"dictionary":0} 144580 dcb213a6a9ec800940ea5a00 d8e76bed6f8687ee66149ed0
+stream 100 deflate {"level":3,"strategy":3,"memLevel":8,"windowBits":15,"chunkSize":16384,"kind":"mixed","size":300000,"dictionary":0} 197803 67310a476774e015031cfb05 f4b157c975e0d15134e0c0c1
+stream 101 raw {"level":3,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":1024,"kind":"mixed","size":300000,"dictionary":0} 149307 65ac56119ed3e50ad69eadd1 53c2ed037c7198058276a773
+stream 102 deflate {"level":6,"strategy":0,"memLevel":8,"windowBits":11,"chunkSize":77,"kind":"mixed","size":300000,"dictionary":2229} 150066 08bbb684a955b8b4ea44531e ab73120db1283fd7f5192519
+stream 103 gzip {"level":5,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":16384,"kind":"random","size":56393,"dictionary":0} 56443 f27cea6b15cb1a70d556bb4f b3fa9894a427962e19d73e28
+stream 104 deflate {"level":1,"strategy":0,"memLevel":8,"windowBits":14,"chunkSize":65536,"kind":"binary","size":180000,"dictionary":0} 18308 265a06ccc635f14a2479c48d fda8be57978d1d2a6a2559d0
+stream 105 raw {"level":3,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":16384,"kind":"text","size":58050,"dictionary":0} 16351 732f67f83dbc14f3d02af91e 8947723888c76ba327e0ff37
+stream 106 raw {"level":6,"strategy":0,"memLevel":1,"windowBits":15,"chunkSize":16384,"kind":"binary","size":26854,"dictionary":0} 1114 b09958dee5a039c331a79f08 ab47e7e2d1e1279cbf15a693
+stream 107 gzip {"level":1,"strategy":0,"memLevel":2,"windowBits":15,"chunkSize":16384,"kind":"binary","size":180000,"dictionary":0} 44806 6f36a1c6dfb144ccd92fcc1a a6d81216a79b9af676ee017c
+stream 108 raw {"level":5,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":1024,"kind":"mixed","size":4193,"dictionary":0} 2391 d059aa5f9e0a38c1e5ba91ad 6afc681b1f98e7023815166b
+stream 109 deflate {"level":6,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":1024,"kind":"runs","size":45713,"dictionary":0} 18643 04c4e3c64ebbb231370ebadd e152e4ca809b24c77031c31e
+stream 110 raw {"level":5,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":1024,"kind":"text","size":13699,"dictionary":0} 4195 51e5f103a2fee0912b786358 5349194b78569617e34241c4
+stream 111 raw {"level":8,"strategy":0,"memLevel":8,"windowBits":12,"chunkSize":16384,"kind":"json","size":47825,"dictionary":0} 26302 389f173bfa90160fc6e28626 a4f2739e652529e2f8e73760
+stream 112 gzip {"level":6,"strategy":0,"memLevel":2,"windowBits":15,"chunkSize":16384,"kind":"binary","size":16613,"dictionary":0} 631 6bca563a7b0906e10d1e250f fc0271ec160145762498966d
+stream 113 gzip {"level":8,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":16384,"kind":"text","size":23985,"dictionary":0} 6783 fe23c053601e4175f54f38c2 5bb32f335a6abf52a8fbed01
+stream 114 gzip {"level":9,"strategy":4,"memLevel":8,"windowBits":15,"chunkSize":1024,"kind":"json","size":150000,"dictionary":0} 103077 2ecb7591339583c7ee9f7955 b43a9499d797464715938e91
+stream 115 gzip {"level":2,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":256,"kind":"json","size":10207,"dictionary":0} 1463 6c3749a25f913b2f0670cf37 2bf6f97f6470db2705255f19
+stream 116 deflate {"level":6,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":16384,"kind":"binary","size":51361,"dictionary":2536} 18723 c56d06d8990b50a3f3ec2de8 325d8c58eb4dda4bce40ad9e
+stream 117 deflate {"level":0,"strategy":1,"memLevel":8,"windowBits":15,"chunkSize":16384,"kind":"text","size":200000,"dictionary":0} 200057 a2b4f8d0765ba8e84962e594 242f88a311f06082b995b1a6
+stream 118 deflate {"level":1,"strategy":2,"memLevel":8,"windowBits":11,"chunkSize":1024,"kind":"text","size":55786,"dictionary":0} 29895 c430d4f9a14647a98df0673e 71a6add0eb5f650b85582388
+stream 119 raw {"level":2,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":77,"kind":"binary","size":19947,"dictionary":0} 1279 5475e1abedb93d0e62e0409a 705bd8e1c9084c2a53752eb2
+stream 120 deflate {"level":3,"strategy":0,"memLevel":8,"windowBits":10,"chunkSize":77,"kind":"runs","size":59596,"dictionary":0} 1340 e2d769a38a85f89ab7f2174d 81f34ecbbaf4900cda6513da
+stream 121 raw {"level":-1,"strategy":0,"memLevel":6,"windowBits":15,"chunkSize":256,"kind":"runs","size":53871,"dictionary":136} 36222 e6a4d4fc602be40515bfc311 1c808c46a0f665602a303d74
+stream 122 deflate {"level":-1,"strategy":0,"memLevel":8,"windowBits":10,"chunkSize":256,"kind":"binary","size":2608,"dictionary":0} 85 643ca518ca215776efe7ceb1 58cd77ed2ac8695188a896f4
+stream 123 gzip {"level":1,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":65536,"kind":"mixed","size":31790,"dictionary":0} 14933 c313216a3f0b3fb03ef7715f 8f7c003f40dda642332ac6b0
+stream 124 raw {"level":3,"strategy":0,"memLevel":3,"windowBits":15,"chunkSize":64,"kind":"text","size":34121,"dictionary":0} 10092 970947a6da5553095c294900 647409ad8e54642a6d76ea2e
+stream 125 gzip {"level":5,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":16384,"kind":"runs","size":100000,"dictionary":0} 5043 2690029b3c3d41c500625f6c 325ab27889a3a43f5b13fc39
+stream 126 raw {"level":8,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":16384,"kind":"random","size":12150,"dictionary":0} 12175 1ade1e198905175583fee18b cf96c211e78d5976b4cf9514
+stream 127 raw {"level":-1,"strategy":1,"memLevel":8,"windowBits":15,"chunkSize":256,"kind":"random","size":37053,"dictionary":0} 37103 cc1a85f5335f1880b2bdb57b fab3a7b0e80af4a4d0747c7e
+stream 128 raw {"level":5,"strategy":2,"memLevel":1,"windowBits":15,"chunkSize":65536,"kind":"text","size":58309,"dictionary":0} 45313 8b302680c988ae8fe5f58246 4eef95589e82336dde6b3ed2
+stream 129 gzip {"level":7,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":1024,"kind":"random","size":70000,"dictionary":0} 70050 85e2d2888e5496861d4a2dc6 68926e7ae3b34c5a38267987
+stream 130 raw {"level":8,"strategy":0,"memLevel":8,"windowBits":9,"chunkSize":16384,"kind":"random","size":16967,"dictionary":0} 17013 c23cbd2b6aeee5965f91b1f1 ad70ba92c47c5fcaf5973cab
+stream 131 raw {"level":2,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":65536,"kind":"random","size":36741,"dictionary":0} 36772 ef88dd3596be92232b4ac795 7bd17238d0ede50b4c99051a
+stream 132 deflate {"level":5,"strategy":3,"memLevel":5,"windowBits":15,"chunkSize":1024,"kind":"text","size":57829,"dictionary":0} 31605 3d062b00a770bb29833c51b5 2cddbd183fc49f592e63fb0f
+stream 133 gzip {"level":0,"strategy":0,"memLevel":8,"windowBits":11,"chunkSize":64,"kind":"json","size":150000,"dictionary":0} 38663 679c1767ac522acf704d328a fc415f91ddc16f99a5059b8d
+stream 134 gzip {"level":2,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":16384,"kind":"random","size":70000,"dictionary":0} 70063 5637836d28dc9323802b8b64 d375541fb80aa5e2ce0a1413
+stream 135 raw {"level":7,"strategy":0,"memLevel":8,"windowBits":12,"chunkSize":1024,"kind":"binary","size":2602,"dictionary":0} 71 80a74dc99b8175492ed3a7c6 7f2253d7e228b22a08bda1f0
+stream 136 gzip {"level":1,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":65536,"kind":"runs","size":2467,"dictionary":0} 93 ee6a2836d758c191e42f9d9a e5ecbce65c0cad882d462b42
+stream 137 gzip {"level":3,"strategy":0,"memLevel":8,"windowBits":9,"chunkSize":65536,"kind":"mixed","size":29884,"dictionary":0} 20430 d63b9760a2048a50a1a2b73e 2b8c8be9609a79e5ab7d673e
+stream 138 gzip {"level":8,"strategy":1,"memLevel":8,"windowBits":15,"chunkSize":77,"kind":"mixed","size":11992,"dictionary":0} 4200 252e7612bca93272b556720a 01414eaf29946ab38ef2b950
+stream 139 deflate {"level":6,"strategy":0,"memLevel":8,"windowBits":9,"chunkSize":16384,"kind":"mixed","size":15993,"dictionary":1519} 8670 8c2a37081fff6a35314d699a 4db45f8756113e3ea2e60ec0
+stream 140 gzip {"level":9,"strategy":0,"memLevel":5,"windowBits":15,"chunkSize":16384,"kind":"random","size":51284,"dictionary":0} 51453 ce8a51f9248ce8b2274a9210 aae414c813ad957b4c3c3c80
+stream 141 gzip {"level":6,"strategy":4,"memLevel":8,"windowBits":15,"chunkSize":256,"kind":"runs","size":25356,"dictionary":0} 680 4f90a5358a4980af7dff898d a3919dc43123ebd2f49daf8a
+stream 142 raw {"level":7,"strategy":3,"memLevel":8,"windowBits":15,"chunkSize":65536,"kind":"json","size":15781,"dictionary":0} 8662 5d5ff6f2b8b936615c7e542b 08ea52036a5ceee99d1d499f
+stream 143 raw {"level":-1,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":65536,"kind":"binary","size":180000,"dictionary":0} 9551 35db99158d6affec282a9126 8879d54849e48e38d8b895bb
+stream 144 raw {"level":1,"strategy":3,"memLevel":2,"windowBits":15,"chunkSize":77,"kind":"text","size":38919,"dictionary":0} 24659 c0665076bf4f814379267313 157a30613cc730ade9f29ee9
+stream 145 deflate {"level":0,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":77,"kind":"runs","size":58420,"dictionary":0} 2390 3af7a15da883a769c449eada f099c3826cfef3679fea976d
+stream 146 gzip {"level":2,"strategy":0,"memLevel":7,"windowBits":15,"chunkSize":77,"kind":"text","size":200000,"dictionary":0} 61543 b95822717f3cc67966bf305e b6d1901db818e163aa67ab54
+stream 147 raw {"level":5,"strategy":4,"memLevel":2,"windowBits":15,"chunkSize":1024,"kind":"json","size":27432,"dictionary":2652} 12364 bfc750770790c26f3e1a8460 0234f5b5121729369b2cfc5c
+stream 148 deflate {"level":0,"strategy":0,"memLevel":8,"windowBits":11,"chunkSize":16384,"kind":"runs","size":12802,"dictionary":547} 12822 a6324aea95b7332c1beb92f7 08409e6b2b42aecb6dd1aee6
+stream 149 gzip {"level":6,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":16384,"kind":"json","size":150000,"dictionary":0} 16837 f909bd0c80ece6902c93e6a0 ad183dd30ab9b6d739bcd268
+stream 150 raw {"level":2,"strategy":0,"memLevel":5,"windowBits":15,"chunkSize":16384,"kind":"mixed","size":34657,"dictionary":0} 15325 ced57f47160e5987685a22c0 e62af34fa223095b4602f954
+stream 151 raw {"level":0,"strategy":0,"memLevel":8,"windowBits":13,"chunkSize":16384,"kind":"binary","size":36823,"dictionary":0} 36854 bc4a3c46d974ed059b31fab7 f8f60453cb57fd5eba985428
+stream 152 deflate {"level":8,"strategy":2,"memLevel":8,"windowBits":11,"chunkSize":256,"kind":"text","size":200000,"dictionary":0} 107300 90d06b1b93c09e94a07daf18 8931ace24e93929a47eb9393
+stream 153 deflate {"level":1,"strategy":0,"memLevel":8,"windowBits":10,"chunkSize":16384,"kind":"runs","size":100000,"dictionary":0} 2174 82ce6b98c77a86af87e92153 dafe586967702bd47235330c
+stream 154 raw {"level":9,"strategy":0,"memLevel":7,"windowBits":15,"chunkSize":64,"kind":"runs","size":37343,"dictionary":0} 931 7a5c90018824dfc51ba5c746 f7323e9bffd1b0bf5cc50819
+stream 155 raw {"level":5,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":256,"kind":"runs","size":33081,"dictionary":0} 761 71d2a41da36d4518526b65c1 2a10efeb1a89cadeb39d9146
+stream 156 gzip {"level":4,"strategy":0,"memLevel":8,"windowBits":11,"chunkSize":64,"kind":"random","size":70000,"dictionary":0} 70254 e71ce20f704c9ac78a40671c a22efeeeb4c3e1afe688c097
+stream 157 gzip {"level":4,"strategy":0,"memLevel":8,"windowBits":15,"chunkSize":65536,"kind":"runs","size":7844,"dictionary":0} 220 c6f1f09c5044b6da9414cc31 391ab6a0e50224896c1d0945
+stream 158 deflate {"level":-1,"strategy":3,"memLevel":8,"windowBits":15,"chunkSize":1024,"kind":"runs","size":55784,"dictionary":0} 1202 88863587f500fe19daab4ae4 c3625416f2ec3d39c427c0f2
+stream 159 deflate {"level":1,"strategy":3,"memLevel":8,"windowBits":15,"chunkSize":256,"kind":"random","size":16525,"dictionary":0} 16541 fd9ceccbe337416941e94321 04355687ed871a13f8de5d03
+params 6,0 -> 0,0 154874 4a99761e975d957e85edac67 5d5b99d3c288a85883ad0373
+params 6,0 -> 0,3 154874 4a99761e975d957e85edac67 5d5b99d3c288a85883ad0373
+params 6,3 -> 0,0 195413 d502c34c9a95883c4f7c0808 fb5ff221e340212b1fedffe0
+params 6,2 -> 0,1 212722 4f7cdaaa87a7ec04df1d2cd3 84897c52f71fa00395939ead
+params 6,1 -> 0,4 155281 81064f9a63b455ec478e7910 7959064ce50b36ff825ad008
+params 0,0 -> 6,0 185520 7e514b74d91fb0b2db6b62e5 8f6ed64bf402bc278c179a7a
+params 0,0 -> 6,3 209996 2452e79b9c1d19ec676c9cdc abee7702d85dd970f0c027c6
+params 0,3 -> 6,0 185520 7e514b74d91fb0b2db6b62e5 8f6ed64bf402bc278c179a7a
+params 0,2 -> 6,1 186009 ba6cb8e41008af378745eaad 84c2707794d8c75eb99793c2
+params 0,1 -> 6,4 187173 44a5d2648dd2e3e14e1baf18 8d1126ee8d8b6a932f5ce7ae
+params 0,0 -> 1,0 187602 7a4e013badfa51afaaac8421 ac2a90d37820f1249484d145
+params 0,0 -> 1,3 209996 2452e79b9c1d19ec676c9cdc abee7702d85dd970f0c027c6
+params 0,3 -> 1,0 187602 7a4e013badfa51afaaac8421 ac2a90d37820f1249484d145
+params 0,2 -> 1,1 187602 7a4e013badfa51afaaac8421 ac2a90d37820f1249484d145
+params 0,1 -> 1,4 189495 06cb4a778c655b4be82bb870 90357edfd49d51ccad1d743d
+params 1,0 -> 9,0 96823 97b049cb1ab43d4355f3eb21 8b953b7a410f9478be7054d5
+params 1,0 -> 9,3 120572 32197d0d106d60f2935176ac 72d412b6ddf779c44903373e
+params 1,3 -> 9,0 131968 29ff944dac791485a1c2389e 40004a2e251c3c668f07b158
+params 1,2 -> 9,1 149801 385f4e56b37d0f364f8ea0c6 864cc5362662ee2b4951f525
+params 1,1 -> 9,4 98464 4328b2540d1de03de4185690 8754ec3a6172cc9af2559aff
+params 9,0 -> 1,0 93692 6f3226259de2281e8ba6223d dd870e6004d60214993c39dc
+params 9,0 -> 1,3 115334 76dd0227459ed6e56ebcee55 f12b1ac8e9c137ae83d926ab
+params 9,3 -> 1,0 134006 9766a53287316ac86d603150 2e83e008c156c1c3c7027b36
+params 9,2 -> 1,1 151315 b71ac674c04931c27b865197 b19b07ff8a9d032d5a22fce8
+params 9,1 -> 1,4 96117 a753168ebcc392c4a7a0d670 e9e11ffff0adbff1dd179c6a
+params 3,0 -> 4,0 94700 e8574e6abc092d0a9f62ae26 640894bd6fc5a997ee4f65f3
+params 3,0 -> 4,3 118619 a0a7bd5736aeb65c24d3fce7 8b1028e8e7be3ffae4f9253f
+params 3,3 -> 4,0 132594 053f178a41763517f6ba482c 67bab1ec7ed0e23acce3eac9
+params 3,2 -> 4,1 150431 dafc295e417462a35ef6aeba 9b2b253b7c679b3e2778fd57
+params 3,1 -> 4,4 96369 76c11dbd5aecd3b1b6839360 e9e3fbb680fee5f3d0695fb6
+params 4,0 -> 5,0 92904 6c224796dd338f3b11e14c6c a66d33a6a877ac8b7563fe85
+params 4,0 -> 5,3 117414 1a75f3e66c5d655fec72fc92 ce8c2f30ff0d6f7f321cd2a5
+params 4,3 -> 5,0 132173 0fd162eabe698f8e46f84c5f 70fba5e920ac898cea8cd373
+params 4,2 -> 5,1 150027 60067135020c9175846f6e8a 41b5a436cb8b2e518fbdf2e1
+params 4,1 -> 5,4 95351 d43ab0acee939e70b5eb19e2 6722ddbd13a00d76255bfa49
+params 6,0 -> 6,0 90020 5b631514f088be8d8478eac3 afdf3d1616fc2ae682696a38
+params 6,0 -> 6,3 115476 0e42fd79e2ea0003626a9a82 82043e184582e6769f2cbcf5
+params 6,3 -> 6,0 132030 d2b55a20b96365a68dc4e9ce 63916cb2eeb4826bb5dced10
+params 6,2 -> 6,1 149865 df1770f0645a2365949b5799 980542e6606db2c6ce73e89c
+params 6,1 -> 6,4 92404 be7ca52b2c71c85cf95b7e5e 5fc24a96cc70b5fbc8bec5bf
+params 0,0 -> 0,0 250045 b71a65a9c8a442e5a97d4f3c bfb61b802f13f37d055a461f
+params 0,0 -> 0,3 250050 ce2b1ffdc6e64bdf692cab64 e30500a2f464e15e56e169ec
+params 0,3 -> 0,0 250050 ce2b1ffdc6e64bdf692cab64 e30500a2f464e15e56e169ec
+params 0,2 -> 0,1 250050 ce2b1ffdc6e64bdf692cab64 e30500a2f464e15e56e169ec
+params 0,1 -> 0,4 250050 ce2b1ffdc6e64bdf692cab64 e30500a2f464e15e56e169ec
+params 9,0 -> 0,0 154696 ade5319deb86b85ca0d52551 abfd6d33fabb8c8c3d7ce121
+params 9,0 -> 0,3 154696 ade5319deb86b85ca0d52551 abfd6d33fabb8c8c3d7ce121
+params 9,3 -> 0,0 195413 d502c34c9a95883c4f7c0808 fb5ff221e340212b1fedffe0
+params 9,2 -> 0,1 212722 4f7cdaaa87a7ec04df1d2cd3 84897c52f71fa00395939ead
+params 9,1 -> 0,4 155099 a31cebdb509e37efb931c876 a4f085b51b4f6e155c58b92b
+reset deflate level=0 180372 c83d2e7aa8a95a4c95a7ac12 d1fb30ca83bcb2dcaaa6dacb
+reset deflate level=1 17481 ef71e3670c7516595b41237d 63ac5e36179686e73f0966e5
+reset deflate level=6 8515 a9905e560d1d44b15b4cd306 c7cb9ab262ae1bd6fc7661bd
+reset deflate level=9 5007 4709c83232d32d3baaed63f1 812a868944a3262f88221f01
+reset raw level=0 180362 7c6565d380377747941f7ce9 4251b787439cf0fca77b1d5c
+reset raw level=1 17471 ba12935434f5d20ea028dc07 6dd17c23e1e088b52c94ad80
+reset raw level=6 8505 821aa5c77e52f4dc69b3ee89 16b51ee70b39a0ee2406efa8
+reset raw level=9 4997 df20d46354d23ec20d3ec3df 752da6f8d9a86e56f66c311c
+reset gzip level=0 180400 30feaf1a1ebdd49f15d2c8a5 e2daf3ddeac9d57bdefe15dd
+reset gzip level=1 17509 6fc708123f8ab9d69c92e4bd 02940c4ef048bb4ea4a3c41f
+reset gzip level=6 8543 2ba760f86e62dab52e61f3eb 271c66057a2ddaf06c447326
+reset gzip level=9 5035 e17a051241163a688f3b8d9f 8bcac5a5ea4e2614a55b19c6
+crc32 text 3146237868 2877444180
+crc32 json 1851075181 2959142296
+crc32 random 831235580 1539050798
+crc32 runs 824255078 2702928850
+crc32 mixed 3368449446 2668787651
+crc32 binary 3499655197 3153578971
+crc32 empty 0 305419896
+crc32 one 3904355907 3061543707
+crc32 three 891568578 2727573087
+crc32 short 3858335872 1033016478
