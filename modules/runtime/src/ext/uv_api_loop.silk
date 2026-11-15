@@ -44,6 +44,8 @@ static if Intrinsic.targetOperatingSystem() == "darwin" {
   const DEFAULT_HANDLE: usize = 18446744073709551614
   const O_NONBLOCK: i32 = 4
   const F_GETPATH: i32 = 50
+  const ENOBUFS: i32 = 55
+  const FIONBIO: u64 = 2147772030
 } else {
   unsafe extern "C" fn __errno_location() -> *mut i32
   unsafe fn errno() -> i32 { return unsafe Pointer.read<i32>(unsafe __errno_location()) }
@@ -51,6 +53,22 @@ static if Intrinsic.targetOperatingSystem() == "darwin" {
   const STDERR_NAME: &[u8] = b"stderr\0"
   const DEFAULT_HANDLE: usize = 0
   const O_NONBLOCK: i32 = 2048
+  const ENOBUFS: i32 = 105
+  const FIONBIO: u64 = 21537
+}
+unsafe extern "C" fn ioctl(fd: i32, request: u64, ...) -> i32
+const ENOTTY: i32 = 25
+// libuv's uv__nonblock: ioctl(FIONBIO), and fcntl where ioctl does not apply (ENOTTY).
+unsafe fn setNonblocking(fd: i32) -> i32 {
+  let mut on: i32 = 1
+  if unsafe ioctl(fd, FIONBIO, Pointer.fromMutRef<i32>(&mut on)) == 0 { return 0 }
+  let code = unsafe errno()
+  if code != ENOTTY { return -code }
+  let flags = unsafe fcntl(fd, F_GETFL)
+  if flags < 0 { return -(unsafe errno()) }
+  if (flags & O_NONBLOCK) != 0 { return 0 }
+  if unsafe fcntl(fd, F_SETFL, flags | O_NONBLOCK) != 0 { return -(unsafe errno()) }
+  return 0
 }
 const F_GETFL: i32 = 3
 const F_SETFL: i32 = 4
@@ -437,9 +455,8 @@ pub unsafe export "C" fn pollInit(loop: *mut u8, handle: *mut u8, fd: i32) -> i3
   if unsafe fdExists(loop, fd, 0) { return -17 }
   let checked = unsafe checkDescriptor(loop, fd)
   if checked != 0 { return checked }
-  let flags = unsafe fcntl(fd, F_GETFL)
-  if flags < 0 { return -(unsafe errno()) }
-  if (flags & O_NONBLOCK) == 0 { if unsafe fcntl(fd, F_SETFL, flags | O_NONBLOCK) != 0 { return -(unsafe errno()) } }
+  let nonblocking = unsafe setNonblocking(fd)
+  if nonblocking != 0 { return nonblocking }
   let inner = unsafe adopt(loop, handle, abi.UV_POLL)
   if Pointer.isNull<u8>(inner) { return -12 }
   let status = unsafe uvl.uv_poll_init_socket(loop, unsafe nn(inner), fd)
@@ -652,7 +669,7 @@ unsafe fn copyPath(path: ?*const u8, buffer: ?*mut u8, size: ?*mut usize) -> i32
   if Pointer.isNull<u8>(path) { unsafe Pointer.write<usize>(unsafe Intrinsic.pointerRequalify<?*mut usize, *mut usize>(size), 0) return -22 }
   let text = unsafe Intrinsic.pointerRequalify<?*const u8, *const u8>(path)
   let length = unsafe strlen(text)
-  if length >= room { unsafe Pointer.write<usize>(unsafe Intrinsic.pointerRequalify<?*mut usize, *mut usize>(size), length + 1) return -105 }
+  if length >= room { unsafe Pointer.write<usize>(unsafe Intrinsic.pointerRequalify<?*mut usize, *mut usize>(size), length + 1) return -ENOBUFS }
   let target = unsafe nn(buffer)
   let _copied = unsafe memcpy(target, text, length)
   unsafe Pointer.write<u8>(unsafe at(target, length), 0)

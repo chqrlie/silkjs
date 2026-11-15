@@ -319,6 +319,13 @@ static if Intrinsic.targetOperatingSystem() == "darwin" {
   const FILTER_READ: i16 = -1
   const FILTER_WRITE: i16 = -2
   const FILTER_VNODE: i16 = -4
+  const FILTER_USER: i16 = -10
+  // libuv's kqueue.c registers UV_PRIORITIZED with EV_OOBAND (EV_FLAG1) in the filter slot. macOS
+  // refuses that filter, and libuv, which hands its changes to the wait, receives the refusal as an
+  // EV_ERROR event of that filter: one UV_PRIORITIZED callback. The same here: the refusal is
+  // collected at once and replayed by a one-shot user event of the descriptor.
+  const FILTER_OOBAND: i16 = 8192
+  const NOTE_TRIGGER: u32 = 16777216
   const EV_ADD: u16 = 1
   const EV_DELETE: u16 = 2
   const EV_CLEAR: u16 = 32
@@ -348,6 +355,22 @@ static if Intrinsic.targetOperatingSystem() == "darwin" {
     if status != 0 { return status }
     if wantWrite && !wasWrite { status = unsafe queueChange(queue, kernelEvent(ident, FILTER_WRITE, EV_ADD, 0, data)) }
     if !wantWrite && wasWrite { let _ignored = unsafe queueChange(queue, kernelEvent(ident, FILTER_WRITE, EV_DELETE, 0, data)) }
+    if status != 0 { return status }
+    let wasPriority = (previous & UV_PRIORITIZED) != 0 let wantPriority = (events & UV_PRIORITIZED) != 0
+    if wantPriority && !wasPriority {
+      let changes = [kernelEvent(ident, FILTER_OOBAND, EV_ADD, 0, data)]
+      let mut answer: [KernelEvent; 1] = [kernelEvent(0, 0, 0, 0, 0)]
+      let zero = TimeSpec { seconds: 0, nanoseconds: 0 }
+      let count = unsafe kevent(queue, Pointer.fromSlice<KernelEvent>(&changes), 1, Pointer.fromMutSlice<KernelEvent>(&mut answer), 1, Pointer.fromRef<TimeSpec>(&zero))
+      if count < 0 { return -(unsafe errno()) }
+      if count == 1 && (answer[0].flags & EV_ERROR) != 0 {
+        status = unsafe queueChange(queue, kernelEvent(ident, FILTER_USER, EV_ADD | EV_ONESHOT, NOTE_TRIGGER, data))
+      }
+    }
+    if !wantPriority && wasPriority {
+      let _a = unsafe queueChange(queue, kernelEvent(ident, FILTER_OOBAND, EV_DELETE, 0, data))
+      let _b = unsafe queueChange(queue, kernelEvent(ident, FILTER_USER, EV_DELETE, 0, data))
+    }
     return status
   }
   // The events of one wait, or -1 when it was interrupted. With `blockProfile`, SIGPROF is blocked
@@ -367,9 +390,11 @@ static if Intrinsic.targetOperatingSystem() == "darwin" {
       let item = raw[index] let mut events: i32 = 0
       if item.filter == FILTER_READ { events = UV_READABLE if (item.flags & EV_EOF) != 0 { events = events | UV_DISCONNECT } }
       if item.filter == FILTER_WRITE { events = UV_WRITABLE if (item.flags & EV_EOF) != 0 { events = events | QUEUE_ERROR } }
+      if item.filter == FILTER_OOBAND { events = UV_PRIORITIZED }
+      if item.filter == FILTER_USER { events = UV_PRIORITIZED }
       // A vnode event carries its NOTE_* bits above the poll bits.
       if item.filter == FILTER_VNODE { events = u32.toI32(u32.shiftLeft(item.fflags, 16)) }
-      if (item.flags & EV_ERROR) != 0 { events = events | QUEUE_ERROR }
+      if (item.flags & EV_ERROR) != 0 && item.filter != FILTER_USER { events = events | QUEUE_ERROR }
       ready[index] = Ready { tag: usize.toU64(item.udata), events: events }
       index = index + 1
     }
@@ -501,7 +526,7 @@ pub unsafe fn uv_loop_configure(memory: *mut u8, option: i32, argument: i32) -> 
   if option == 1 { l.idleMetrics = true return 0 }
   // UV_LOOP_USE_IO_URING_SQPOLL: accepted on Linux, where libuv only records it.
   static if Intrinsic.targetOperatingSystem() != "darwin" { if option == 2 { return 0 } }
-  if option != 0 { return -38 }
+  if option != 0 { static if Intrinsic.targetOperatingSystem() == "darwin" { return -78 } else { return -38 } }
   // UV_LOOP_BLOCK_SIGNAL takes only SIGPROF (27 on both targets): the wait then blocks it.
   if argument != 27 { return -22 }
   l.blockProfile = true
