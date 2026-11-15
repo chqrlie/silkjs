@@ -113,14 +113,23 @@ fixes below came between them; a full run of the final commit is queued).
 The 19 fixtures that fail on macOS fail on `main` there too (among them `sea-smoke.py`, the
 Node-API smokes, `embed-smoke.py` within the old five-minute limit).
 
-libuv's suite found seven differences on macOS that Linux could not show, all fixed:
+libuv's suite found these differences on macOS that Linux could not show, all fixed:
 posix_spawn children got an empty environment when `options.env` was null; `uv_loop_fork` closed
 its own new kqueue (a kqueue is not inherited, so the old descriptor's number is free and the new
 queue may take it); `ENOBUFS` and `ENOSYS` had Linux's values; `uv_poll_init` set nonblocking
 mode with `fcntl`, which a kqueue descriptor refuses (libuv tries `ioctl(FIONBIO)` first); and
 `UV_PRIORITIZED` behaved as on Linux where libuv on macOS reports the kernel's refusal of its
-`EV_OOBAND` filter as one priority event ahead of the batch (replayed now with a one-shot
-`EVFILT_USER` event, first in its batch).
+`EV_OOBAND` filter as one priority event ahead of the batch. Two more showed only on a busy runner:
+`uv_poll` filters registered at once could report in another order than libuv's, which hands its
+watcher changes to the kevent call that waits (so a refused change arrives as an `EV_ERROR` event
+first); uv_poll handles now keep a per-loop change list that the wait passes to kevent, removals
+still happen at once (`poll_oob`). And the loop's clock was `CLOCK_MONOTONIC`, microsecond-grained
+on macOS, where libuv's is `mach_continuous_time`, the clock of `uv_hrtime`: a timer could fire
+early as `uv_hrtime` measures it (`timer_early_check`).
+
+The runtime's own descriptor watchers do not take the deferred change list: with them on it, the
+full run of e55510b timed out in `cluster-transport-smoke.cjs` and `heap-image-smoke.cjs`, which
+passed in the run before that change; 271451f registers them at once again.
 
 Not covered by any run: Linux arm64 (type-checked only), the select() thread libuv starts for
 descriptors kqueue refuses (`/dev/tty`; not done), and a fork after FSEvents started.
