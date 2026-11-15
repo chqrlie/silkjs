@@ -11,5 +11,6 @@ wasm = { path = "../wamr", package = "silkjsruntime-wamr" }
 compress = { path = "../compress", package = "silkjsruntime-compress" }
 http2 = { path = "../http2", package = "silkjsruntime-nghttp2" }
 http = { path = "../llhttp", package = "silkjsruntime-llhttp" }
+database = { path = "../sqlite", package = "silkjsruntime-sqlite" }
 # The package manager: `silkjsruntime install` and the other commands.
 pm = { path = "../../pm" }

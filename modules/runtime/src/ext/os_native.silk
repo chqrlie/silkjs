@@ -305,7 +305,8 @@ unsafe effect fn dispatchBody<'m,S:EngineServices>(engine:&mut Engine<'m,S>,cont
     run unsafe push(&mut engine,context,output,&mut index,ValueBits.Undefined)
     // nghttp2's is the Http2 capability's (its `version`).
     run unsafe push(&mut engine,context,output,&mut index,ValueBits.Undefined)
-    run unsafe pushText(&mut engine,context,output,&mut index,unsafe abi.sqlite3_libversion())
+    // SQLite's is the Database capability's (its `version`).
+    run unsafe push(&mut engine,context,output,&mut index,ValueBits.Undefined)
   } else if fs.equal(op,b"uname") {
     let mut info=abi.Uname { sysname:[0;256],release:[0;256],version:[0;256],machine:[0;256] }
     run unsafe checked(&mut engine,context,unsafe abi.uv_os_uname(Pointer.fromMutRef<abi.Uname>(&mut info)),b"uv_os_uname")

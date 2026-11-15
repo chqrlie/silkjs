@@ -678,6 +678,27 @@ build `--without-inspector`. The inspector needs the network (`checkCombination`
 
 With this, every capability of the design is a service with an empty implementation.
 
+**Step 7, first parts: the library packages.** A library service now has a contract of
+operations, not only its presence: `open`, `call` for its native ids, and `poll`,
+`appendResources`, `openHandles` and `close` where it has work in flight, each forwarded by
+`Composition` (`compressionCall`, `http2Open` and so on), with the state inside the
+implementation's value instead of a pointer field of `Services`. Its version for
+`process.versions` comes from its own native. So the real implementation can live in a package
+that depends on the core, as `WamrWasm` does in ./wamr:
+
+| Package | Implementation | Brings |
+| --- | --- | --- |
+| ./compress (`silkjsruntime-compress`) | `NativeCompression` | zlib, zstd, brotli |
+| ./http2 (`silkjsruntime-nghttp2`) | `Nghttp2` | nghttp2 |
+| ./llhttp (`silkjsruntime-llhttp`) | `Llhttp` | llhttp and its bridge |
+| ./sqlite (`silkjsruntime-sqlite`) | `SqliteDatabase` | SQLite (lib-sqlite) |
+| ./wamr (`silkjsruntime-wamr`) | `WamrWasm` | WAMR, SIMDe |
+
+The core's manifest no longer lists those libraries. The embedding smoke test checks with `nm`
+that the program of the core alone defines no symbol of any of them, and that the program with
+every capability defines one of each. Their C entry points are kept by the implementation's
+`open` (`keepExports`), since a dependency's C exports are emitted only when taken as values.
+
 ## Risks and decisions taken
 
 Decisions made here without asking, each reversible before step 1 lands:

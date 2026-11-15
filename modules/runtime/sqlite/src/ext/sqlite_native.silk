@@ -4,7 +4,7 @@
 //! C callbacks re-enter the same engine on the same thread. Each dispatch saves
 //! the previous bridge, so nested queries do not invalidate an outer callback.
 import silk.mem.allocator { Allocator, OutOfMemoryError }
-import ext.diagnostics_fatal { RuntimeHeap }
+import silkjsruntime.ext.diagnostics_fatal { RuntimeHeap }
 import silkjs.js_owned_value { lendFor }
 import silkjs.js_realm { lendRealm }
 import silk.core.effect { Effect }
@@ -34,9 +34,9 @@ import silkjs.js_core_types { FrameSlots, NativeErrorKind, NativeFunctionId }
 import silkjs.js_exceptions { JsException }
 import silkjs.js_coercion_host { CoercionHooks }
 import silkjs.js_string_types { StringLengthError }
-import libs.core.owners { Scope }
-import libs.core.owners as owners
-import libs.core.common as common
+import silkjsruntime.libs.core.owners { Scope }
+import silkjsruntime.libs.core.owners as owners
+import silkjsruntime.libs.core.common as common
 import silkjs.js_std_support as text
 import silkjs.js_buffer_storage as buffers
 import silkjs.js_bigint_coercions as bigint
@@ -47,8 +47,8 @@ import silkjs.js_exceptions as exceptions
 import silkjs.js_promise as promise
 import silkjs.js_primitives as primitives
 import silkjs.js_weakref_intrinsics_storage as weak
-import libs.core.capabilities { Composition }
-import libs.core.host as host
+import silkjsruntime.libs.core.capabilities { Composition }
+import silkjsruntime.libs.core.host as host
 import sqlite.sys as c
 
 @foreign(noCapture: .("dest", "source"))
@@ -717,6 +717,11 @@ unsafe effect fn backupStart<'m, C: Composition>(engine: &mut Engine<'m, host.Se
 }
 unsafe effect fn dispatchBody<'m, C: Composition>(engine: &mut Engine<'m, host.Services<C>>, context: *mut HeapHeader, state: *mut State, argv: &FrameSlots, scope: &mut Scope) -> ValueBits ! OutOfMemoryError | JsException ? &mut Allocator {
   let operationName = run text.text(&mut engine, unsafe lendRealm(&context, context), unsafe lendFor(unsafe common.argument(argv, 0))) let input = unsafe common.argument(argv, 1) let mut i: u32 = 0
+  // SQLite's version, for process.versions.
+  if named(operationName.asSlice(), b"version") {
+    let version = run text.cstring(&mut engine, unsafe lendRealm(&context, context), unsafe sqlite3_libversion())
+    return version.intoBits()
+  }
   while i < 8 { scope.values[u32.toUsize(i)] = run unsafe owners.getIndex(&mut engine, context, input, i) i = i + 1 }
   return run unsafe operation(&mut engine, context, state, operationName.asSlice(), &mut scope)
 }
@@ -727,6 +732,8 @@ pub unsafe effect fn dispatch<'m, C: Composition>(engine: &mut Engine<'m, host.S
   return match move outcome { Result<ValueBits, OutOfMemoryError | JsException>.Success { value } => value Result<ValueBits, OutOfMemoryError | JsException>.Failure { error } => { fail move error } }
 }
 
+unsafe extern "C" fn sqlite3_libversion() -> *const u8
+fn named(a: &[u8], b: &[u8]) -> bool { if a.length != b.length { return false } let mut i: usize = 0 while i < a.length { if a[i] != b[i] { return false } i = i + 1 } return true }
 // Host freeExternal must route NativeFunctionId.Host { id: 7001 } here.
 pub unsafe fn freeBuffer(data: ?*mut u8) -> () { unsafe c.sqlite3_free(data) }
 unsafe effect fn ownedBuffer<'m, C: Composition>(engine: &mut Engine<'m, host.Services<C>>, context: *mut HeapHeader, data: ?*mut u8, length: u64) -> ValueBits ! JsException ? &mut Allocator {

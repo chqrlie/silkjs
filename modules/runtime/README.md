@@ -86,7 +86,7 @@ impl Host for App {
 }
 // One implementation per capability: here the process's environment, modules from the files of
 // the operating system, no WebAssembly and no functions of the host's.
-let capabilities = Capabilities { platform: OsPlatform {}, modules: NodeResolution {}, files: OsFiles {}, compression: NativeCompression.make(), http2: Nghttp2.make(), crypto: OpenSslCrypto {}, tls: OpenSslTls {}, database: SqliteDatabase {}, addons: DlopenAddons {}, processes: OsProcesses {}, network: OsNetwork {}, http: Llhttp.make(), systemInfo: OsSystemInfo {}, typeStripping: Amaro {}, workers: ThreadWorkers {}, inspector: NodeInspector {}, wasm: EmptyWasm {}, hostApi: EmptyHostApi {} }
+let capabilities = Capabilities { platform: OsPlatform {}, modules: NodeResolution {}, files: OsFiles {}, compression: NativeCompression.make(), http2: Nghttp2.make(), crypto: OpenSslCrypto {}, tls: OpenSslTls {}, database: SqliteDatabase.make(), addons: DlopenAddons {}, processes: OsProcesses {}, network: OsNetwork {}, http: Llhttp.make(), systemInfo: OsSystemInfo {}, typeStripping: Amaro {}, workers: ThreadWorkers {}, inspector: NodeInspector {}, wasm: EmptyWasm {}, hostApi: EmptyHostApi {} }
 let status = run embed.start(run Options.make(b"app"), &mut app, move capabilities)
 ```
 

@@ -1,0 +1,14 @@
+[package]
+name = "silkjsruntime-sqlite"
+description = "node:sqlite and localStorage for the SilkJS runtime, over SQLite: the real implementation of its Database capability"
+version = "0.1.0"
+silk-version = "0.1.0-dev.78+e02346fdb3aa"
+kind = "library"
+# `sqlite_database` is SqliteDatabase.
+exports = ["sqlite_database"]
+
+[dependencies]
+silkjs = { path = "../../engine" }
+silkjsruntime = { path = ".." }
+# SQLite 3 compiled from the amalgamation that silk-lang/lib-sqlite pins, with the features Node builds.
+sqlite = { git = "https://github.com/silk-lang/lib-sqlite", rev = "e462070986630cb4bba54e76d991f2bad53a4727", package = "db-sqlite" }

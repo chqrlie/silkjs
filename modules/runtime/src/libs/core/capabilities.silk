@@ -289,18 +289,41 @@ impl Tls for EmptyTls { static fn present() -> bool { return false } }
 
 /// The database: `node:sqlite` and `localStorage`, over SQLite. Native ids 7000 and 7001 are this
 /// capability's. It needs `Files` (`checkCombination`). A library service, as `Compression` is.
+///
+/// The real implementation is `SqliteDatabase` of ./sqlite (silkjsruntime-sqlite), which brings
+/// SQLite.
 pub interface Database {
   /// A constant of the implementation type: whether the database is there.
   static fn present() -> bool
+  /// The instance a new worker thread starts with, made from its parent's: nothing opened yet.
+  fn forWorker(self: &Self) -> Self
+  /// Opens this runtime's native state, before the bootstrap runs.
+  effect fn open(self: &mut Self, allocator: *mut RuntimeHeap) -> () ! OutOfMemoryError
+  /// Native function 7000 (`sqliteNative`).
+  unsafe effect fn call<'m, C: Composition>(self: &Self, engine: &mut Engine<'m, Services<C>>, context: *mut HeapHeader, argc: i32, argv: &FrameSlots) -> ValueBits
+    ! OutOfMemoryError | JsException ? &mut Allocator
+  /// Frees the memory of an ArrayBuffer the database made (external free 7001).
+  unsafe fn freeBuffer(self: &Self, data: ?*mut u8) -> ()
+  /// Databases still open, for the report of what keeps the loop alive.
+  unsafe fn openHandles(self: &Self) -> usize
+  /// Closes the databases and the state.
+  unsafe fn close<'m, C: Composition>(self: &mut Self, engine: &mut Engine<'m, Services<C>>, context: *mut HeapHeader) -> ()
 }
-/// SQLite.
-pub struct SqliteDatabase {}
-impl Copy for SqliteDatabase {}
-impl Database for SqliteDatabase { static fn present() -> bool { return true } }
 /// No database: `node:sqlite` is not there, and neither is `localStorage`.
 pub struct EmptyDatabase {}
 impl Copy for EmptyDatabase {}
-impl Database for EmptyDatabase { static fn present() -> bool { return false } }
+impl Database for EmptyDatabase {
+  static fn present() -> bool { return false }
+  fn forWorker(self: &Self) -> Self { return EmptyDatabase {} }
+  effect fn open(self: &mut Self, allocator: *mut RuntimeHeap) -> () ! OutOfMemoryError {}
+  unsafe effect fn call<'m, C: Composition>(self: &Self, engine: &mut Engine<'m, Services<C>>, context: *mut HeapHeader, argc: i32, argv: &FrameSlots) -> ValueBits
+    ! OutOfMemoryError | JsException ? &mut Allocator {
+    Intrinsic.trap("the database is not there")
+  }
+  unsafe fn freeBuffer(self: &Self, data: ?*mut u8) -> () {}
+  unsafe fn openHandles(self: &Self) -> usize { return 0 }
+  unsafe fn close<'m, C: Composition>(self: &mut Self, engine: &mut Engine<'m, Services<C>>, context: *mut HeapHeader) -> () {}
+}
 
 /// Native addons: Node-API and `process.dlopen`. Native ids 14000 and 14001 are this capability's.
 /// The Node-API C functions stay exported either way until the package split (step 7).
@@ -479,7 +502,7 @@ pub interface ModuleResolver {
 /// a capability the program does not want is given its empty implementation.
 ///
 /// ```silk
-/// let capabilities = Capabilities { platform: OsPlatform {}, modules: NodeResolution {}, files: OsFiles {}, compression: NativeCompression.make(), http2: Nghttp2.make(), crypto: OpenSslCrypto {}, tls: OpenSslTls {}, database: SqliteDatabase {}, addons: DlopenAddons {}, processes: OsProcesses {}, network: OsNetwork {}, http: Llhttp.make(), systemInfo: OsSystemInfo {}, typeStripping: Amaro {}, workers: ThreadWorkers {}, inspector: NodeInspector {}, wasm: EmptyWasm {}, hostApi: EmptyHostApi {} }
+/// let capabilities = Capabilities { platform: OsPlatform {}, modules: NodeResolution {}, files: OsFiles {}, compression: NativeCompression.make(), http2: Nghttp2.make(), crypto: OpenSslCrypto {}, tls: OpenSslTls {}, database: SqliteDatabase.make(), addons: DlopenAddons {}, processes: OsProcesses {}, network: OsNetwork {}, http: Llhttp.make(), systemInfo: OsSystemInfo {}, typeStripping: Amaro {}, workers: ThreadWorkers {}, inspector: NodeInspector {}, wasm: EmptyWasm {}, hostApi: EmptyHostApi {} }
 /// ```
 pub struct Capabilities<P, M, F, Z, H, K, T, D, N, R, E, L, S, Y, X, I, W, A> {
   pub platform: P,
@@ -569,6 +592,12 @@ pub interface Composition {
   unsafe fn wasmFinalize<'m>(engine: &mut Engine<'m, Services<Self>>, rt: *mut HeapHeader, object: *mut HeapHeader) -> ()
   unsafe fn wasmOpenHandles<'m>(engine: &Engine<'m, Services<Self>>) -> usize
   effect fn compressionOpen<'m>(engine: &mut Engine<'m, Services<Self>>) -> () ! OutOfMemoryError
+  effect fn databaseOpen<'m>(engine: &mut Engine<'m, Services<Self>>, allocator: *mut RuntimeHeap) -> () ! OutOfMemoryError
+  unsafe effect fn databaseCall<'m>(engine: &mut Engine<'m, Services<Self>>, context: *mut HeapHeader, argc: i32, argv: &FrameSlots) -> ValueBits
+    ! OutOfMemoryError | JsException ? &mut Allocator
+  unsafe fn databaseFreeBuffer<'m>(engine: &Engine<'m, Services<Self>>, data: ?*mut u8) -> ()
+  unsafe fn databaseOpenHandles<'m>(engine: &Engine<'m, Services<Self>>) -> usize
+  unsafe fn databaseClose<'m>(engine: &mut Engine<'m, Services<Self>>, context: *mut HeapHeader) -> ()
   effect fn httpOpen<'m>(engine: &mut Engine<'m, Services<Self>>, allocator: *mut RuntimeHeap) -> () ! OutOfMemoryError
   unsafe effect fn httpCall<'m>(engine: &mut Engine<'m, Services<Self>>, context: *mut HeapHeader, argc: i32, argv: &FrameSlots) -> ValueBits
     ! OutOfMemoryError | JsException ? &mut Allocator
@@ -630,7 +659,7 @@ impl<P: Platform + Copy, M: ModuleResolver + Copy, F: Files + Copy, Z: Compressi
   static fn filesDirect() -> bool { return directFiles<F>() }
   unsafe fn filesExecute(self: &Self, call: &Call, out: &mut Outcome) -> () { unsafe self.files.execute(&call, &mut out) }
   fn forWorker(self: &Self) -> Self {
-    return Capabilities<P, M, F, Z, H, K, T, D, N, R, E, L, S, Y, X, I, W, A> { platform: self.platform.forWorker(), modules: self.modules.forWorker(), files: self.files.forWorker(), compression: self.compression.forWorker(), http2: self.http2.forWorker(), crypto: self.crypto, tls: self.tls, database: self.database, addons: self.addons, processes: self.processes, network: self.network, http: self.http.forWorker(), systemInfo: self.systemInfo, typeStripping: self.typeStripping, workers: self.workers, inspector: self.inspector, wasm: self.wasm.forWorker(), hostApi: self.hostApi.forWorker() }
+    return Capabilities<P, M, F, Z, H, K, T, D, N, R, E, L, S, Y, X, I, W, A> { platform: self.platform.forWorker(), modules: self.modules.forWorker(), files: self.files.forWorker(), compression: self.compression.forWorker(), http2: self.http2.forWorker(), crypto: self.crypto, tls: self.tls, database: self.database.forWorker(), addons: self.addons, processes: self.processes, network: self.network, http: self.http.forWorker(), systemInfo: self.systemInfo, typeStripping: self.typeStripping, workers: self.workers, inspector: self.inspector, wasm: self.wasm.forWorker(), hostApi: self.hostApi.forWorker() }
   }
   effect fn platformGetenv<'m>(engine: &Engine<'m, Services<Self>>, name: &[u8], into: &mut List<u8>) -> bool ! OutOfMemoryError ? &mut Allocator {
     let platform = engine.services.capabilities.platform return run platform.getenv(name, &mut into.*)
@@ -714,6 +743,18 @@ impl<P: Platform + Copy, M: ModuleResolver + Copy, F: Files + Copy, Z: Compressi
   }
   unsafe fn httpClose<'m>(engine: &mut Engine<'m, Services<Self>>, context: *mut HeapHeader) -> () {
     let mut http = engine.services.capabilities.http unsafe http.close(&mut engine, context) engine.services.capabilities.http = http
+  }
+  effect fn databaseOpen<'m>(engine: &mut Engine<'m, Services<Self>>, allocator: *mut RuntimeHeap) -> () ! OutOfMemoryError {
+    run engine.services.capabilities.database.open(allocator)
+  }
+  unsafe effect fn databaseCall<'m>(engine: &mut Engine<'m, Services<Self>>, context: *mut HeapHeader, argc: i32, argv: &FrameSlots) -> ValueBits
+    ! OutOfMemoryError | JsException ? &mut Allocator {
+    let database = engine.services.capabilities.database return run unsafe database.call(&mut engine, context, argc, argv)
+  }
+  unsafe fn databaseFreeBuffer<'m>(engine: &Engine<'m, Services<Self>>, data: ?*mut u8) -> () { let database = engine.services.capabilities.database unsafe database.freeBuffer(data) }
+  unsafe fn databaseOpenHandles<'m>(engine: &Engine<'m, Services<Self>>) -> usize { let database = engine.services.capabilities.database return unsafe database.openHandles() }
+  unsafe fn databaseClose<'m>(engine: &mut Engine<'m, Services<Self>>, context: *mut HeapHeader) -> () {
+    let mut database = engine.services.capabilities.database unsafe database.close(&mut engine, context) engine.services.capabilities.database = database
   }
   effect fn compressionOpen<'m>(engine: &mut Engine<'m, Services<Self>>) -> () ! OutOfMemoryError {
     run engine.services.capabilities.compression.open()

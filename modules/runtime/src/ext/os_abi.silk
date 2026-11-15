@@ -39,7 +39,6 @@ pub unsafe extern "C" fn uv_available_parallelism()->u32
 // Version queries of the libraries linked into the binary (process.versions).
 pub unsafe extern "C" fn uv_version_string()->*const u8
 pub unsafe extern "C" fn OpenSSL_version(kind:i32)->*const u8
-pub unsafe extern "C" fn sqlite3_libversion()->*const u8
 pub unsafe extern "C" fn uv_get_free_memory()->u64
 pub unsafe extern "C" fn uv_get_total_memory()->u64
 pub unsafe extern "C" fn uv_get_constrained_memory()->u64

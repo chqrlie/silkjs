@@ -74,7 +74,6 @@ import ext.process_native
 import ext.vm_global
 import ext.worker_native
 import ext.immediates
-import ext.sqlite_native
 import ext.module_native
 import ext.platform_native
 import ext.napi_native
@@ -130,7 +129,6 @@ pub struct Services<C> {
   pub crypto: ?*mut crypto_native.State,
   pub network: ?*mut net_native.State,
   pub tls: ?*mut tls_native.State,
-  pub sqlite: ?*mut sqlite_native.State,
   pub napi: ?*mut napi_native.State,
   pub tracing: ?*mut trace_native.State,
   pub inspector: ?*mut inspector_native.State,
@@ -165,7 +163,7 @@ impl<C> Services<C> {
     meta: ValueBits.Undefined, asyncEvent: ValueBits.Undefined, asyncDestroyEvent: ValueBits.Undefined,
     destroyQueue: Queue.make(), io: Pointer.null<fs_async.State>(), crypto: Pointer.null<crypto_native.State>(),
     network: Pointer.null<net_native.State>(), tls: Pointer.null<tls_native.State>(),
-    sqlite: Pointer.null<sqlite_native.State>(),
+   
     napi: Pointer.null<napi_native.State>(),
    
     tracing: Pointer.null<trace_native.State>(), sea: Pointer.null<sea_native.State>(),
@@ -259,10 +257,6 @@ unsafe fn processState<'m, C: Composition>(engine: &Engine<'m, Services<C>>) -> 
 unsafe fn workerState<'m, C: Composition>(engine: &Engine<'m, Services<C>>) -> *mut worker_native.State {
   if Pointer.isNull<worker_native.State>(engine.services.workers) { Intrinsic.trap("worker provider is not initialized") }
   return unsafe Intrinsic.pointerRequalify<?*mut worker_native.State, *mut worker_native.State>(engine.services.workers)
-}
-unsafe fn sqliteState<'m, C: Composition>(engine: &Engine<'m, Services<C>>) -> *mut sqlite_native.State {
-  if Pointer.isNull<sqlite_native.State>(engine.services.sqlite) { Intrinsic.trap("SQLite provider is not initialized") }
-  return unsafe Intrinsic.pointerRequalify<?*mut sqlite_native.State, *mut sqlite_native.State>(engine.services.sqlite)
 }
 unsafe fn napiState<'m, C: Composition>(engine: &Engine<'m, Services<C>>) -> *mut napi_native.State {
   if Pointer.isNull<napi_native.State>(engine.services.napi) { Intrinsic.trap("Node-API provider is not initialized") }
@@ -718,7 +712,7 @@ impl<C: Composition> EngineServices for Services<C> {
   unsafe fn freeExternal<'m>(engine: &mut Engine<'m, Self>, rt: *mut HeapHeader, callback: NativeFunctionId, opaque: ?*mut u8, data: ?*mut u8) -> () {
     match callback {
       NativeFunctionId.Host { id } => {
-        static if capabilities.hasDatabase<C>() { if id == 7001 { unsafe sqlite_native.freeBuffer(data) return () } }
+        static if capabilities.hasDatabase<C>() { if id == 7001 { unsafe Composition.databaseFreeBuffer(&engine.*, data) return () } }
         if id == 13001 { unsafe sea_native.freeBuffer(opaque, data) return () }
         static if capabilities.hasAddons<C>() { if id == 14001 { let napi = unsafe napiState(&engine.*) unsafe napi_native.freeBuffer(&mut engine, napi, opaque) return () } }
       }
@@ -819,8 +813,7 @@ impl<C: Composition> EngineServices for Services<C> {
     if id == module_native.ID { return run unsafe module_native.dispatch(&mut engine, context, argv) }
     static if capabilities.hasDatabase<C>() {
     if id == 7000 {
-      let sqlite = unsafe sqliteState(&engine.*)
-      return run unsafe sqlite_native.dispatch(&mut engine, context, sqlite, argc, argv)
+      return run unsafe Composition.databaseCall(&mut engine, context, argc, argv)
     }
     }
     static if capabilities.hasWasm<C>() {
