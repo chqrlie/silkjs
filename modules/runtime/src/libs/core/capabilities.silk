@@ -14,6 +14,7 @@
 import silk.mem.allocator { Allocator, OutOfMemoryError }
 import silk.core.ownership { Copy }
 import silk.collections.list { List }
+import ext.fs_ops { Call, Outcome }
 import silkjs.js_engine { Engine }
 import silkjs.js_heap { HeapHeader }
 import silkjs.js_value { ValueBits }
@@ -149,6 +150,25 @@ pub interface Platform {
   fn exit(self: &Self, status: i32) -> never
 }
 
+/// The file system `fs` stands on: one operation of `ext/fs_ops.silk` at a time, on the loop
+/// thread for a synchronous call and on a blocking thread for an asynchronous one. Native ids
+/// 2000 to 2007 are this capability's.
+///
+/// `OsFiles` (`libs/core/files.silk`) is the operating system's; `MemoryFiles` keeps files in
+/// memory, shared by every thread of the runtime. An implementation is `Copy` and keeps its state
+/// behind pointers.
+pub interface Files {
+  /// A constant of the implementation type: whether `fs` is there.
+  static fn present() -> bool
+  /// A constant of the implementation type: whether descriptors are the operating system's, so
+  /// the runtime may read one without waiting and close one itself.
+  static fn native() -> bool
+  /// The instance a new worker thread starts with, made from its parent's.
+  fn forWorker(self: &Self) -> Self
+  /// Runs `call` and writes its result to `out`. It may block, and it runs on any thread.
+  unsafe fn execute(self: &Self, call: &Call, out: &mut Outcome) -> ()
+}
+
 /// The file type bits ([`ModuleResolver.kind`]) of a regular file.
 pub const MODULE_FILE: i32 = 0o100000
 /// The file type bits of a directory.
@@ -179,11 +199,12 @@ pub interface ModuleResolver {
 /// a capability the program does not want is given its empty implementation.
 ///
 /// ```silk
-/// let capabilities = Capabilities { platform: OsPlatform {}, modules: NodeResolution {}, wasm: EmptyWasm {}, hostApi: EmptyHostApi {} }
+/// let capabilities = Capabilities { platform: OsPlatform {}, modules: NodeResolution {}, files: OsFiles {}, wasm: EmptyWasm {}, hostApi: EmptyHostApi {} }
 /// ```
-pub struct Capabilities<P, M, W, A> {
+pub struct Capabilities<P, M, F, W, A> {
   pub platform: P,
   pub modules: M,
+  pub files: F,
   pub wasm: W,
   pub hostApi: A,
 }
@@ -194,6 +215,10 @@ pub struct Capabilities<P, M, W, A> {
 pub interface Composition {
   /// `Wasm.present` of the program's Wasm implementation.
   static fn wasmPresent() -> bool
+  /// `Files.native` of the program's file system.
+  static fn filesNative() -> bool
+  /// Runs one file system operation, on any thread (`Files.execute`).
+  unsafe fn filesExecute(self: &Self, call: &Call, out: &mut Outcome) -> ()
   /// The capabilities a new worker thread starts with, made from its parent's.
   fn forWorker(self: &Self) -> Self
   effect fn platformGetenv<'m>(engine: &Engine<'m, Services<Self>>, name: &[u8], into: &mut List<u8>) -> bool ! OutOfMemoryError ? &mut Allocator
@@ -227,11 +252,14 @@ pub interface Composition {
 }
 
 static fn presentOf<W: Wasm>() -> bool { return Wasm.present() }
+static fn nativeFiles<F: Files>() -> bool { return Files.native() }
 
-impl<P: Platform + Copy, M: ModuleResolver + Copy, W: Wasm + Copy, A: HostApi + Copy> Composition for Capabilities<P, M, W, A> {
+impl<P: Platform + Copy, M: ModuleResolver + Copy, F: Files + Copy, W: Wasm + Copy, A: HostApi + Copy> Composition for Capabilities<P, M, F, W, A> {
   static fn wasmPresent() -> bool { return presentOf<W>() }
+  static fn filesNative() -> bool { return nativeFiles<F>() }
+  unsafe fn filesExecute(self: &Self, call: &Call, out: &mut Outcome) -> () { unsafe self.files.execute(&call, &mut out) }
   fn forWorker(self: &Self) -> Self {
-    return Capabilities<P, M, W, A> { platform: self.platform.forWorker(), modules: self.modules.forWorker(), wasm: self.wasm.forWorker(), hostApi: self.hostApi.forWorker() }
+    return Capabilities<P, M, F, W, A> { platform: self.platform.forWorker(), modules: self.modules.forWorker(), files: self.files.forWorker(), wasm: self.wasm.forWorker(), hostApi: self.hostApi.forWorker() }
   }
   effect fn platformGetenv<'m>(engine: &Engine<'m, Services<Self>>, name: &[u8], into: &mut List<u8>) -> bool ! OutOfMemoryError ? &mut Allocator {
     let platform = engine.services.capabilities.platform return run platform.getenv(name, &mut into.*)

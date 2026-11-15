@@ -570,6 +570,27 @@ streams' descriptors, `kill` and `getpid`, and `gc`: they move with `Files` (ste
 and `SystemInfo` (step 6). Time and entropy are the engine's (`EngineServices`) and stay there
 until an embedder needs to fix them; `FixedPlatform` would then carry them.
 
+**Step 4, first part: `Files`.** Every `fs` operation already went through one seam,
+`ext/fs_ops.silk`'s `Call` and `Outcome`, run on the loop thread for a synchronous call and on a
+blocking thread for an asynchronous one. That seam is now the `Files` capability (ids 2000 to
+2007): `fs_native` and `fs_async` run each call through the program's implementation, and a
+blocking thread gets it as `runRequest` instantiated for the runtime's capabilities, with the
+address of the runtime's own. `OsFiles` is the operating system's file system, as before.
+`MemoryFiles` keeps files in memory behind a lock, shared by every thread of the runtime; the
+embedder can seed it (`addFile`). Its descriptors start at 1000, and 0 to 2 stay the process's
+standard streams. It has no links and keeps no owners, and a relative path is taken from `/`. The
+read that skips the blocking threads (`preadv2` with `RWF_NOWAIT`) runs only for `OsFiles`, and an
+abandoned open is closed through the capability. Some of `fs`, and the bootstrap's own reads, call
+the engine's `os` module on files directly; with a file system other than the operating system's
+(`native.filesNative` false), the bootstrap points those calls at the capability as well. The embedding smoke test runs on `MemoryFiles`:
+a seeded file, a write and an append, `readdir`, `stat`, `existsSync` of a host path (false), and
+`fs.promises.readFile` on the blocking threads.
+
+Still to come in step 4: `Files.empty` (the built-ins of `fs` absent, as step 2 does for a
+missing service), a rooted `OsFiles`, and routing the readers that bypass `fs` today through the
+capability: WASI preopens, SQLite's VFS, the compile cache, reports, snapshots, the DNS resolver's
+configuration, TLS roots, and the bootstrap's own `host.readFile` and `host.stat`.
+
 ## Risks and decisions taken
 
 Decisions made here without asking, each reversible before step 1 lands:

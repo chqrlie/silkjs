@@ -169,7 +169,7 @@ service = "SystemInfo"
 prefixes = ["ext/os_"]
 [[silk]]
 service = "Files"
-prefixes = ["ext/fs_native", "ext/fs_ops", "ext/fs_descriptors", "ext/uv_fs"]
+prefixes = ["ext/fs_native", "ext/fs_ops", "ext/fs_descriptors", "ext/uv_fs", "libs/core/files"]
 [[silk]]
 service = "Network"
 prefixes = ["ext/net_native", "ext/dns_", "ext/uv_net"]

@@ -165,6 +165,15 @@ effect fn scan(path: &[u8], out: &mut Outcome) -> () ! NativeFileError | OutOfMe
   run out.names.sort()
 }
 
+/// Adds `name` to the entries of a scan, for a `Files` implementation other than the system's.
+pub effect fn appendName(out: &mut Outcome, name: &[u8]) -> () ! OutOfMemoryError ? &mut Allocator {
+  let mut copy = List<u8>.make()
+  run copy.appendBytes(name)
+  run out.names.append(Name { bytes: move copy })
+}
+/// Puts the entries of a scan in libuv's order (strcmp), which Node's readdir order follows.
+pub effect fn sortNames(out: &mut Outcome) -> () ! OutOfMemoryError ? &mut Allocator { run out.names.sort() }
+
 effect fn copyText(out: &mut Outcome, bytes: &[u8]) -> () ! OutOfMemoryError ? &mut Allocator {
   run out.text.reserveExact(bytes.length)
   let mut index: usize = 0 while index < bytes.length { run out.text.append(bytes[index]) index = index + 1 }

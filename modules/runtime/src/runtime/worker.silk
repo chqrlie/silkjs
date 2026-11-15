@@ -560,6 +560,8 @@ unsafe effect fn configure<'m, C: Composition>(engine: &mut Engine<'m, Services<
   if snapshot == SNAPSHOT_BUILD { run unsafe common.define(&mut engine, context, native, b"snapshotBuild", ValueBits.Bool { value: true }, 7) }
   // An embedded runtime does not own the process (bootstrap.js rawStd.exit).
   if hosted { run unsafe common.define(&mut engine, context, native, b"embedded", ValueBits.Bool { value: true }, 7) }
+  // Whether fs is the operating system's, whose descriptors the engine's os module reads directly.
+  static if Composition.filesNative() { run unsafe common.define(&mut engine, context, native, b"filesNative", ValueBits.Bool { value: true }, 7) }
   at = 0
   while at < count {
     let value = run unsafe host.string(&mut engine, context, arguments.asSlice()[at].asSlice())

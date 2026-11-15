@@ -45,6 +45,8 @@ import silk.io.reactor { Interest, ReadyEvent, Reactor, ReactorError, Waker }
 import ext.blocking_pool as pool
 import ext.blocking_pool { Pool }
 import ext.fs_ops as ops
+import libs.core.host as runtimeHost
+import libs.core.capabilities { Composition }
 import silk.concurrency.thread_native { SpawnError }
 import silk.platform.native.clock { NativeClock }
 import silk.system.system_clock { SystemClock }
@@ -101,7 +103,10 @@ struct Request {
   offset: u64, bigint: bool,
   // read/write of an ordinary buffer use its bytes in place: the lease keeps them
   // alive through detach or resize until the request is released.
-  lease: Option<buffers.BufferReadLease>
+  lease: Option<buffers.BufferReadLease>,
+  // The runtime's capabilities (a `C`, alive until the executor closes, which waits for every
+  // running job), and how to close a descriptor of its file system when an open is abandoned.
+  capabilities: *const u8, closer: extern "C" fn(*const u8, i32) -> (),
 }
 unsafe fn nonnull<T>(pointer: ?*mut T) -> *mut T { return unsafe Intrinsic.pointerRequalify<?*mut T, *mut T>(pointer) }
 effect fn allocate(size: usize) -> *mut u8 ! OutOfMemoryError {
@@ -334,11 +339,22 @@ pub unsafe effect fn resourceSnapshot<'m, S: EngineServices>(engine: &mut Engine
   unsafe owners.cleanup(&mut engine, context, move scope)
   return match move outcome { Result<ValueBits, OutOfMemoryError | JsException>.Success { value } => value Result<ValueBits, OutOfMemoryError | JsException>.Failure { error } => { fail move error } }
 }
-// Runs on a blocking worker.
-export "C" fn runRequest(data: ?*mut u8) -> () {
+unsafe fn capabilitiesOf<'a, C: Composition>(anchor: &'a (), capabilities: *const u8) -> &'a C {
+  return unsafe Pointer.borrow<(), C>(anchor, unsafe Intrinsic.pointerReinterpret<*mut u8, *mut C>(unsafe Intrinsic.pointerRequalify<*const u8, *mut u8>(capabilities)))
+}
+/// Runs a request on a blocking worker, with the runtime's file system.
+pub export "C" fn runRequest<C: Composition>(data: ?*mut u8) -> () {
   let request = unsafe Intrinsic.pointerReinterpret<*mut u8, *mut Request>(unsafe nonnull(data))
   let mut anchor = () let entry = unsafe Pointer.borrowMut<(), Request>(&mut anchor, request)
-  unsafe ops.execute(&entry.call, &mut entry.result)
+  let held = () let capabilities = unsafe capabilitiesOf<C>(&held, entry.capabilities)
+  unsafe capabilities.filesExecute(&entry.call, &mut entry.result)
+}
+/// Closes `fd` of the runtime's file system: an open that finished after nobody waited for it.
+pub export "C" fn closeOpened<C: Composition>(capabilities: *const u8, fd: i32) -> () {
+  let held = () let owner = unsafe capabilitiesOf<C>(&held, capabilities)
+  let mut call = ops.call(ops.CLOSE) call.fd = fd
+  let mut out = ops.outcome()
+  unsafe owner.filesExecute(&call, &mut out)
 }
 unsafe fn owner(job: *mut pool.Job) -> *mut Request {
   let anchor = () let entry = unsafe Pointer.borrow<(), pool.Job>(&anchor, job)
@@ -418,7 +434,7 @@ unsafe fn release<'m, S: EngineServices>(engine: &mut Engine<'m, S>, context: *m
   // A successful open may complete after termination, without reaching JS.
   // Successful closes must also leave the registry even when delivery is skipped.
   if !request.descriptorSettled && request.done && request.status >= 0 {
-    if request.call.op == ops.OPEN { unsafe descriptors.close(i64.toI32(request.result.count)) }
+    if request.call.op == ops.OPEN { let close = request.closer unsafe close(request.capabilities, i64.toI32(request.result.count)) }
     else if request.call.op == ops.CLOSE { let _held = unsafe descriptors.release(request.tracking, request.call.fd) }
   }
   if request.lease.isNone() { unsafe free(request.call.buffer) }
@@ -483,12 +499,12 @@ unsafe effect fn prepare<'m, S: EngineServices>(engine: &mut Engine<'m, S>, cont
     }
   }
 }
-pub unsafe effect fn submit<'m, S: EngineServices>(engine: &mut Engine<'m, S>, context: *mut HeapHeader, pointer: *mut State, operation: ValueBits, args: ValueBits, callback: ValueBits, requestKind: i32) -> ValueBits ! OutOfMemoryError | JsException ? &mut Allocator {
+pub unsafe effect fn submit<'m, C: Composition>(engine: &mut Engine<'m, runtimeHost.Services<C>>, context: *mut HeapHeader, pointer: *mut State, operation: ValueBits, args: ValueBits, callback: ValueBits, requestKind: i32) -> ValueBits ! OutOfMemoryError | JsException ? &mut Allocator {
   let anchor = () let state = unsafe Pointer.borrow<(), State>(&anchor, pointer) let closing = state.closing let turn = state.turn drop state
   if closing { return run engine.throwError(unsafe lendRealm(&context, context), NativeErrorKind.Internal, b"filesystem executor is closed") }
   let raw = run allocate(Layout.of<Request>().bytes)
   let request = unsafe Intrinsic.pointerReinterpret<*mut u8, *mut Request>(raw)
-  unsafe Pointer.put<Request>(request, Request { next: Pointer.null<Request>(), job: pool.job(runRequest, finishRequest, raw, pool.KIND_NONE), done: false, turn: turn, status: 0, requestKind: requestKind, tracking: unsafe descriptorState(pointer), descriptorSettled: false, callback: unsafe callback.retained(), args: [ValueBits.Undefined; 5], operation: List<u8>.make(), call: ops.call(0), result: ops.outcome(), offset: 0, bigint: false, lease: Option<buffers.BufferReadLease>.none() })
+  unsafe Pointer.put<Request>(request, Request { next: Pointer.null<Request>(), job: pool.job((runRequest<C>), finishRequest, raw, pool.KIND_NONE), done: false, turn: turn, status: 0, requestKind: requestKind, tracking: unsafe descriptorState(pointer), descriptorSettled: false, callback: unsafe callback.retained(), args: [ValueBits.Undefined; 5], operation: List<u8>.make(), call: ops.call(0), result: ops.outcome(), offset: 0, bigint: false, lease: Option<buffers.BufferReadLease>.none(), capabilities: unsafe Intrinsic.pointerReinterpret<*const C, *const u8>(Pointer.fromRef<C>(&engine.services.capabilities)), closer: (closeOpened<C>) })
   let mut mutable = () let entry = unsafe Pointer.borrowMut<(), Request>(&mut mutable, request)
   let prepared = run Effect.result(unsafe prepare(&mut engine, context, &mut entry, operation, args)) drop entry
   match move prepared { Result<(), OutOfMemoryError | JsException>.Success { .. } => () Result<(), OutOfMemoryError | JsException>.Failure { error } => { unsafe release(&mut engine, context, request) fail move error } }
@@ -502,7 +518,8 @@ pub unsafe effect fn submit<'m, S: EngineServices>(engine: &mut Engine<'m, S>, c
   }
   // A read the kernel answers at once (cached file data) skips the blocking threads: their two
   // thread wakeups cost more than the copy. It is delivered in the next turn, as a finished job is.
-  if unsafe ops.readWithoutWaiting(&entry2.call, &mut entry2.result) { entry2.done = true return ValueBits.Undefined }
+  // Only the operating system's descriptors can be read that way.
+  static if Composition.filesNative() { if unsafe ops.readWithoutWaiting(&entry2.call, &mut entry2.result) { entry2.done = true return ValueBits.Undefined } }
   let job = Pointer.fromMutRef<pool.Job>(&mut entry2.job) drop entry2 drop state2
   let status = run unsafe queueWork(pointer, job)
   if status < 0 { let entry3 = unsafe Pointer.borrowMut<(), Request>(&mut entryAnchor, request) entry3.status = status entry3.done = true }
@@ -958,7 +975,6 @@ pub fn keepExports() -> () {
   let _silk_runtime_wake: extern "C" fn(*mut u8) -> () = silk_runtime_wake
   let _inspectResource: extern "C" fn(*mut u8, *mut u8) -> () = inspectResource
   let _describeHandle: extern "C" fn(*mut u8, *mut u8) -> () = describeHandle
-  let _runRequest: extern "C" fn(?*mut u8) -> () = runRequest
   let _finishRequest: extern "C" fn(?*mut u8) -> () = finishRequest
   let _changed: extern "C" fn(*mut u8, ?*const u8, i32, i32) -> () = changed
   let _statChanged: extern "C" fn(*mut u8, i32, *const uv.UvStat, *const uv.UvStat) -> () = statChanged

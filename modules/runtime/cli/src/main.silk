@@ -10,6 +10,7 @@ import napi_exports
 import silkjsruntime.libs.core.capabilities { Capabilities, EmptyHostApi }
 import silkjsruntime.libs.core.module_sources { NodeResolution }
 import silkjsruntime.libs.core.platforms { OsPlatform }
+import silkjsruntime.libs.core.files { OsFiles }
 import wasm.wamr { WamrWasm }
 import pm.cli
 import silk.collections.bytes { Bytes }
@@ -63,7 +64,7 @@ effect fn program() -> i32 ! HostInputError | OutOfMemoryError | Synchronization
   napi_exports.keep()
   let arguments = run HostInput.arguments()
   // The executable has every capability: the real implementation of each, and no host functions.
-  let capabilities = Capabilities { platform: OsPlatform {}, modules: NodeResolution {}, wasm: WamrWasm.make(), hostApi: EmptyHostApi {} }
+  let capabilities = Capabilities { platform: OsPlatform {}, modules: NodeResolution {}, files: OsFiles {}, wasm: WamrWasm.make(), hostApi: EmptyHostApi {} }
   return run worker.executeProgram(&arguments, move capabilities)
 }
 pub effect fn main() -> i32 ? &mut HostInput {

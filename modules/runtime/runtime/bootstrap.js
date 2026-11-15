@@ -98,6 +98,39 @@ for (const name of ['dispose', 'asyncDispose']) {
   if (Symbol[name] === undefined) Object.defineProperty(Symbol, name, { value: Symbol.for('nodejs.' + name) });
 }
 const host = { ...native, rawOS, rawStd };
+// A file system other than the operating system's (MemoryFiles): the engine's os calls on files,
+// which fs and this bootstrap make directly, go through it too as fsSync calls, keeping the os
+// module's conventions (a negative errno, or [value, errno]). Descriptors 0 to 2 stay the process's.
+if (!native.filesNative) {
+  const fsSync = native.fsSync;
+  const status = (name, args) => {
+    try { const result = fsSync(name, args); return result === undefined ? 0 : result; }
+    catch (error) { if (typeof error?.errno === 'number') return error.errno; throw error; }
+  };
+  const pair = (name, args) => {
+    try { return [fsSync(name, args), 0]; }
+    catch (error) { if (typeof error?.errno === 'number') return [undefined, error.errno]; throw error; }
+  };
+  const statOf = name => path => {
+    const [s, errno] = pair(name, [path]);
+    if (errno) return [undefined, errno];
+    return [{ dev: s.dev, ino: s.ino, mode: s.mode, nlink: s.nlink, uid: s.uid, gid: s.gid, rdev: s.rdev, size: s.size, blocks: s.blocks, atime: s.atimeMs, mtime: s.mtimeMs, ctime: s.ctimeMs }, 0];
+  };
+  const { read, write, close } = rawOS;
+  Object.assign(rawOS, {
+    open: (path, flags, mode = 0o666) => status('open', [path, flags, mode]),
+    close: fd => fd <= 2 ? close(fd) : status('close', [fd]),
+    read: (fd, buffer, offset, length) => fd <= 2 ? read(fd, buffer, offset, length) : status('pread', [fd, buffer, offset, length, -1]),
+    write: (fd, buffer, offset, length) => fd <= 2 ? write(fd, buffer, offset, length) : status('pwrite', [fd, buffer, offset, length, -1]),
+    stat: statOf('stat'), lstat: statOf('lstat'),
+    mkdir: (path, mode = 0o777) => status('mkdir', [path, mode]),
+    rename: (from, to) => status('rename', [from, to]),
+    readlink: path => pair('readlink', [path]),
+    realpath: path => pair('realpath', [path]),
+    symlink: (target, path) => status('symlink', [target, path]),
+    utimes: (path, atime, mtime) => status('utimes', [path, atime / 1000, mtime / 1000]),
+  });
+}
 // Node's internals keep SharedArrayBuffer when the global is left out
 // (--enable-sharedarraybuffer-per-context): a Worker still shares its cwd counter.
 host.SharedArrayBuffer = SharedArrayBuffer;
