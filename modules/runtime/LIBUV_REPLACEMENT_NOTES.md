@@ -93,7 +93,7 @@ and risks, most serious first:
 
 None blocked the work, and no C was added. Reported for the compiler's owner:
 
-1. **Internal compiler error on a layout query in `static if`.** Blocks compile-time assertions
+1. **Internal compiler error on a layout query in `static if`** (silk-lang/silk#3114). Blocks compile-time assertions
    that a Silk `extern "C" struct` matches a C header, so the uvwasi shim checks at run time.
    ```silk
    import silk.mem.layout { Layout }
@@ -103,12 +103,12 @@ None blocked the work, and no C was added. Reported for the compiler's owner:
    ```
    `internal compiler error[Undetermined]` at the condition. Wanted: `Layout.of<T>()` and an
    `offsetOf<T>("field")` usable in `static if`.
-2. **`silk check` does not report SEM0192** (two declarations of one C symbol with different
+2. **`silk check` does not report SEM0192** (silk-lang/silk#3115) (two declarations of one C symbol with different
    types); only `silk build` does, at codegen. With a 13-minute runtime build that is a late
    failure. Repro: two modules declaring `getpid() -> i32` and `-> i64`.
-3. **The check server replays stale diagnostics.** After editing files, `silk check` answered in
-   0.04 s with MOD0007 warnings at positions of text that no longer existed; `silk check
-   --no-server` gave the right answer. Not reduced to a minimal repro. Each check server also
+3. **The check server replays stale diagnostics** (silk-lang/silk#3116, with a minimal repro).
+   After editing files, `silk check` answered in 0.04 s with MOD0007 warnings for imports that
+   were gone; `silk check --no-server` gave the right answer. Each check server also
    holds about 3.7 GB for this package; three of them plus a build ran the 16 GB container out of
    memory once.
 4. **No way to reinterpret `*mut u8` as a pointer to a wider type** (`SEM0215`) even when the
@@ -200,13 +200,19 @@ Reading it:
 
 - Throughput, server CPU and memory are within the run-to-run range on every runtime benchmark,
   with these to watch:
-- **SQLite `db.exec` 8000 statements is 7.7% slower, and was 7.6% slower in the earlier interleaved
-  run too**, so it is probably real although the ranges overlap. The SQLite path does not touch the
-  loop; a code-layout effect is the likely cause and it is not explained. The two short SQLite
-  reads lean the same way (+5%).
+- **SQLite `db.exec` reads 7.7% slower (and 7.6% in the earlier run), and it is code layout, not
+  work.** Under callgrind, 20 runs of the 8000-statement `exec` execute 961,680,770 instructions on
+  the `main` binary and 961,682,444 on this branch's, with the same count in every SQLite function.
+  In isolation (400 runs, pinned) the median is 10.75 ms against 11.15 ms. Nothing on that path
+  changed; SQLite's code sits at different addresses because other objects left the link. The
+  guide's own caution applies (wall time swings 4% to 7% between builds at equal instruction
+  counts). The two short SQLite reads lean the same way for the same reason.
 - serve() user time per request reads +10.8% here and -0.4% in the earlier interleaved run of the
   same code; one branch round was an outlier (114k req/s). Treated as noise, not confirmed.
-- Postgres peak RSS is 1.6 MB higher in both runs. Not explained.
+- **The Postgres peak RSS difference (50.9 / 52.5 MB above) was a measurement artifact.** The
+  memory pass ran all of main's rounds and then all of the branch's, not interleaved, and the
+  database had grown in between. Interleaved, with the harness's own method (`wait4` `ru_maxrss`),
+  three runs each give 48.9 to 49.0 MB on main and 48.6 to 48.9 MB on the branch.
 - **A layout regression was found and fixed on the way:** the first build of this branch had every
   peak RSS about 1.2 to 1.9 MB higher, all of it resident text and read-only data. The functions a
   start runs had changed, so the link-order hints no longer covered them. Regenerating the hints
