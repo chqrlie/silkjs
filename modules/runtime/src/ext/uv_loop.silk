@@ -328,8 +328,8 @@ static if Intrinsic.targetOperatingSystem() == "darwin" {
   const FILTER_VNODE: i16 = -4
   // libuv's kqueue.c registers UV_PRIORITIZED with EV_OOBAND (EV_FLAG1) in the filter slot. macOS
   // refuses that filter, and libuv, which hands its changes to the wait, receives the refusal as an
-  // EV_ERROR event of that filter ahead of the ready events: one UV_PRIORITIZED callback. Poll and
-  // descriptor handles register the same way here (queueSetLoop, applied by queueWait).
+  // EV_ERROR event of that filter ahead of the ready events: one UV_PRIORITIZED callback. Poll
+  // handles register the same way here (queueSetLoop, applied by queueWait).
   const FILTER_OOBAND: i16 = 8192
   const EV_ADD: u16 = 1
   const EV_DELETE: u16 = 2
@@ -394,7 +394,7 @@ static if Intrinsic.targetOperatingSystem() == "darwin" {
     }
     l.changeCount = kept
   }
-  /// queueSet for poll and descriptor handles: additions wait for the next queueWait, as libuv's
+  /// queueSet for poll handles: additions wait for the next queueWait, as libuv's
   /// uv__io_poll applies its watcher queue in the wait's change list; removals happen now, and drop
   /// any addition still waiting.
   unsafe fn queueSetLoop(loop: *mut Loop, fd: i32, tag: u64, previous: i32, events: i32) -> i32 {
@@ -2645,8 +2645,11 @@ pub unsafe fn ioWatch(memory: *mut u8, events: i32, callback: PollCallback) -> i
   let wanted = events & (UV_READABLE | UV_WRITABLE | UV_DISCONNECT | UV_PRIORITIZED)
   if wanted == h.registered { h.polled = callback return 0 }
   if h.fd < 0 { if wanted == 0 { return 0 } return -9 }
+  // The runtime's descriptor watchers register at once, as before the libuv facade: only uv_poll
+  // handles take libuv's deferred change list (queueSetLoop).
   let loop = h.loop let fd = h.fd let previous = h.registered drop h
-  let status = unsafe queueSetLoop(loop, fd, usize.toU64(Pointer.address<Handle>(handle)), previous, wanted)
+  let anchorLoop = () let l = unsafe Pointer.borrow<(), Loop>(&anchorLoop, loop) let queue = l.backend drop l
+  let status = unsafe queueSet(queue, fd, usize.toU64(Pointer.address<Handle>(handle)), previous, wanted)
   if status != 0 { return status }
   let h2 = unsafe Pointer.borrowMut<(), Handle>(&mut anchor, handle)
   h2.registered = wanted h2.polled = callback
