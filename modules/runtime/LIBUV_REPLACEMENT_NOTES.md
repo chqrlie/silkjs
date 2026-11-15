@@ -193,64 +193,51 @@ Container: 4 vCPU Linux x64. Release builds, Silk dev.74, `SILKJS_PREPARSE_THREA
 
 ### Before and after: main against this branch, interleaved
 
-Same harness, silkjs only: six rounds, each running the `main` binary and then this branch's
-(final build, with `tools/startup-order.txt` and `tools/server-order.txt` regenerated). Medians;
-the last column is the range of the six values, main then branch.
+Same harness, silkjs only. Builds: `main` as above; the branch at its final state (the whole libuv
+API exported, link-order hints regenerated). Wall-clock numbers in this container swing 5% to 10%
+between rounds, so each comparison was run twice, the second time alternating which binary runs
+first in a round, and the work itself was counted with callgrind.
 
-| Benchmark | main | branch | change | ranges |
-| --- | --- | --- | --- | --- |
-| serve() hello, req/s | 135,634 | 132,566 | -2.3% | 133,272..140,381 / 114,214..138,784 |
-| serve(): user us/request | 2.54 | 2.81 | +10.8% | 2.40..2.77 / 2.44..3.54 |
-| serve(): sys us/request | 4.73 | 4.76 | +0.6% | |
-| serve(): peak RSS, MB | 30.9 | 30.7 | -0.8% | |
-| node:http hello, req/s | 9,298 | 9,282 | -0.2% | 8,710..9,550 / 9,148..9,673 |
-| node:http: user us/request | 93.0 | 93.1 | 0.0% | |
-| node:http: sys us/request | 13.6 | 13.0 | -4.5% | |
-| node:http: peak RSS, MB | 32.3 | 32.3 | -0.2% | |
-| Express over HTTPS, req/s | 3,269 | 3,220 | -1.5% | 3,020..3,574 / 2,967..3,376 |
-| Express: user us/request | 283.9 | 289.9 | +2.1% | 264..308 / 277..314 |
-| Express: sys us/request | 20.9 | 19.0 | -8.9% | |
-| Express: peak RSS, MB | 56.6 | 57.0 | +0.6% | |
-| WebSocket chat (ws API), msg/s | 1,540,840 | 1,542,328 | +0.1% | |
-| WebSocket: peak RSS, MB | 78.7 | 79.0 | +0.4% | |
-| Postgres 100k queries, ms | 6,501 | 6,402 | -1.5% | |
-| SQLite SELECT Order, ms | 14.57 | 15.23 | +4.6% | 13.87..17.20 / 14.09..16.48 |
-| SQLite SELECT Product, ms | 0.030 | 0.032 | +5.0% | 0.029..0.031 / 0.030..0.035 |
-| SQLite SELECT OrderDetail, ms | 185.0 | 185.6 | +0.3% | |
-| SQLite db.exec 8000 statements, ms | 5.21 | 5.61 | +7.7% | 5.04..5.83 / 5.18..5.98 |
-| spawnSync echo, us | 1,302 | 1,215 | -6.7% | 1,194..1,357 / 1,149..1,269 |
-| cat 1 GB with fs streams, ms | 711 | 709 | -0.4% | 636..856 / 636..740 |
-| setImmediate, turns/s | 1,638,273 | 1,613,451 | -1.5% | |
+Peak RSS, MB (median of six or eight interleaved rounds; main / branch):
 
-Peak RSS of the non-server benchmarks (MB, median of 3; main / branch): cat 28.5 / 28.4,
-Postgres 50.9 / 52.5, setImmediate 23.4 / 23.0, spawnSync 26.3 / 26.2, SQLite 177.3 / 178.1.
+| Benchmark | main | branch |
+| --- | --- | --- |
+| Cold start, empty script | 17.1 | 16.0 |
+| Cold start, `net` | 26.7 | 25.5 |
+| serve() hello under load | 30.4 | 29.1 |
+| node:http hello under load | 31.9 | 31.1 |
+| Express over HTTPS under load | 55.7 | 54.4 |
+| WebSocket chat | 77.6 | 77.6 |
+| setImmediate / spawnSync / cat / Postgres / SQLite | 22.1 / 25.0 / 26.9 / 48.7 / 174.4 | the same within 0.2 MB |
 
-Cold start (30 interleaved runs, wall ms median; main / branch): empty 5.2 / 4.8, hello 5.6 / 5.2,
-cjs 5.9 / 5.2, esm 8.1 / 7.4, local 6.2 / 5.5, fsread 6.9 / 5.8, timer 6.4 / 5.9, net 10.9 / 10.2.
-Peak RSS of a start: empty 17.4 / 16.3 MB, net 27.1 / 27.2 MB.
+Instructions executed (callgrind, same work; main / branch): 200,000 setImmediate turns
+600.0 M / 584.2 M (-2.6%); a node:http server answering 5,000 keep-alive requests 1,337 M /
+1,306 M (-2.3%); serve() answering 5,000 requests 171.7 M / 166.2 M (-3.2%).
+
+Throughput and server CPU, alternating order (medians; main / branch): Postgres 100k queries
+8,056 / 8,039 ms; setImmediate 1.59 M / 1.58 M turns/s; SQLite SELECT Order 21.5 / 20.2 ms,
+OrderDetail 218.9 / 214.3 ms, `db.exec` 8000 statements 5.69 / 5.06 ms; serve() 120.6 k / 116.1 k
+req/s (ranges 115.7..127.3 k / 110.0..131.7 k); node:http 9,207 / 8,611 req/s (7,987..9,625 /
+7,780..9,368); Express over HTTPS 2,727 / 2,770 req/s; spawnSync 1,489 / 1,470 us; cat 1 GB
+928 / 799 ms. In the first (fixed-order) run serve() read +2.1% and node:http -1.1%; the two
+runs disagree in sign, the ranges overlap, and the instruction counts are lower on the branch, so
+these are read as noise.
+
+Cold start, wall ms (30 interleaved runs, median; main / branch): empty 6.6 / 7.5, hello 6.5 / 6.8,
+cjs 7.2 / 6.9, esm 12.2 / 9.9, local 8.8 / 8.2, fsread 7.8 / 7.6, timer 8.1 / 7.7, net 15.1 / 15.2;
+page faults 1 to 2% fewer on the branch in every case.
 
 Reading it:
 
-- Throughput, server CPU and memory are within the run-to-run range on every runtime benchmark,
-  with these to watch:
-- **SQLite `db.exec` reads 7.7% slower (and 7.6% in the earlier run), and it is code layout, not
-  work.** Under callgrind, 20 runs of the 8000-statement `exec` execute 961,680,770 instructions on
-  the `main` binary and 961,682,444 on this branch's, with the same count in every SQLite function.
-  In isolation (400 runs, pinned) the median is 10.75 ms against 11.15 ms. Nothing on that path
-  changed; SQLite's code sits at different addresses because other objects left the link. The
-  guide's own caution applies (wall time swings 4% to 7% between builds at equal instruction
-  counts). The two short SQLite reads lean the same way for the same reason.
-- serve() user time per request reads +10.8% here and -0.4% in the earlier interleaved run of the
-  same code; one branch round was an outlier (114k req/s). Treated as noise, not confirmed.
-- **The Postgres peak RSS difference (50.9 / 52.5 MB above) was a measurement artifact.** The
-  memory pass ran all of main's rounds and then all of the branch's, not interleaved, and the
-  database had grown in between. Interleaved, with the harness's own method (`wait4` `ru_maxrss`),
-  three runs each give 48.9 to 49.0 MB on main and 48.6 to 48.9 MB on the branch.
-- **A layout regression was found and fixed on the way:** the first build of this branch had every
-  peak RSS about 1.2 to 1.9 MB higher, all of it resident text and read-only data. The functions a
-  start runs had changed, so the link-order hints no longer covered them. Regenerating the hints
-  from this branch's binary (merged with the committed lists, which also hold profiles this
-  container cannot retake) brought a start back from 27.7 MB to 26.6 MB (main: 26.5 MB).
+- **A memory regression was found and fixed:** the first full build of this branch started at
+  35.3 MB resident (main 22.8 MB), every server 13 to 17 MB higher. Silk names functions by hash,
+  and nearly all names had changed, so `tools/startup-order.txt` matched 38 of its 896 functions
+  and the start's code was spread over the text again. Regenerated (`tools/startup_order.py`, with
+  callgrind profiles of node:http, serve() and Express servers under `wrk -c8`): 22.0 MB. **The
+  lists must be regenerated whenever the function names move**; a build with a stale list is
+  correct but larger.
+- An earlier fixed-order run showed Postgres +5.6% and setImmediate -5.6%; with the order
+  alternated they are -0.2% and -0.6%. The binary that ran second in each round was penalized.
 - The engine benchmarks (section 4 of the guide) were not run: no engine source changed.
 
 ## Next
