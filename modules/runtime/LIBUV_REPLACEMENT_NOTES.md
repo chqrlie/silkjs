@@ -185,12 +185,14 @@ None blocked the work, and no C was added. Reported for the compiler's owner:
 8. `tools/keep_exports.py` cannot keep an export that takes a function pointer; such exports are
    still emitted for this package (the addon fixture links them), so this is a note, not a wall.
 9. **No variadic `export "C"` functions.** libuv's `int uv_loop_configure(uv_loop_t*, uv_loop_option, ...)`
-   cannot be defined with its C signature; `ext.uv_api_loop` exports it with a fixed third `int`.
-   On Linux x86-64 and GNU arm64 a variadic caller passes that argument in the same register, so
-   it behaves the same. On Darwin arm64 a variadic argument goes on the stack, so
-   `UV_LOOP_BLOCK_SIGNAL` there takes `SIGPROF` (the only signal libuv accepts) without reading it,
-   and an addon passing another signal gets success where libuv returns `UV_EINVAL`. Wanted:
-   `export "C" fn f(a: A, ...)` with a `VaList` reader, as calls to variadic externs already work.
+   cannot be defined with its C signature. `ext.uv_api_loop` reaches the variadic argument through
+   the calling convention instead: on x86-64 and GNU arm64 a variadic int arrives where a third
+   fixed parameter does; on Darwin arm64 every variadic argument is on the stack, the first at the
+   caller's stack pointer, which is where a ninth integer parameter is read from, so the export
+   there has six unused parameters and takes the argument ninth (read only for
+   `UV_LOOP_BLOCK_SIGNAL`, the one option with an argument). `tools/libuv_diagnostic.c` checks
+   SIGPROF, SIGINT and 0 against libuv on each target. Wanted all the same: `export "C" fn f(a: A,
+   ...)` with a `VaList` reader, as calls to variadic externs already work.
 
 ## Test status (Linux x64, release build of this branch)
 
