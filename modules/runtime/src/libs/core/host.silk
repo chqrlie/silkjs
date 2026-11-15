@@ -68,7 +68,6 @@ import ext.crypto_native
 import ext.net_native
 import ext.os_native
 import ext.tls_native
-import ext.compression_native
 import ext.vm_native
 import ext.vm_interrupt
 import ext.process_native
@@ -149,7 +148,6 @@ pub struct Services<C> {
   pub stopCleanup: bool,
   /// The capabilities the embedder chose (`Capabilities`): WebAssembly, the host's own functions.
   pub capabilities: C,
-  pub compression: ?*mut compression_native.State,
   pub processes: ?*mut process_native.State,
   pub workers: ?*mut worker_native.State,
   /// The runtime's class namespace, for realms created after startup.
@@ -177,7 +175,7 @@ impl<C> Services<C> {
     tracing: Pointer.null<trace_native.State>(), sea: Pointer.null<sea_native.State>(),
     inspector: Pointer.null<inspector_native.State>(),
     storageClass: 0, debugBuiltins: false, stopCleanup: false, capabilities: move capabilities,
-    compression: Pointer.null<compression_native.State>(), processes: Pointer.null<process_native.State>(),
+    processes: Pointer.null<process_native.State>(),
     workers: Pointer.null<worker_native.State>(),
     classes: move classes, shadowRealmClass: 0, shadowRealm: ValueBits.Undefined,
     immediates: immediates.makeState()
@@ -257,10 +255,6 @@ unsafe fn networkState<'m, C: Composition>(engine: &Engine<'m, Services<C>>) -> 
 unsafe fn tlsState<'m, C: Composition>(engine: &Engine<'m, Services<C>>) -> *mut tls_native.State {
   if Pointer.isNull<tls_native.State>(engine.services.tls) { Intrinsic.trap("TLS provider is not initialized") }
   return unsafe Intrinsic.pointerRequalify<?*mut tls_native.State, *mut tls_native.State>(engine.services.tls)
-}
-unsafe fn compressionState<'m, C: Composition>(engine: &Engine<'m, Services<C>>) -> *mut compression_native.State {
-  if Pointer.isNull<compression_native.State>(engine.services.compression) { Intrinsic.trap("compression executor is not initialized") }
-  return unsafe Intrinsic.pointerRequalify<?*mut compression_native.State, *mut compression_native.State>(engine.services.compression)
 }
 unsafe fn processState<'m, C: Composition>(engine: &Engine<'m, Services<C>>) -> *mut process_native.State {
   if Pointer.isNull<process_native.State>(engine.services.processes) { Intrinsic.trap("process executor is not initialized") }
@@ -346,8 +340,7 @@ unsafe effect fn appendResourceSnapshots<'m, C: Composition>(engine: &mut Engine
     run unsafe crypto_native.appendResources(&mut engine, context, crypto, array, &mut index)
   }
   static if capabilities.hasCompression<C>() {
-    let compression = unsafe compressionState(&engine.*)
-    run unsafe compression_native.appendResources(&mut engine, context, compression, array, &mut index)
+    run unsafe Composition.compressionAppendResources(&mut engine, context, array, &mut index)
   }
 }
 unsafe extern "C" fn lgamma(x: f64) -> f64
@@ -476,8 +469,7 @@ unsafe effect fn pollOnce<'m, C: Composition>(engine: &mut Engine<'m, Services<C
   }
   let mut compressionRan = false
   static if capabilities.hasCompression<C>() {
-    let compression = unsafe compressionState(&engine.*)
-    compressionRan = run unsafe compression_native.poll(&mut engine, context, compression)
+    compressionRan = run unsafe Composition.compressionPoll(&mut engine, context)
   }
   let processes = unsafe processState(&engine.*)
   let processRan = run unsafe process_native.poll(&mut engine, context, processes)
@@ -1002,10 +994,8 @@ impl<C: Composition> EngineServices for Services<C> {
     }
     static if capabilities.hasCompression<C>() {
     if id == 2600 || id == 2601 {
-      let compression = unsafe compressionState(&engine.*)
-      if id == 2600 { return run unsafe compression_native.dispatch(&mut engine, context, compression, argc, argv) }
       let io = unsafe ioState(&engine.*)
-      return run unsafe compression_native.submit(&mut engine, context, compression, io, argc, argv)
+      return run unsafe Composition.compressionCall(&mut engine, context, id, io, argc, argv)
     }
     }
     if id == 2700 {

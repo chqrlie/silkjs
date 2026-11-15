@@ -55,7 +55,6 @@ import ext.fs_async
 import ext.crypto_native
 import ext.net_native
 import ext.tls_native
-import ext.compression_native
 import ext.vm_native
 import ext.process_native
 import ext.vm_global
@@ -339,7 +338,7 @@ unsafe fn openHandles<'m, C: Composition>(engine: &Engine<'m, Services<C>>) -> b
   static if Composition.networkPresent() { if let Option<*mut net_native.State>.Some { value } = Pointer.nonNullMut<net_native.State>(services.network) { open = unsafe reportOpen(b"network and DNS", unsafe net_native.openHandles(value)) || open } }
   static if capabilities.hasCrypto<C>() { if let Option<*mut crypto_native.State>.Some { value } = Pointer.nonNullMut<crypto_native.State>(services.crypto) { open = unsafe reportOpen(b"crypto", unsafe crypto_native.openHandles(value)) || open } }
   static if capabilities.hasTls<C>() { if let Option<*mut tls_native.State>.Some { value } = Pointer.nonNullMut<tls_native.State>(services.tls) { open = unsafe reportOpen(b"TLS", unsafe tls_native.openHandles(value)) || open } }
-  static if capabilities.hasCompression<C>() { if let Option<*mut compression_native.State>.Some { value } = Pointer.nonNullMut<compression_native.State>(services.compression) { open = unsafe reportOpen(b"zlib", unsafe compression_native.openHandles(value)) || open } }
+  open = unsafe reportOpen(b"zlib", unsafe Composition.compressionOpenHandles(&engine.*)) || open
   if let Option<*mut process_native.State>.Some { value } = Pointer.nonNullMut<process_native.State>(services.processes) { open = unsafe reportOpen(b"child process", unsafe process_native.openHandles(value)) || open }
   static if capabilities.hasHttp2<C>() { if let Option<*mut http2_native.State>.Some { value } = Pointer.nonNullMut<http2_native.State>(services.http2) { open = unsafe reportOpen(b"HTTP/2", unsafe http2_native.openHandles(value)) || open } }
   static if Composition.databasePresent() { if let Option<*mut sqlite_native.State>.Some { value } = Pointer.nonNullMut<sqlite_native.State>(services.sqlite) { open = unsafe reportOpen(b"SQLite", unsafe sqlite_native.openHandles(value)) || open } }
@@ -633,7 +632,7 @@ unsafe effect fn execute<'m, D: Driver, C: Composition>(engine: &mut Engine<'m, 
   static if Composition.inspectorPresent() { engine.services.inspector = run inspector_native.create(unsafe fs_async.wakerAddress(io), mailbox) }
   static if Composition.networkPresent() { engine.services.network = run net_native.open(io) }
   static if capabilities.hasTls<C>() { engine.services.tls = run tls_native.open(allocator) }
-  static if capabilities.hasCompression<C>() { engine.services.compression = run compression_native.open() }
+  run Composition.compressionOpen(&mut engine)
   engine.services.processes = run process_native.make(io, workers)
   static if capabilities.hasHttp2<C>() { engine.services.http2 = run http2_native.open() }
   static if Composition.databasePresent() { engine.services.sqlite = run sqlite_native.open(allocator) }
@@ -866,15 +865,7 @@ unsafe effect fn realm<'m, D: Driver, C: Composition>(engine: &mut Engine<'m, Se
       }
       unsafe Composition.wasmCloseWasi(&mut engine, context)
       unsafe Composition.wasmClose(&mut engine, context)
-      static if capabilities.hasCompression<C>() {
-      match Pointer.nonNullMut<compression_native.State>(engine.services.compression) {
-        Option<*mut compression_native.State>.Some { value: compression } => {
-          unsafe compression_native.close(&mut engine, context, compression, io)
-          engine.services.compression = Pointer.null<compression_native.State>()
-        }
-        _ => ()
-      }
-      }
+      unsafe Composition.compressionClose(&mut engine, context, io)
       static if capabilities.hasCrypto<C>() {
       match Pointer.nonNullMut<crypto_native.State>(engine.services.crypto) {
         Option<*mut crypto_native.State>.Some { value: crypto } => { unsafe crypto_native.close(&mut engine, context, crypto, io) engine.services.crypto = Pointer.null<crypto_native.State>() }

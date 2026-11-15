@@ -32,7 +32,7 @@ import runtime.embed
 import runtime.session { Runtime, Turn }
 import libs.core.host { Services }
 import libs.core.capabilities { Capabilities, Composition, Compression, Crypto, Files, HostApi, Http2, HOST_API_FIRST, Tls, Wasm }
-import libs.core.capabilities { EmptyCompression, EmptyCrypto, EmptyHttp2, EmptyTls, NativeCompression, Nghttp2, OpenSslCrypto, OpenSslTls }
+import libs.core.capabilities { EmptyCompression, EmptyCrypto, EmptyHttp2, EmptyTls, Nghttp2, OpenSslCrypto, OpenSslTls }
 import libs.core.capabilities { Database, DlopenAddons, EmptyAddons, EmptyDatabase, NativeAddons, SqliteDatabase }
 import libs.core.capabilities { EmptyProcesses, OsProcesses, Processes }
 import libs.core.capabilities { EmptyHttp, EmptyNetwork, Http, Llhttp, Network, OsNetwork }
@@ -143,10 +143,11 @@ effect fn smoke<W: Wasm + Copy, F: Files + Copy, Z: Compression + Copy, H: Http2
   return run embed.start(move options, &mut host, move capabilities)
 }
 
-/// The smoke test on a file system in memory (`MemoryFiles`), with every library.
-pub effect fn program<W: Wasm + Copy>(wasm: W) -> i32 ! OutOfMemoryError | SynchronizationError ? &mut Allocator {
+/// The smoke test on a file system in memory (`MemoryFiles`), with every library: the caller
+/// gives those of packages of their own (WebAssembly, compression).
+pub effect fn program<W: Wasm + Copy, Z: Compression + Copy>(wasm: W, compression: Z) -> i32 ! OutOfMemoryError | SynchronizationError ? &mut Allocator {
   let files = run seededFiles()
-  return run smoke(wasm, files, NativeCompression {}, Nghttp2 {}, OpenSslCrypto {}, OpenSslTls {}, SqliteDatabase {}, DlopenAddons {}, OsProcesses {}, OsNetwork {}, Llhttp {}, OsSystemInfo {}, Amaro {}, ThreadWorkers {}, NodeInspector {})
+  return run smoke(wasm, files, compression, Nghttp2 {}, OpenSslCrypto {}, OpenSslTls {}, SqliteDatabase {}, DlopenAddons {}, OsProcesses {}, OsNetwork {}, Llhttp {}, OsSystemInfo {}, Amaro {}, ThreadWorkers {}, NodeInspector {})
 }
 
 /// The smoke test with no file system, compression, HTTP/2, crypto or TLS: `node:fs`, `node:zlib`,
@@ -163,9 +164,9 @@ fn status(result: Result<i32, OutOfMemoryError | SynchronizationError>) -> i32 {
 }
 
 /// Runs `program` and turns its failure into status 1.
-pub effect fn report<W: Wasm + Copy>(wasm: W) -> i32 ? &mut HostInput {
+pub effect fn report<W: Wasm + Copy, Z: Compression + Copy>(wasm: W, compression: Z) -> i32 ? &mut HostInput {
   let mut allocator = Allocator.systemAllocatorProvider()
-  return status(run Effect.result(program(wasm)) |> Effect.provideMut<Allocator>(&mut allocator))
+  return status(run Effect.result(program(wasm, compression)) |> Effect.provideMut<Allocator>(&mut allocator))
 }
 
 /// Runs `programWithoutFiles` and turns its failure into status 1.

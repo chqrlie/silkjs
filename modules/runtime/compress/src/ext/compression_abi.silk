@@ -10,6 +10,8 @@ pub extern "C" struct ZBuffer { pub data: ?*mut u8, pub size: usize, pub pos: us
 pub unsafe extern "C" fn calloc(count: usize, size: usize) -> ?*mut u8
 pub unsafe extern "C" fn free(pointer: ?*mut u8) -> ()
 pub unsafe extern "C" fn zlibVersion() -> ?*const u8
+pub unsafe extern "C" fn BrotliDecoderVersion() -> u32
+pub unsafe extern "C" fn ZSTD_versionString() -> *const u8
 pub unsafe extern "C" fn deflateInit2_(stream: *mut ZStream, level: i32, method: i32, window: i32, memory: i32, strategy: i32, version: ?*const u8, size: i32) -> i32
 pub unsafe extern "C" fn inflateInit2_(stream: *mut ZStream, window: i32, version: ?*const u8, size: i32) -> i32
 pub unsafe extern "C" fn deflate(stream: *mut ZStream, flush: i32) -> i32

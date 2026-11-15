@@ -3,11 +3,12 @@
 //! written, finished, again), followed by exactly `written` output bytes and
 //! then, when the status is a failure, the codec's own message text.
 //! The loop thread owns handle links/busy/disposed; workers only touch codec state.
-import ext.blocking_pool as pool
-import ext.fs_async as fs_async
+import silkjsruntime.ext.blocking_pool as pool
+import silkjsruntime.ext.fs_async as fs_async
 import silk.mem.allocator { Allocator, OutOfMemoryError }
 import silkjs.js_owned_value { Value,  lendFor }
 import silkjs.js_realm { lendRealm }
+import silkjs.js_std_support as text
 import silk.core.effect { Effect }
 import silk.core.result { Result }
 import silk.mem.pointer { Pointer }
@@ -26,13 +27,13 @@ import silkjs.js_value { ValueBits }
 import silkjs.js_core_types { FrameSlots, NativeErrorKind }
 import silkjs.js_exceptions { JsException }
 import silkjs.js_coercion_host { CoercionHooks }
-import libs.core.owners as owners
-import libs.core.common as common
+import silkjsruntime.libs.core.owners as owners
+import silkjsruntime.libs.core.common as common
 import silkjs.js_buffer_storage as buffers
 import silkjs.js_promise as promise
-import libs.core.host as host
+import silkjsruntime.libs.core.host as host
 import ext.compression_abi as c
-import ext.resource_snapshot as resources
+import silkjsruntime.ext.resource_snapshot as resources
 
 pub struct State { first: ?*mut Handle, jobs: ?*mut Job, next: i32, closing: bool }
 struct Handle {
@@ -387,7 +388,21 @@ unsafe effect fn synchronous<'m, S: EngineServices>(engine: &mut Engine<'m, S>, 
   }
   unsafe execute(&mut j) return run unsafe result(&mut engine, context, &j.*)
 }
+/// `[zlib, brotli, zstd]`: the libraries' versions for `process.versions`, brotli's packed as
+/// major << 24 | minor << 12 | patch.
+unsafe effect fn versions<'m, S: EngineServices>(engine: &mut Engine<'m, S>, context: *mut HeapHeader) -> ValueBits ! OutOfMemoryError | JsException ? &mut Allocator {
+  let memory = engine.memory
+  let output = run unsafe common.array(&mut engine, memory, context)
+  let zlib = run text.cstring(&mut engine, unsafe lendRealm(&context, context), unsafe Intrinsic.pointerRequalify<?*const u8, *const u8>(unsafe c.zlibVersion()))
+  run unsafe common.defineIndex(&mut engine, context, output, 0, zlib.intoBits())
+  run unsafe common.defineIndex(&mut engine, context, output, 1, ValueBits.number(u32.toF64(unsafe c.BrotliDecoderVersion())))
+  let zstd = run text.cstring(&mut engine, unsafe lendRealm(&context, context), unsafe c.ZSTD_versionString())
+  run unsafe common.defineIndex(&mut engine, context, output, 2, zstd.intoBits())
+  return output
+}
 pub unsafe effect fn dispatch<'m, S: EngineServices>(engine: &mut Engine<'m, S>, context: *mut HeapHeader, state: *mut State, argc: i32, argv: &FrameSlots) -> ValueBits ! OutOfMemoryError | JsException ? &mut Allocator {
+  let name = run unsafe host.text(&mut engine, context, unsafe common.argument(argv, 0))
+  if equal(name.asSlice(), b"versions") { return run unsafe versions(&mut engine, context) }
   let p = run newJob() let mut anchor = () let j = unsafe Pointer.borrowMut<(), Job>(&mut anchor, p)
   let prepared = run Effect.result(unsafe prepare(&mut engine, context, state, &mut j, argv)) drop j
   match move prepared { Result<(), OutOfMemoryError | JsException>.Success { .. } => () Result<(), OutOfMemoryError | JsException>.Failure { error } => { unsafe destroyJob(p) fail move error } }

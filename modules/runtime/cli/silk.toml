@@ -8,5 +8,6 @@ silk-version = "0.1.0-dev.78+e02346fdb3aa"
 silkjs = { path = "../../engine" }
 silkjsruntime = { path = ".." }
 wasm = { path = "../wamr", package = "silkjsruntime-wamr" }
+compress = { path = "../compress", package = "silkjsruntime-compress" }
 # The package manager: `silkjsruntime install` and the other commands.
 pm = { path = "../../pm" }
