@@ -449,7 +449,7 @@ unsafe effect fn configure<'m, C: Composition>(engine: &mut Engine<'m, Services<
   run unsafe function(&mut engine, context, native, b"builtinService", 42)
   // The services this runtime has (docs/composable-runtime.md): the bootstrap registers only
   // their built-ins. Every one is here until each becomes a capability the embedder chooses.
-  // Files, Compression, Http2, Crypto, Tls, Database, NativeAddons, Processes, Network, Http and Wasm are the embedder's choice (`Capabilities`); the rest are
+  // Files, Compression, Http2, Crypto, Tls, Database, NativeAddons, Processes, Network, Http, SystemInfo, TypeStripping and Wasm are the embedder's choice (`Capabilities`); the rest are
   // still always here.
   let mut wasm: &[u8] = b"" static if capabilities.hasWasm<C>() { wasm = b"Wasm" }
   let mut files: &[u8] = b"" static if capabilities.hasFiles<C>() { files = b"Files" }
@@ -462,8 +462,10 @@ unsafe effect fn configure<'m, C: Composition>(engine: &mut Engine<'m, Services<
   let mut processes: &[u8] = b"" static if Composition.processesPresent() { processes = b"Processes" }
   let mut network: &[u8] = b"" static if Composition.networkPresent() { network = b"Network" }
   let mut http: &[u8] = b"" static if Composition.httpPresent() { http = b"Http" }
-  let present = [b"Platform", b"ModuleResolver", files, network, processes, b"SystemInfo", b"Workers", crypto, tls,
-    compression, http, http2, wasm, database, b"TypeStripping", b"Inspector", addons, b"HostApi"]
+  let mut systemInfo: &[u8] = b"" static if Composition.systemInfoPresent() { systemInfo = b"SystemInfo" }
+  let mut typeStripping: &[u8] = b"" static if Composition.typeStrippingPresent() { typeStripping = b"TypeStripping" }
+  let present = [b"Platform", b"ModuleResolver", files, network, processes, systemInfo, b"Workers", crypto, tls,
+    compression, http, http2, wasm, database, typeStripping, b"Inspector", addons, b"HostApi"]
   let services = run unsafe common.array(&mut engine, memory, context)
   let mut named: usize = 0
   while named < present.length {

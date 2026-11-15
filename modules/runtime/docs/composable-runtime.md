@@ -653,9 +653,16 @@ functions stay exported until the package split. Without child processes `node:c
 and the process executor stays: it serves signals (`process.on('SIGINT')`, the inspector's SIGUSR1)
 and handle transfer, which every runtime has, until those move to the core.
 
-What is left of step 6 is the services the runtime itself stands on today: `Workers` holds
-`process.env` and the thread identities every runtime has, `SystemInfo` gives `constants` its errno
-and signal numbers, and `Inspector` reaches into the console, diagnostics channels and tracing at
+**Step 6, second part: SystemInfo and TypeStripping.** `OsSystemInfo` and `EmptySystemInfo`:
+the errno, signal and dlopen numbers that `constants`, dotenv and the socket binding need are the
+core's now (`internal/os_constants`, which `os.constants` is), so without system information only
+`node:os` is gone; its native stays, as it also answers the process's own facts (its executable's
+path, the component versions). `Amaro` and `EmptyTypeStripping`: what step 2 made follow the
+service is now the embedder's choice, and `checkCombination` checks that amaro has WebAssembly to
+run on.
+
+What is left of step 6 is `Workers`, which holds `process.env` and the thread identities every
+runtime has, and `Inspector`, which reaches into the console, diagnostics channels and tracing at
 load. Each needs that part moved to the core before it can be empty.
 
 ## Risks and decisions taken

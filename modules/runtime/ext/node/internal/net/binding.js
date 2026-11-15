@@ -20,7 +20,7 @@ const {
   symbols: { owner_symbol },
 } = require('internal/async_hooks');
 
-const errno = require('os').constants.errno;
+const errno = require('internal/os_constants').errno;
 
 // libuv error numbers are negated errno values on Unix.
 const uv = {

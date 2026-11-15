@@ -5,7 +5,7 @@ const { parseEnv } = require('internal/util_public/parse_env');
 const { Buffer } = require('buffer');
 const { isUint8Array } = require('util').types;
 const { fileURLToPath } = require('url');
-const { errno } = require('os').constants;
+const { errno } = require('internal/os_constants');
 const { writeStartupDiagnostic } = require('internal/host');
 
 function filename(value) {

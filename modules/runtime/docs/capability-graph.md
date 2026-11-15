@@ -12,13 +12,13 @@ declarations, the libc and library surface each service reaches today. Requires 
 
 | Service | Built-ins | JavaScript KiB | Load-time requires | Lazy requires | Silk files | Silk KiB | `extern "C"` |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Core | 326 | 3,473.8 | 944 | 354 | 41 | 736.0 | 80 |
+| Core | 327 | 3,477.3 | 944 | 354 | 41 | 739.1 | 80 |
 | Platform | 0 | 0.0 | 0 | 0 | 2 | 10.8 | 0 |
 | ModuleResolver | 15 | 181.7 | 22 | 20 | 2 | 6.9 | 0 |
 | Files | 18 | 238.9 | 76 | 40 | 5 | 81.2 | 49 |
 | Network | 45 | 1,423.8 | 275 | 64 | 4 | 253.6 | 107 |
 | Processes | 10 | 88.4 | 50 | 14 | 3 | 68.5 | 60 |
-| SystemInfo | 2 | 11.6 | 4 | 2 | 2 | 38.9 | 61 |
+| SystemInfo | 2 | 8.5 | 5 | 2 | 2 | 38.9 | 61 |
 | Workers | 6 | 47.6 | 15 | 20 | 4 | 117.0 | 24 |
 | Crypto | 28 | 453.6 | 159 | 55 | 3 | 162.5 | 280 |
 | Tls | 12 | 315.8 | 44 | 9 | 3 | 102.5 | 213 |
@@ -30,8 +30,8 @@ declarations, the libc and library surface each service reaches today. Requires 
 | TypeStripping | 2 | 3,716.1 | 2 | 4 | 0 | 0.0 | 0 |
 | Inspector | 24 | 165.0 | 40 | 47 | 18 | 234.1 | 33 |
 | NativeAddons | 1 | 10.6 | 0 | 7 | 4 | 221.7 | 205 |
-| Executable | 47 | 577.1 | 323 | 35 | 6 | 38.9 | 21 |
-| **Total** | 561 | 11,132.1 | 2049 | 685 | 111 | 2,470.7 | 1474 |
+| Executable | 47 | 577.1 | 323 | 35 | 6 | 39.0 | 21 |
+| **Total** | 562 | 11,132.6 | 2050 | 685 | 111 | 2,473.9 | 1474 |
 
 ## Linked size
 
@@ -118,7 +118,7 @@ Load-time edges block an empty service outright; lazy ones fail only on the path
 | Core | NativeAddons | 1 | 1 |
 | Core | Network | 16 | 2 |
 | Core | Processes | 9 | 0 |
-| Core | SystemInfo | 16 | 3 |
+| Core | SystemInfo | 13 | 0 |
 | Core | Tls | 3 | 0 |
 | Core | TypeStripping | 1 | 0 |
 | Core | Wasm | 2 | 1 |
@@ -147,7 +147,6 @@ Load-time edges block an empty service outright; lazy ones fail only on the path
 | Network | Http2 | 1 | 0 |
 | Network | Inspector | 6 | 5 |
 | Network | Processes | 2 | 0 |
-| Network | SystemInfo | 1 | 1 |
 | Network | Tls | 4 | 0 |
 | Network | Workers | 1 | 0 |
 | Processes | Http | 1 | 0 |
@@ -169,7 +168,6 @@ Load-time edges block an empty service outright; lazy ones fail only on the path
 | `console` | Core | `internal/trace_events` | Inspector | lazy |
 | `constants` | Core | `crypto` | Crypto | load |
 | `constants` | Core | `fs` | Files | load |
-| `constants` | Core | `os` | SystemInfo | load |
 | `crypto` | Crypto | `internal/tls/options` | Tls | load |
 | `crypto` | Crypto | `worker_threads` | Workers | lazy |
 | `dgram` | Network | `cluster` | Processes | lazy |
@@ -238,7 +236,6 @@ Load-time edges block an empty service outright; lazy ones fail only on the path
 | `internal/config_file` | Core | `internal/options_table` | Executable | load |
 | `internal/constants_binding` | Core | `crypto` | Crypto | load |
 | `internal/constants_binding` | Core | `fs` | Files | load |
-| `internal/constants_binding` | Core | `os` | SystemInfo | load |
 | `internal/constants_binding` | Core | `zlib` | Compression | load |
 | `internal/contextify_binding` | Core | `host.workerNative` | Workers | call |
 | `internal/crypto/binding` | Crypto | `internal/tls/context` | Tls | lazy |
@@ -250,7 +247,6 @@ Load-time edges block an empty service outright; lazy ones fail only on the path
 | `internal/deps/undici/undici` | Network | `zlib` | Compression | lazy |
 | `internal/dotenv` | Core | `fs` | Files | load |
 | `internal/dotenv` | Core | `internal/fs/utils` | Files | load |
-| `internal/dotenv` | Core | `os` | SystemInfo | load |
 | `internal/error_stack` | Core | `crypto` | Crypto | lazy |
 | `internal/fatal_report` | Core | `fs` | Files | lazy |
 | `internal/fs/sync_call` | Files | `internal/trace_events` | Inspector | load |
@@ -287,7 +283,6 @@ Load-time edges block an empty service outright; lazy ones fail only on the path
 | `internal/navigator` | Core | `internal/worker/locks` | Workers | lazy |
 | `internal/net/binding` | Network | `fs` | Files | lazy |
 | `internal/net/binding` | Network | `internal/trace_events` | Inspector | lazy |
-| `internal/net/binding` | Network | `os` | SystemInfo | load |
 | `internal/net` | Network | `fs` | Files | lazy |
 | `internal/options` | Core | `internal/options_table` | Executable | load |
 | `internal/options` | Core | `internal/tls/options` | Tls | lazy |

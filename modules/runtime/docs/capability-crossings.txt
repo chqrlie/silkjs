@@ -7,7 +7,6 @@ console	Core	internal/inspector_console	Inspector	load
 console	Core	internal/trace_events	Inspector	lazy
 constants	Core	crypto	Crypto	load
 constants	Core	fs	Files	load
-constants	Core	os	SystemInfo	load
 crypto	Crypto	internal/tls/options	Tls	load
 crypto	Crypto	worker_threads	Workers	lazy
 dgram	Network	cluster	Processes	lazy
@@ -76,7 +75,6 @@ internal/compile_cache	Core	os	SystemInfo	lazy
 internal/config_file	Core	internal/options_table	Executable	load
 internal/constants_binding	Core	crypto	Crypto	load
 internal/constants_binding	Core	fs	Files	load
-internal/constants_binding	Core	os	SystemInfo	load
 internal/constants_binding	Core	zlib	Compression	load
 internal/contextify_binding	Core	host.workerNative	Workers	call
 internal/crypto/binding	Crypto	internal/tls/context	Tls	lazy
@@ -88,7 +86,6 @@ internal/deps/undici/undici	Network	worker_threads	Workers	lazy
 internal/deps/undici/undici	Network	zlib	Compression	lazy
 internal/dotenv	Core	fs	Files	load
 internal/dotenv	Core	internal/fs/utils	Files	load
-internal/dotenv	Core	os	SystemInfo	load
 internal/error_stack	Core	crypto	Crypto	lazy
 internal/fatal_report	Core	fs	Files	lazy
 internal/fs/sync_call	Files	internal/trace_events	Inspector	load
@@ -126,7 +123,6 @@ internal/navigator	Core	internal/worker/locks	Workers	lazy
 internal/net	Network	fs	Files	lazy
 internal/net/binding	Network	fs	Files	lazy
 internal/net/binding	Network	internal/trace_events	Inspector	lazy
-internal/net/binding	Network	os	SystemInfo	load
 internal/options	Core	internal/options_table	Executable	load
 internal/options	Core	internal/tls/options	Tls	lazy
 internal/process/per_thread	Core	fs	Files	lazy

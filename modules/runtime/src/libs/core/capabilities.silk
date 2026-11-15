@@ -315,6 +315,38 @@ pub struct EmptyHttp {}
 impl Copy for EmptyHttp {}
 impl Http for EmptyHttp { static fn present() -> bool { return false } }
 
+/// System information: `node:os`. Its native (2300) also answers the process's own facts (its
+/// executable's path, the component versions), which every runtime has, so it stays; without
+/// system information `node:os` is not there. The errno and signal numbers are the core's.
+pub interface SystemInfo {
+  /// A constant of the implementation type: whether `node:os` is there.
+  static fn present() -> bool
+}
+/// The operating system's.
+pub struct OsSystemInfo {}
+impl Copy for OsSystemInfo {}
+impl SystemInfo for OsSystemInfo { static fn present() -> bool { return true } }
+/// No system information.
+pub struct EmptySystemInfo {}
+impl Copy for EmptySystemInfo {}
+impl SystemInfo for EmptySystemInfo { static fn present() -> bool { return false } }
+
+/// TypeScript stripping: running `.ts` files and `module.stripTypeScriptTypes`, with amaro, which
+/// runs on WebAssembly (`checkCombination`). Without it they throw `ERR_NO_TYPESCRIPT`, as in a
+/// Node build without amaro.
+pub interface TypeStripping {
+  /// A constant of the implementation type: whether TypeScript is stripped.
+  static fn present() -> bool
+}
+/// amaro.
+pub struct Amaro {}
+impl Copy for Amaro {}
+impl TypeStripping for Amaro { static fn present() -> bool { return true } }
+/// No TypeScript stripping.
+pub struct EmptyTypeStripping {}
+impl Copy for EmptyTypeStripping {}
+impl TypeStripping for EmptyTypeStripping { static fn present() -> bool { return false } }
+
 /// The file type bits ([`ModuleResolver.kind`]) of a regular file.
 pub const MODULE_FILE: i32 = 0o100000
 /// The file type bits of a directory.
@@ -345,9 +377,9 @@ pub interface ModuleResolver {
 /// a capability the program does not want is given its empty implementation.
 ///
 /// ```silk
-/// let capabilities = Capabilities { platform: OsPlatform {}, modules: NodeResolution {}, files: OsFiles {}, compression: NativeCompression {}, http2: Nghttp2 {}, crypto: OpenSslCrypto {}, tls: OpenSslTls {}, database: SqliteDatabase {}, addons: DlopenAddons {}, processes: OsProcesses {}, network: OsNetwork {}, http: Llhttp {}, wasm: EmptyWasm {}, hostApi: EmptyHostApi {} }
+/// let capabilities = Capabilities { platform: OsPlatform {}, modules: NodeResolution {}, files: OsFiles {}, compression: NativeCompression {}, http2: Nghttp2 {}, crypto: OpenSslCrypto {}, tls: OpenSslTls {}, database: SqliteDatabase {}, addons: DlopenAddons {}, processes: OsProcesses {}, network: OsNetwork {}, http: Llhttp {}, systemInfo: OsSystemInfo {}, typeStripping: Amaro {}, wasm: EmptyWasm {}, hostApi: EmptyHostApi {} }
 /// ```
-pub struct Capabilities<P, M, F, Z, H, K, T, D, N, R, E, L, W, A> {
+pub struct Capabilities<P, M, F, Z, H, K, T, D, N, R, E, L, S, Y, W, A> {
   pub platform: P,
   pub modules: M,
   pub files: F,
@@ -360,6 +392,8 @@ pub struct Capabilities<P, M, F, Z, H, K, T, D, N, R, E, L, W, A> {
   pub processes: R,
   pub network: E,
   pub http: L,
+  pub systemInfo: S,
+  pub typeStripping: Y,
   pub wasm: W,
   pub hostApi: A,
 }
@@ -390,6 +424,10 @@ pub interface Composition {
   static fn networkPresent() -> bool
   /// `Http.present` of the program's HTTP/1 parser.
   static fn httpPresent() -> bool
+  /// `SystemInfo.present` of the program's system information.
+  static fn systemInfoPresent() -> bool
+  /// `TypeStripping.present` of the program's TypeScript stripping.
+  static fn typeStrippingPresent() -> bool
   /// `Files.native` of the program's file system.
   static fn filesNative() -> bool
   /// `Files.direct` of the program's file system.
@@ -441,10 +479,14 @@ static fn presentAddons<N: NativeAddons>() -> bool { return NativeAddons.present
 static fn presentProcesses<R: Processes>() -> bool { return Processes.present() }
 static fn presentNetwork<E: Network>() -> bool { return Network.present() }
 static fn presentHttp<L: Http>() -> bool { return Http.present() }
+static fn presentSystemInfo<S: SystemInfo>() -> bool { return SystemInfo.present() }
+static fn presentTypeStripping<Y: TypeStripping>() -> bool { return TypeStripping.present() }
 
 impl<P: Platform + Copy, M: ModuleResolver + Copy, F: Files + Copy, Z: Compression + Copy, H: Http2 + Copy, K: Crypto + Copy, T: Tls + Copy, D: Database + Copy,
-  N: NativeAddons + Copy, R: Processes + Copy, E: Network + Copy, L: Http + Copy, W: Wasm + Copy, A: HostApi + Copy>
-  Composition for Capabilities<P, M, F, Z, H, K, T, D, N, R, E, L, W, A> {
+  N: NativeAddons + Copy, R: Processes + Copy, E: Network + Copy, L: Http + Copy, S: SystemInfo + Copy, Y: TypeStripping + Copy,
+  W: Wasm + Copy, A: HostApi + Copy> Composition for Capabilities<P, M, F, Z, H, K, T, D, N, R, E, L, S, Y, W, A> {
+  static fn systemInfoPresent() -> bool { return presentSystemInfo<S>() }
+  static fn typeStrippingPresent() -> bool { return presentTypeStripping<Y>() }
   static fn networkPresent() -> bool { return presentNetwork<E>() }
   static fn httpPresent() -> bool { return presentHttp<L>() }
   static fn processesPresent() -> bool { return presentProcesses<R>() }
@@ -460,7 +502,7 @@ impl<P: Platform + Copy, M: ModuleResolver + Copy, F: Files + Copy, Z: Compressi
   static fn filesDirect() -> bool { return directFiles<F>() }
   unsafe fn filesExecute(self: &Self, call: &Call, out: &mut Outcome) -> () { unsafe self.files.execute(&call, &mut out) }
   fn forWorker(self: &Self) -> Self {
-    return Capabilities<P, M, F, Z, H, K, T, D, N, R, E, L, W, A> { platform: self.platform.forWorker(), modules: self.modules.forWorker(), files: self.files.forWorker(), compression: self.compression, http2: self.http2, crypto: self.crypto, tls: self.tls, database: self.database, addons: self.addons, processes: self.processes, network: self.network, http: self.http, wasm: self.wasm.forWorker(), hostApi: self.hostApi.forWorker() }
+    return Capabilities<P, M, F, Z, H, K, T, D, N, R, E, L, S, Y, W, A> { platform: self.platform.forWorker(), modules: self.modules.forWorker(), files: self.files.forWorker(), compression: self.compression, http2: self.http2, crypto: self.crypto, tls: self.tls, database: self.database, addons: self.addons, processes: self.processes, network: self.network, http: self.http, systemInfo: self.systemInfo, typeStripping: self.typeStripping, wasm: self.wasm.forWorker(), hostApi: self.hostApi.forWorker() }
   }
   effect fn platformGetenv<'m>(engine: &Engine<'m, Services<Self>>, name: &[u8], into: &mut List<u8>) -> bool ! OutOfMemoryError ? &mut Allocator {
     let platform = engine.services.capabilities.platform return run platform.getenv(name, &mut into.*)
@@ -570,6 +612,9 @@ pub fn checkCombination<C: Composition>() -> () {
   }
   static if Composition.processesPresent() && !Composition.networkPresent() {
     compileError("Processes needs Network for the pipes of child processes: give Capabilities a network (OsNetwork), or no child processes (EmptyProcesses)")
+  }
+  static if Composition.typeStrippingPresent() && !Composition.wasmPresent() {
+    compileError("TypeStripping needs Wasm: amaro runs on WebAssembly; give Capabilities WamrWasm, or no TypeScript (EmptyTypeStripping)")
   }
   static if Composition.databasePresent() && !Composition.filesPresent() {
     compileError("Database needs Files: give Capabilities a file system, or no database (EmptyDatabase)")
