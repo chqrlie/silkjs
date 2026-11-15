@@ -4,7 +4,11 @@ import silk.core.result { Result }
 import silk.system.host_input { HostInput, HostInputError }
 import silkjs.js_atomics_native { SynchronizationError }
 import silkjs.js_libc_platform as platform
-import runtime.worker
+import silkjsruntime.runtime.worker
+import silkjsruntime.ext.keep_exports
+import napi_exports
+import silkjsruntime.libs.core.capabilities { Capabilities, EmptyHostApi }
+import wasm.wamr { WamrWasm }
 import pm.cli
 import silk.collections.bytes { Bytes }
 import silk.core.option { Option }
@@ -50,8 +54,15 @@ effect fn program() -> i32 ! HostInputError | OutOfMemoryError | Synchronization
     }
     Option.None => {}
   }
+  // The core's C exports that native code calls by name (Node-API for addons, among others) are
+  // emitted only when Silk takes them, as embed.start does too; the ones that take a callback are
+  // this package's own, in napi_exports.
+  keep_exports.all()
+  napi_exports.keep()
   let arguments = run HostInput.arguments()
-  return run worker.executeProgram(&arguments)
+  // The executable has every capability: the real implementation of each, and no host functions.
+  let capabilities = Capabilities { wasm: WamrWasm.make(), hostApi: EmptyHostApi {} }
+  return run worker.executeProgram(&arguments, move capabilities)
 }
 pub effect fn main() -> i32 ? &mut HostInput {
   let mut allocator = Allocator.systemAllocatorProvider()

@@ -37,6 +37,7 @@ import silkjs.js_proxy_core as core
 import silkjs.js_runtime as runtime
 import ext.os_abi as abi
 import libs.core.host as host
+import libs.core.capabilities { Composition }
 import runtime.worker as worker
 import ext.worker_transport { Group, Registry, Thread, Endpoint, Message, Shared, Environment, Variable, LockRequest }
 import ext.worker_transport as transport
@@ -69,8 +70,8 @@ pub struct Start { pub group: Group, pub id: u32, pub control: u32, pub metadata
 struct SignalGuard { next: ?*mut SignalGuard, id: u32, watcher: Arc<vm_interrupt.Service>, slot: vm_interrupt.Slot }
 fn equal(a: &[u8], b: &[u8]) -> bool { if a.length != b.length { return false } let mut i: usize = 0 while i < a.length { if a[i] != b[i] { return false } i = i + 1 } return true }
 unsafe fn nonnull<T>(pointer: ?*mut T) -> *mut T { return unsafe transport.nonnull(pointer) }
-pub effect fn mainState(process: &Process, domain: Domain) -> *mut State ! OutOfMemoryError {
-  let group = run Group.make(process, domain)
+pub effect fn mainState(process: &Process, domain: Domain, entry: extern "C" fn(?*mut u8) -> ?*mut u8) -> *mut State ! OutOfMemoryError {
+  let group = run Group.make(process, domain, entry)
   let mut allocator = group.resources.clone()
   let cancellation = run CancellableDomain.make(domain) |> Effect.provideMut<Allocator>(&mut allocator)
   let thread = run transport.allocate<Thread>(&group.resources)
@@ -314,7 +315,8 @@ pub unsafe fn finished(group: &Group, id: u32, code: i32) -> () {
   if !abandoned { let owner = unsafe Pointer.borrow<(), Thread>(&anchor, unsafe nonnull(parentPointer)) abandoned = owner.exited }
   if abandoned { unsafe transport.retireThread(guard.getMut(), id) } else { unsafe transport.wake(guard.get(), parent) }
 }
-export "C" fn silkNodeWorkerEntry(raw: ?*mut u8) -> ?*mut u8 {
+/// A worker thread's C entry, instantiated for the runtime's capabilities (the group's `entry`).
+pub export "C" fn silkNodeWorkerEntry<C: Composition>(raw: ?*mut u8) -> ?*mut u8 {
   let pointer = unsafe Intrinsic.pointerReinterpret<*mut u8, *mut Start>(unsafe nonnull(raw))
   let packet = unsafe Pointer.take<Start>(pointer) unsafe resources.release(raw)
   let _ignored = unsafe uv_thread_setname(Pointer.fromRef<u8>(&packet.name[0]))
@@ -324,7 +326,7 @@ export "C" fn silkNodeWorkerEntry(raw: ?*mut u8) -> ?*mut u8 {
   let entry = unsafe Pointer.borrowMut<(), Thread>(&mut anchor, unsafe nonnull(unsafe transport.thread(guard.get(), id)))
   entry.cpu = cpu drop entry drop guard
   let mut allocator = Allocator.systemAllocatorProvider()
-  let outcome = run Effect.result(worker.executeThread(move packet)) |> Effect.provideMut<Allocator>(&mut allocator)
+  let outcome = run Effect.result(worker.executeThread<C>(move packet)) |> Effect.provideMut<Allocator>(&mut allocator)
   let code = match move outcome { Result<i32, OutOfMemoryError>.Success { value } => value _ => 1 }
   unsafe finished(&group, id, code) group.resources.threadFinished() return Pointer.null<u8>()
 }
@@ -371,7 +373,7 @@ unsafe effect fn spawn(state: &State, metadata: List<u8>, control: u32, stackSiz
   if status == 0 { status = unsafe pthread_attr_setstacksize(attr, nativeStack) }
   let mut detached: i32 = 1 static if Intrinsic.targetOperatingSystem() == "darwin" { detached = 2 }
   if status == 0 { status = unsafe pthread_attr_setdetachstate(attr, detached) }
-  if status == 0 { state.group.resources.threadStarted() status = unsafe pthread_create(Pointer.fromMutRef<usize>(&mut thread), attr, silkNodeWorkerEntry, unsafe transport.raw(packet)) if status != 0 { state.group.resources.threadFinished() } }
+  if status == 0 { state.group.resources.threadStarted() status = unsafe pthread_create(Pointer.fromMutRef<usize>(&mut thread), attr, state.group.entry, unsafe transport.raw(packet)) if status != 0 { state.group.resources.threadFinished() } }
   if initialized == 0 { let _ignored = unsafe pthread_attr_destroy(attr) }
   if status != 0 {
     let owned = unsafe Pointer.take<Start>(packet) drop owned unsafe resources.release(unsafe transport.raw(packet))
@@ -1207,5 +1209,4 @@ unsafe effect fn dispatchInto<'m, S: EngineServices>(engine: &mut Engine<'m, S>,
 /// Takes each C export as a value, so that Silk emits it (see tools/keep_exports.py).
 pub fn keepExports() -> () {
   let _silkNodeFatalReport: extern "C" fn(*mut u8, *const u8, usize, *const u8, usize) -> () = silkNodeFatalReport
-  let _silkNodeWorkerEntry: extern "C" fn(?*mut u8) -> ?*mut u8 = silkNodeWorkerEntry
 }

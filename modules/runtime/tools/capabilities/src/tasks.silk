@@ -3,6 +3,7 @@
 //!   silk task graph                      # writes ../../docs/capability-graph.md
 //!   silk task graph --check              # fails on an edge across services that is not in the list
 //!   silk task graph --sizes ../../build  # first records that build's linked sizes
+//!   silk task symbols --binary ../../build/embed-smoke/embed-smoke --prefix wasm_runtime_ --absent
 import silk.cli.command { Command, CommandLine, Opt }
 import silk.cli.task { Task, TaskError, TaskSet }
 import silk.collections.bytes { Bytes }
@@ -16,6 +17,7 @@ import graph
 
 union Tasks {
   Graph { pub check: bool, pub sizes: Option<Bytes>, pub profile: Option<Bytes> },
+  Symbols { pub binary: Bytes, pub prefix: Bytes, pub absent: bool },
 }
 
 impl CommandLine for Tasks {
@@ -35,6 +37,10 @@ impl CommandLine for Tasks {
         ),
       )
       |> Command.option("profile", Opt.about("How that build was made, for the report"))
+      |> Command.variant("Symbols", "Check that a linked program has, or with --absent lacks, symbols starting with a prefix")
+      |> Command.option("binary", Opt.about("The program, relative to this directory") |> Opt.required)
+      |> Command.option("prefix", Opt.about("The symbol prefix, such as wasm_runtime_ for WAMR") |> Opt.required)
+      |> Command.option("absent", Opt.about("Fail when any such symbol is there, rather than when none is"))
   }
 }
 
@@ -44,6 +50,7 @@ impl TaskSet for Tasks {
     ? &mut HostInput | &mut Allocator | &mut ChildProcess | &mut FileSystem {
     match move self {
       Tasks.Graph { check, sizes, profile } => run graph.perform(check, move sizes, move profile)
+      Tasks.Symbols { binary, prefix, absent } => run graph.symbols(binary.asSlice(), prefix.asSlice(), absent)
     }
   }
 }

@@ -1,0 +1,12 @@
+[package]
+name = "silkjsruntime-cli"
+description = "The silkjsruntime executable: the runtime with the real implementation of every capability"
+version = "0.1.0"
+silk-version = "0.1.0-dev.78+e02346fdb3aa"
+
+[dependencies]
+silkjs = { path = "../../engine" }
+silkjsruntime = { path = ".." }
+wasm = { path = "../wamr", package = "silkjsruntime-wamr" }
+# The package manager: `silkjsruntime install` and the other commands.
+pm = { path = "../../pm" }

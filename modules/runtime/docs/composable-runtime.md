@@ -491,7 +491,7 @@ in a Node build without amaro. Two parts of step 2 move to the step whose servic
 rather than one tagged index comes with the package split (step 7), since only then can a
 service's JavaScript leave the program with its package.
 
-**Step 1, the spike.** Neither route in "The one dependency of this shape" works on the pinned
+**Step 1, the spike.** Neither route in "The one dependency of this shape" works on the then-pinned
 toolchain (0.1.0-dev.74) as written:
 
 - *Requirement rows through the engine hooks* put a row parameter on every signature that reaches
@@ -512,11 +512,37 @@ read under `static if` removes the absent arm before name resolution, in debug b
 there are. Dependency C sources are linked as loose objects, so an empty capability leaves its
 library out only when the package holding it is not in the program's dependency graph.
 
-Next: a Silk compiler change that gives a generic function's concrete instantiation a C callback
-address (in progress separately, in silk-lang/silk). With it, `Services<C>` follows the design
-unchanged. Without it, the fallback is a concrete `Services` that reaches each capability package
-through a table of C function pointers, the way the `Embedder` hook works today. Presence then
-becomes a runtime value, and there is one indirect call per capability native.
+**Step 1.** The compiler change is [silk-lang/silk#3113](https://github.com/silk-lang/silk/pull/3113):
+a generic export's name with type arguments is the C address of that instantiation, so a callback
+is written once and handed over for the runtime's own type. On that compiler the runtime is generic
+over the embedder's capabilities, `Services<C>` with `C: Composition` (`libs/core/capabilities.silk`):
+
+- `Capabilities { wasm, hostApi }` is the closed list so far; `Composition`, implemented by it alone,
+  forwards each capability's operations, so every signature carries one type parameter however
+  many capabilities there are.
+- `Wasm` has `WamrWasm` (`./wamr`, the package that depends on WAMR) and `EmptyWasm` (the core).
+  Presence is `Wasm.present`, a static function read under `static if`, so with `EmptyWasm` the
+  Wasm natives, classes and loop turns are not compiled. The bootstrap sees no `wasmNative`:
+  `typeof WebAssembly` is `'undefined'` and the Wasm built-ins are not registered.
+- `HostApi` replaces the `Embedder` struct and its C function pointer.
+- The C callbacks that re-enter the engine (SQLite, Node-API's bridge, TLS, the HTTP parser,
+  WAMR's imports, the worker thread entry) are generic exports instantiated where the runtime
+  hands them over. The HTTP parser's C bridge now takes its callback as a pointer instead of
+  calling a fixed symbol.
+- The executable moved to `./cli`; `./smoke` is the embedding smoke test without WebAssembly.
+
+The smoke test with `EmptyWasm` links no WAMR symbol (`silk task symbols ... --absent`) and prints
+`wasm undefined`; with `WamrWasm` it prints `wasm object`. The workspace is pinned to
+0.1.0-dev.78, the first release with #3113, and SQLite's package moved with it
+(silk-lang/lib-sqlite, the same branch name as this one).
+
+One gap in the compiler remains: Silk emits a C export of a dependency package only where Silk
+code takes it as a value, while the reference (FFI-010) says every export of the loaded modules is
+a root. The core takes most of its exports as values (`ext/keep_exports.silk`), but a function
+with a callback parameter cannot be one, so the 15 Node-API functions that take a callback
+(`napi_define_class`, `napi_wrap` and the others) are plain functions in the core, and
+`cli/src/napi_exports.silk` declares them as the executable's C exports. An embedder that loads
+addons declares the same until the compiler roots dependency exports.
 
 ## Risks and decisions taken
 

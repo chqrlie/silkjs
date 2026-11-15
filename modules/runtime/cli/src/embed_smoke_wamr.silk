@@ -1,0 +1,7 @@
+//! The embedding smoke test (the core's src/embed_smoke.silk) with WebAssembly: the same host,
+//! started with `WamrWasm`, so the program links WAMR and `typeof WebAssembly` is 'object'.
+import silk.system.host_input { HostInput }
+import silkjsruntime.embed_smoke
+import wasm.wamr { WamrWasm }
+
+pub effect fn main() -> i32 ? &mut HostInput { return run embed_smoke.report(WamrWasm.make()) }

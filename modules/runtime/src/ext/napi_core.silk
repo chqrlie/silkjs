@@ -627,8 +627,7 @@ pub export "C" fn napi_reference_unref(env: ?*mut u8, ref: ?*mut u8, result: ?*m
 
 // Native functions.
 
-@deferredCallbacks("callback")
-pub unsafe export "C" fn napi_create_function(env: ?*mut u8, name: ?*const u8, length: usize, callback: ?extern "C" fn(?*mut u8, ?*mut u8) -> ?*mut u8, data: ?*mut u8, result: ?*mut ?*mut u8) -> i32 {
+pub unsafe fn napi_create_function(env: ?*mut u8, name: ?*const u8, length: usize, callback: ?extern "C" fn(?*mut u8, ?*mut u8) -> ?*mut u8, data: ?*mut u8, result: ?*mut ?*mut u8) -> i32 {
   return unsafe createFunction(env, name, length, callback, data, result)
 }
 /// `napi_create_function`, for Silk callers: Silk emits a dependency's export only when it is taken as a value.
@@ -865,8 +864,7 @@ pub export "C" fn node_api_get_module_file_name(env: ?*mut u8, result: ?*mut ?*c
   unsafe store<?*const u8>(result, unsafe Intrinsic.pointerRequalify<?*mut u8, ?*const u8>(e.filename))
   return unsafe status(env, OK)
 }
-@deferredCallbacks("finalize")
-pub unsafe export "C" fn napi_set_instance_data(env: ?*mut u8, data: ?*mut u8, finalize: Finalize, hint: ?*mut u8) -> i32 {
+pub unsafe fn napi_set_instance_data(env: ?*mut u8, data: ?*mut u8, finalize: Finalize, hint: ?*mut u8) -> i32 {
   if !unsafe onOwner(env) { return INVALID_ARG }
   let mut a = () let e = unsafe Pointer.borrowMut<(), Env>(&mut a, unsafe envOf(env))
   e.instanceData = data e.instanceFinalize = finalize e.instanceHint = hint drop e

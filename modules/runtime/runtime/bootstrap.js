@@ -205,7 +205,9 @@ host.rebindRealmBuiltins = (previous, global) => {
   wasmCallbacks.set(global, callbacks);
 };
 const wasmResolver = global => wasmCallbacks.get(global);
-native.wasmNative('register', wasmResolver);
+// Without the Wasm capability there are no Wasm natives, and no WebAssembly global below.
+const hasWasm = typeof native.wasmNative === 'function';
+if (hasWasm) native.wasmNative('register', wasmResolver);
 // --disable-proto=delete|throw, for the main realm and each new one.
 function disableProto(global) {
   const prototype = global.Object.prototype;
@@ -252,7 +254,7 @@ host.initializeRealmBuiltins = (handle, global, wasmCodeGeneration, isolated = f
     privateSymbols: host.privateSymbols,
     errorStackState: host.errorStackState,
     builtinLoaded: moduleHas,
-    wasmNative: native.vmWasmNative(handle),
+    wasmNative: hasWasm ? native.vmWasmNative(handle) : undefined,
     wasmRealmState: host.wasmRealmState,
     wasmCodeGeneration,
     registerWasmRealm(_global, callbacks) {
@@ -274,7 +276,7 @@ host.initializeRealmBuiltins = (handle, global, wasmCodeGeneration, isolated = f
     return module.exports;
   }
   load('internal/error_stack').install(global, isolated);
-  if (!host.jitless) Object.defineProperty(global, 'WebAssembly', {
+  if (!host.jitless && hasWasm) Object.defineProperty(global, 'WebAssembly', {
     value: load('internal/web/wasm').WebAssembly, writable: true, configurable: true,
   });
   return load;
@@ -875,6 +877,7 @@ function componentVersions() {
     uv, uvwasi: '0.0.23', zlib, zstd,
   };
   if (zlib === undefined) delete versions.zlib;
+  if (!hasWasm) delete versions.uvwasi;
   return versions;
 }
 // process.config describes the build the way Node's config.gypi does, for the
@@ -1103,7 +1106,7 @@ host.watch = (filename, options, callback) => {
   return handle;
 };
 // Worker bootstrap decodes Wasm host objects through the realm's wrap callbacks.
-Object.defineProperty(globalThis, 'WebAssembly', {
+if (hasWasm) Object.defineProperty(globalThis, 'WebAssembly', {
   value: internalRequire('internal/web/wasm').WebAssembly, writable: true, configurable: true,
 });
 const workerThreads = internalRequire('internal/worker');
@@ -2380,7 +2383,7 @@ globalThis.__silkRuntime = {
     host.performanceTimeOrigin = Date.now() - (native.now() - startTime);
     process.argv = argv.slice(); process.argv0 = argv[0];
     process.execPath = native.osNative('execPath', []); process.pid = rawOS.getpid();
-    native.wasmNative('register', wasmResolver);
+    if (hasWasm) native.wasmNative('register', wasmResolver);
     loader.Module._initPaths();
     internalRequire('internal/child_process/ipc').installChild(process);
     internalRequire('internal/watch_mode/dependencies').initialize();

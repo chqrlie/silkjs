@@ -1,5 +1,5 @@
 import silk.mem.allocator { Allocator, OutOfMemoryError }
-import ext.diagnostics_fatal { RuntimeHeap }
+import silkjsruntime.ext.diagnostics_fatal { RuntimeHeap }
 import silkjs.js_owned_value { lendFor }
 import silkjs.js_realm { lendRealm }
 import silk.mem.pointer { Pointer }

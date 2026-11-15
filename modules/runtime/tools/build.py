@@ -40,13 +40,14 @@ def main():
     named = ROOT / 'build/link-object'
     named.write_text(str(identified))
     # Source-file compilation keeps the generic engine in one native object.
+    # The executable is ./cli: the runtime with the real implementation of every capability.
     command = ['silk', '+' + version, 'build', 'src/main.silk', '-o', str(args.output.resolve()),
                '--debug', str(not args.release).lower(),
                '--clang', str(ROOT / 'tools/clang.py')]
     if args.release:
         command += ['--optimization', 'speed']
     try:
-        subprocess.run(command, cwd=ROOT, env=environment, check=True)
+        subprocess.run(command, cwd=ROOT / 'cli', env=environment, check=True)
     finally:
         named.unlink(missing_ok=True)
     embed_builtin_cache(args.output.resolve(), environment, identity, identified)

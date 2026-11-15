@@ -1,19 +1,20 @@
 [package]
 name = "silkjsruntime"
 version = "0.1.0"
-# The embedding API (src/runtime/embed.silk), the loop it turns, and the hook for an embedder's own
-# native functions (src/libs/core/embedder.silk). src/main.silk is the
-# executable, the first embedder; src/embed_smoke.silk is the embedding API's smoke test.
-exports = ["runtime.embed", "runtime.session", "libs.core.embedder", "libs.core.host", "embed_smoke"]
-silk-version = "0.1.0-dev.74+205aea3f5b2e"
+# The runtime's core (docs/composable-runtime.md): the embedding API (src/runtime/embed.silk), the
+# loop it turns, and the capabilities an embedder chooses (src/libs/core/capabilities.silk). The
+# real Wasm capability is ./wamr; the executable, which provides every real one, is ./cli.
+# src/embed_smoke.silk is the embedding API's smoke test, here without WebAssembly.
+exports = ["runtime.embed", "runtime.session", "runtime.worker", "libs.core.capabilities", "libs.core.host", "libs.core.common",
+  "libs.core.owners", "ext.diagnostics_fatal", "ext.vm_native", "ext.keep_exports", "ext.napi_async", "ext.napi_core", "ext.napi_values", "embed_smoke"]
+kind = "library"
+silk-version = "0.1.0-dev.78+e02346fdb3aa"
 
 [dependencies]
 # The engine, from this repository's modules/engine.
 silkjs = { path = "../engine" }
-# The package manager, from this repository's modules/pm: `silkjsruntime install` and the other commands.
-pm = { path = "../pm" }
 # SQLite 3 compiled from the amalgamation that silk-lang/lib-sqlite pins, with the features Node builds.
-sqlite = { git = "https://github.com/silk-lang/lib-sqlite", rev = "b633d162c209a41547c5a0ea3a96098eff2e20bb", package = "db-sqlite" }
+sqlite = { git = "https://github.com/silk-lang/lib-sqlite", rev = "e462070986630cb4bba54e76d991f2bad53a4727", package = "db-sqlite" }
 # The C libraries Node builds with, each compiled by Silk from its pinned release (../native).
 libuv = { path = "../native/libuv", package = "silkjs-libuv" }
 openssl = { path = "../native/openssl", package = "silkjs-openssl" }
@@ -21,8 +22,6 @@ nghttp2 = { path = "../native/nghttp2", package = "silkjs-nghttp2" }
 zlib = { path = "../native/zlib", package = "silkjs-zlib" }
 zstd = { path = "../native/zstd", package = "silkjs-zstd" }
 brotli = { path = "../native/brotli", package = "silkjs-brotli" }
-# WAMR, behind WebAssembly and WASI (../native/wamr).
-wamr = { path = "../native/wamr", package = "silkjs-wamr" }
 
 # The runtime's own C. builtin_sources.c embeds the built-in JavaScript (tools/embed.py).
 # tools/build.py links the executable with the built-ins' bytecode and a build identity besides.
@@ -39,7 +38,6 @@ link = [
   { library = "dl", mode = "dynamic", os = "linux" },
   { library = "m", mode = "dynamic", os = "linux" },
 ]
-
 
 [[generate]]
 run = ["tools/embed.py"]

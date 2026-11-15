@@ -977,43 +977,55 @@ effect fn build(root: &Path, rules: &Rules) -> Graph
     at = at + 1
   }
 
-  // Silk and C of src/.
+  // Silk and C of the core's src/ and of the packages beside it (WebAssembly, the executable, the
+  // smoke test); a path is shown with its package directory when it is not the core's.
   let mut modules = List<Module>.make()
+  let packages = [b"src", b"wamr/src", b"cli/src", b"smoke/src"]
   let patterns = [b"**/*.silk", b"**/*.c", b"**/*.h"]
-  let mut p: usize = 0
-  while p < patterns.length {
-    let found = run glob(root, b"src", patterns[p])
-    let paths = found.asSlice()
-    let mut f: usize = 0
-    while f < paths.length {
-      let mut relative = run Bytes.copy(b"src/")
-      run relative.append(paths[f].asSlice())
-      let source = run read(root, relative.asSlice())
-      let text = source.asSlice()
-      let mut count: u32 = 0
-      let mut from: usize = 0
-      while true {
-        match find(text, b"extern \"C\" fn", from) {
-          Option<usize>.Some { value } => {
-            count = count + 1
-            from = value + 1
-          }
-          Option<usize>.None => {
-            break
+  let mut k: usize = 0
+  while k < packages.length {
+    let mut p: usize = 0
+    while p < patterns.length {
+      let found = run glob(root, packages[k], patterns[p])
+      let paths = found.asSlice()
+      let mut f: usize = 0
+      while f < paths.length {
+        let mut relative = run Bytes.copy(packages[k])
+        run relative.append(b"/")
+        run relative.append(paths[f].asSlice())
+        let source = run read(root, relative.asSlice())
+        let text = source.asSlice()
+        let mut count: u32 = 0
+        let mut from: usize = 0
+        while true {
+          match find(text, b"extern \"C\" fn", from) {
+            Option<usize>.Some { value } => {
+              count = count + 1
+              from = value + 1
+            }
+            Option<usize>.None => {
+              break
+            }
           }
         }
+        let shown = if k == 0 {
+          run Bytes.copy(paths[f].asSlice())
+        } else {
+          run Bytes.copy(relative.asSlice())
+        }
+        run modules.append(
+          Module {
+            path: move shown,
+            owner: run classify(&rules.silk, paths[f].asSlice()),
+            bytes: source.length(),
+            externC: count,
+          },
+        )
+        f = f + 1
       }
-      run modules.append(
-        Module {
-          path: run Bytes.copy(paths[f].asSlice()),
-          owner: run classify(&rules.silk, paths[f].asSlice()),
-          bytes: source.length(),
-          externC: count,
-        },
-      )
-      f = f + 1
+      p = p + 1
     }
-    p = p + 1
+    k = k + 1
   }
   return Graph {
     builtins: move builtins,
@@ -1787,7 +1799,7 @@ effect fn sizes(root: &Path, rules: &Rules, directory: &[u8], profile: &[u8]) ->
           Option<usize>.None => owning.length
         }
         let packageName = view(owning, 0, colon)
-        if startsWith(packageName, b"silkjsruntime@") {
+        if startsWith(packageName, b"silkjsruntime") {
           let owner = run classify(&rules.silk, view(owning, colon + 1, owning.length))
           run add(&mut silk, owner.asSlice(), bytes)
         } else if startsWith(packageName, b"silkjs@") {
@@ -1961,7 +1973,10 @@ fn hashOf(bytes: &[u8]) -> usize {
   // Kept below 2^31 at every step: Silk arithmetic traps on overflow.
   let mut hash: u64 = 5381
   let mut at: usize = 0
-  while at < bytes.length { hash = (hash * 33 + u8.toU64(bytes[at])) % 2147483647 at = at + 1 }
+  while at < bytes.length {
+    hash = (hash * 33 + u8.toU64(bytes[at])) % 2147483647
+    at = at + 1
+  }
   return u64.toUsize(hash)
 }
 
@@ -2049,13 +2064,68 @@ pub effect fn perform(check: bool, sizesFrom: Option<Bytes>, profile: Option<Byt
         status: 1,
       }
     }
+
     // An edge that went away leaves the list stale: it is regenerated so that it stays the list of
     // what crosses. The report's sizes change with every edit and are not checked.
     if !same(before.asSlice(), crossings.asSlice()) {
-      run Task.abort("docs/capability-crossings.txt lists edges that are gone: run silk task graph in tools/capabilities")
+      run Task.abort(
+        "docs/capability-crossings.txt lists edges that are gone: run silk task graph in tools/capabilities",
+      )
     }
     return
   }
   run FileSystem.writeFile(&reportFile, report.asSlice())
   run FileSystem.writeFile(&crossingsFile, crossings.asSlice())
+}
+
+/// `silk task symbols`: whether the linked program `binary` (relative to this package) defines a
+/// symbol starting with `prefix`. With `absent`, one fails the task (an empty capability left its
+/// library in); without, none does. Reads the symbol table with nm.
+pub effect fn symbols(binary: &[u8], prefix: &[u8], absent: bool) -> ()
+  ! TaskError | ProcessError | FileError | HostInputError | OutOfMemoryError | WriterError
+  ? &mut HostInput | &mut Allocator | &mut ChildProcess | &mut FileSystem {
+  let package = run Task.root()
+  let program = run path(&package, binary)
+  let mut arguments = List<Bytes>.make()
+  run arguments.append(run Bytes.copy(b"--defined-only"))
+  run arguments.append(run Bytes.copy(Path.rawBytes(&program)))
+  let listed = run capture("nm", &arguments)
+  let rows = run lines(listed.asSlice())
+  let items = rows.asSlice()
+  let mut found: u64 = 0
+  let mut first = Bytes.make()
+  let mut at: usize = 0
+  while at < items.length {
+    let parts = run fields(items[at].asSlice())
+    if parts.length() >= 3 && startsWith(parts.asSlice()[2].asSlice(), prefix) {
+      if found == 0 {
+        run first.append(parts.asSlice()[2].asSlice())
+      }
+      found = found + 1
+    }
+    at = at + 1
+  }
+  let mut message = Bytes.make()
+  if absent && found > 0 {
+    run message.append(binary)
+    run message.append(b" defines ")
+    run number(&mut message, found)
+    run message.append(b" symbols starting with ")
+    run message.append(prefix)
+    run message.append(b", such as ")
+    run message.append(first.asSlice())
+  } else if !absent && found == 0 {
+    run message.append(binary)
+    run message.append(b" defines no symbol starting with ")
+    run message.append(prefix)
+  } else {
+    return
+  }
+  fail TaskError {
+    message: match run String.copyUtf8(message.asSlice()) {
+      Result<String, InvalidUtf8>.Success { value } => move value
+      Result<String, InvalidUtf8>.Failure { .. } => run String.copy("symbol check failed")
+    },
+    status: 1,
+  }
 }

@@ -6,9 +6,12 @@
 //! loop, and `process.exit()` ends the runtime instead, with the status the host's turn reports.
 //!
 //! ```silk
+//! // No WebAssembly, no functions of the host's: the smallest runtime.
+//! return run embed.start(options, &mut app, Capabilities { wasm: EmptyWasm {}, hostApi: EmptyHostApi {} })
+//!
 //! struct App {}
 //! impl Host for App {
-//!   effect fn drive<'e, 'm>(self: &mut Self, runtime: &mut Runtime<'e, 'm>) -> i32 ! OutOfMemoryError | JsException ? &mut Allocator {
+//!   effect fn drive<'e, 'm, C: Composition>(self: &mut Self, runtime: &mut Runtime<'e, 'm, C>) -> i32 ! OutOfMemoryError | JsException ? &mut Allocator {
 //!     run runtime.evaluateModule(b"/app/main.mjs", b"setTimeout(() => console.log('hi'), 10)")
 //!     while true {
 //!       // Run what is ready, waiting for the runtime's next timer or completion at most 16 ms:
@@ -32,6 +35,7 @@ import runtime.session { Driver, Runtime, Turn }
 import runtime.worker { Mode }
 import runtime.worker
 import ext.keep_exports
+import libs.core.capabilities { Composition }
 
 /// How the host starts the runtime.
 pub struct Options {
@@ -62,23 +66,27 @@ pub interface Host {
   /// the loop until the host is done or the runtime finishes, and returns the exit status. A
   /// host that returns before the runtime finished should call `runtime.finish()` first, so
   /// that 'exit' listeners run.
-  effect fn drive<'e, 'm>(self: &mut Self, runtime: &mut Runtime<'e, 'm>) -> i32 ! OutOfMemoryError | JsException ? &mut Allocator
+  effect fn drive<'e, 'm, C: Composition>(self: &mut Self, runtime: &mut Runtime<'e, 'm, C>) -> i32 ! OutOfMemoryError | JsException ? &mut Allocator
 }
 
 struct Hosted<'h, H> { host: &'h mut H }
 impl<'h, H: Host> Driver for Hosted<'h, H> {
-  effect fn drive<'e, 'm>(self: &mut Self, runtime: &mut Runtime<'e, 'm>) -> i32 ! OutOfMemoryError | JsException ? &mut Allocator {
+  effect fn drive<'e, 'm, C: Composition>(self: &mut Self, runtime: &mut Runtime<'e, 'm, C>) -> i32 ! OutOfMemoryError | JsException ? &mut Allocator {
     let status = run self.host.drive(&mut runtime.*)
     if runtime.isFinished() { return status }
     return match run runtime.finish() { Turn.Finished { status: ended } => ended Turn.Running => status }
   }
 }
 
-/// Starts a runtime on this thread, runs `host.drive` in it, and closes it when that returns.
-/// Returns the runtime's exit status. An uncaught exception is reported on stderr and ends the
-/// runtime, as in Node, with status 1 (or the one process.exitCode set).
-pub effect fn start<H: Host>(options: Options, host: &mut H) -> i32 ! OutOfMemoryError | SynchronizationError ? &mut Allocator {
+/// Starts a runtime on this thread with the embedder's `capabilities` (one implementation per
+/// capability, `libs.core.capabilities.Capabilities`), runs `host.drive` in it, and closes it when
+/// that returns. Returns the runtime's exit status. An uncaught exception is reported on stderr
+/// and ends the runtime, as in Node, with status 1 (or the one process.exitCode set).
+///
+/// The runtime is compiled for the capabilities' type: one whose `Wasm` is `EmptyWasm` has no
+/// WebAssembly, and a program that never names `WamrWasm` does not link WAMR.
+pub effect fn start<H: Host, C: Composition>(options: Options, host: &mut H, capabilities: C) -> i32 ! OutOfMemoryError | SynchronizationError ? &mut Allocator {
   keep_exports.all()
   let mut driver = Hosted { host: &mut host.* }
-  return run worker.executeMain(&options.arguments, Mode { main: true, exiting: false, embedded: true, keepAlive: options.keepAlive }, &mut driver)
+  return run worker.executeMain(&options.arguments, Mode { main: true, exiting: false, embedded: true, keepAlive: options.keepAlive }, &mut driver, move capabilities)
 }

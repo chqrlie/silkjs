@@ -19,10 +19,7 @@ import ext.tls_native
 import ext.trace_native
 import ext.vm_interrupt
 import ext.vm_native
-import ext.wasm_native
-import ext.wasm_ownership
 import ext.worker_native
-import libs.core.embedder
 
 /// Calls every module's `keepExports`.
 pub fn all() -> () {
@@ -44,8 +41,5 @@ pub fn all() -> () {
   trace_native.keepExports()
   vm_interrupt.keepExports()
   vm_native.keepExports()
-  wasm_native.keepExports()
-  wasm_ownership.keepExports()
   worker_native.keepExports()
-  embedder.keepExports()
 }

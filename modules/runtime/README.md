@@ -25,7 +25,7 @@ silk task build
 ./build/silkjsruntime -p 'process.versions'
 ```
 
-A plain `silk build` builds the executable too, and is how a program that embeds the runtime builds (see [Embed](#embed)). `silk task build` adds what only an executable that can run on the build machine gets: the built-ins' bytecode, compiled by the executable itself and linked into it, and a startup heap image, so a start does not run the bootstrap.
+A plain `silk build` in [`cli`](cli) builds the executable too, and is how a program that embeds the runtime builds (see [Embed](#embed)). `silk task build` adds what only an executable that can run on the build machine gets: the built-ins' bytecode, compiled by the executable itself and linked into it, and a startup heap image, so a start does not run the bootstrap.
 
 Use `SILK_CLANG` to select a particular Clang executable. `silk task build --release` builds with speed optimization; `--output PATH` selects the output executable. `silk task` lists the other tasks (`embed`, `compat`, `sea`); they run the Python tools in [`tools/`](tools/), which can still be run directly. The first build compiles about 1,300 C files once (Silk compiles them one at a time), a few minutes; later builds reuse the objects.
 
@@ -75,7 +75,7 @@ Another Silk program can run the runtime inside itself with [`runtime.embed`](sr
 ```silk
 struct App {}
 impl Host for App {
-  effect fn drive<'e, 'm>(self: &mut Self, runtime: &mut Runtime<'e, 'm>) -> i32 ! OutOfMemoryError | JsException ? &mut Allocator {
+  effect fn drive<'e, 'm, C: Composition>(self: &mut Self, runtime: &mut Runtime<'e, 'm, C>) -> i32 ! OutOfMemoryError | JsException ? &mut Allocator {
     run runtime.evaluateModule(b"/app/main.mjs", source)
     while true {
       // Timers, then native completions (waiting at most 16 ms), then immediates.
@@ -84,15 +84,19 @@ impl Host for App {
     return 0
   }
 }
-let status = run embed.start(run Options.make(b"app"), &mut app)
+// One implementation per capability: here no WebAssembly and no functions of the host's.
+let capabilities = Capabilities { wasm: EmptyWasm {}, hostApi: EmptyHostApi {} }
+let status = run embed.start(run Options.make(b"app"), &mut app, move capabilities)
 ```
+
+The capabilities are [`libs.core.capabilities`](src/libs/core/capabilities.silk), and the list is closed: every field of `Capabilities` must be given. The runtime is compiled for their types, so a capability given its empty implementation is not in the program. With `EmptyWasm`, `typeof WebAssembly` is `'undefined'`, and a program that does not depend on [`./wamr`](wamr) (where `WamrWasm` is) links no WAMR. `HostApi` is the host's own native functions: `NativeFunctionId.Host` ids from `HOST_API_FIRST` reach its `call`. [`docs/composable-runtime.md`](docs/composable-runtime.md) is the design the other capabilities follow.
 
 - `Runtime.turn(milliseconds)` runs one pass of the loop and waits for native completions at most that long (0 never blocks). `Runtime.timeout()` says how long until a timer is due, and `Runtime.waker()` ends a turn's wait from another thread, for a host whose own events arrive elsewhere.
 - `Options.keepAlive` (on for `Options.make`): the host's own work keeps the runtime alive, as open windows do, so a loop with nothing referenced is not its end. The runtime finishes with `process.exit()` or `Runtime.finish()`, which runs the `'exit'` listeners.
 - The runtime runs on the thread that calls `embed.start`; its JavaScript stays on that thread. It leaves the host's signal dispositions alone (the executable ignores `SIGPIPE` and `SIGXFSZ`, as Node does).
-- Every extension is still linked into an embedder, and the heap image is the executable's alone, so an embedded runtime bootstraps cold. Native modules for the host's own API are the next step of the embedding API.
+- Capabilities other than WebAssembly are still linked into every embedder, and the heap image is the executable's alone, so an embedded runtime bootstraps cold.
 
-[`tests/embed-smoke.py`](tests/embed-smoke.py) builds [`src/embed_smoke.silk`](src/embed_smoke.silk), a host that runs its own module, and checks the status its turn reports.
+[`tests/embed-smoke.py`](tests/embed-smoke.py) builds [`src/embed_smoke.silk`](src/embed_smoke.silk), a host that runs its own module, twice: from [`./smoke`](smoke) with `EmptyWasm`, and from [`./cli`](cli) with `WamrWasm`. It checks what each prints and the status its turn reports. `silk task symbols --binary ../../build/embed-smoke/embed-smoke --prefix wasm_runtime_ --absent` in [`tools/capabilities`](tools/capabilities) checks that the first has no WAMR in it.
 
 ## Compatibility boundaries
 
@@ -109,14 +113,17 @@ This is a Node compatibility implementation, not an official Node distribution o
 
 | Location | Responsibility |
 | --- | --- |
-| [`src/main.silk`](src/main.silk), [`src/libs/core/`](src/libs/core/) | Native entry point, engine embedding, host interfaces |
+| [`src/libs/core/`](src/libs/core/) | Engine embedding, host interfaces, the capabilities an embedder chooses |
+| [`cli/`](cli/) | The executable (`src/main.silk`): the runtime with the real implementation of every capability |
+| [`wamr/`](wamr/) | `WamrWasm`, WebAssembly and WASI over WAMR, and the Silk that binds it |
+| [`smoke/`](smoke/) | The embedding smoke test without WebAssembly |
 | [`src/runtime/`](src/runtime/) | Runtime startup and teardown (`worker`), the loop in turns (`session`), the embedding API (`embed`) |
 | [`runtime/`](runtime/) | Bootstrap and event-loop integration |
 | [`libs/node_resolver/`](libs/node_resolver/) | Package resolution, module loading, and loader hooks |
 | [`src/ext/`](src/ext/) | Native extension implementations and resource ownership |
 | [`ext/node/`](ext/node/) | Node-compatible JavaScript modules |
 | [`ext/web/`](ext/web/) | Web-platform JavaScript APIs and vendored standards data |
-| [`tools/`](tools/) | Dependency preparation, native builds, embedding, executable tooling |
+| [`tools/`](tools/) | Dependency preparation, native builds, embedding, executable tooling; [`tools/capabilities`](tools/capabilities) is the capability graph |
 | [`tests/`](tests/) | Differential and real-runtime consumers |
 
 The engine lives beside the runtime in [`modules/engine`](../engine); the runtime does not maintain a second engine implementation.

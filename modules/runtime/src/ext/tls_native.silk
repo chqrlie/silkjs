@@ -29,6 +29,7 @@ import libs.core.common as common
 import silkjs.js_buffer_storage as buffers
 import silkjs.js_class_data as classes
 import silkjs.js_proxy_core as core
+import libs.core.capabilities { Composition }
 import libs.core.host as host
 import ext.openssl as crypto
 import ext.tls_abi as ssl
@@ -151,7 +152,7 @@ unsafe fn release(state: *mut State, target: *mut Handle) -> () {
     link = Pointer.fromMutRef<?*mut Handle>(&mut h.next) drop h
   }
 }
-pub unsafe fn close<'m>(engine: &mut Engine<'m, host.Services>, context: *mut HeapHeader, state: *mut State) -> () {
+pub unsafe fn close<'m, C: Composition>(engine: &mut Engine<'m, host.Services<C>>, context: *mut HeapHeader, state: *mut State) -> () {
   let s = unsafe Pointer.take<State>(state) let mut cursor = s.first
   unsafe owners.release(&mut engine, context, s.callback)
   // SSL objects are inserted after their contexts, so list order closes SSL first.
@@ -369,14 +370,14 @@ const NO_ANSWER: i64 = -1
 // Calls the JS callback registered with setCallback as callback(kind, id, text, a, b) from
 // inside an OpenSSL callback, and copies the Buffer it returns into out.
 // text is a C string, or with binary set, length bytes passed as an ArrayBuffer.
-unsafe fn callJS(state: *mut State, kind: i32, id: i32, text: ?*mut u8, binary: bool, length: usize, a: u32, b: u32, out: ?*mut u8, outMax: usize) -> i64 {
+unsafe fn callJS<C: Composition>(state: *mut State, kind: i32, id: i32, text: ?*mut u8, binary: bool, length: usize, a: u32, b: u32, out: ?*mut u8, outMax: usize) -> i64 {
   let anchor = () let s = unsafe Pointer.borrow<(), State>(&anchor, state)
   let ep = s.engine let cp = s.context let ap = s.allocator let callback = s.callback drop s
   if Pointer.isNull<u8>(ep) || Pointer.isNull<HeapHeader>(cp) { return NO_ANSWER }
   match callback { ValueBits.Undefined => { return NO_ANSWER } _ => () }
   let context = unsafe Intrinsic.pointerRequalify<?*mut HeapHeader, *mut HeapHeader>(cp)
   if unsafe exceptions.has(unsafe runtime.contextRuntime(context)) { return NO_ANSWER }
-  let mut engineAnchor = () let engine = unsafe Pointer.borrowMut<(), Engine<'static, host.Services>>(&mut engineAnchor, unsafe Intrinsic.pointerReinterpret<*mut u8, *mut Engine<'static, host.Services>>(unsafe nonnull(ep)))
+  let mut engineAnchor = () let engine = unsafe Pointer.borrowMut<(), Engine<'static, host.Services<C>>>(&mut engineAnchor, unsafe Intrinsic.pointerReinterpret<*mut u8, *mut Engine<'static, host.Services<C>>>(unsafe nonnull(ep)))
   let mut allocatorAnchor = () let allocator = unsafe Pointer.borrowMut<(), RuntimeHeap>(&mut allocatorAnchor, ap)
   let mut scope = Scope.make()
   let result = run Effect.result(unsafe invokeCallback(&mut engine, context, callback, kind, id, text, binary, length, a, b, out, outMax, &mut scope)) |> Effect.provideMut<Allocator>(&mut allocator)
@@ -386,7 +387,7 @@ unsafe fn callJS(state: *mut State, kind: i32, id: i32, text: ?*mut u8, binary: 
     Result<i64, OutOfMemoryError | JsException>.Failure { .. } => NO_ANSWER
   }
 }
-unsafe effect fn invokeCallback<'m>(engine: &mut Engine<'m, host.Services>, context: *mut HeapHeader, callback: ValueBits, kind: i32, id: i32, text: ?*mut u8, binary: bool, length: usize, a: u32, b: u32, out: ?*mut u8, outMax: usize, scope: &mut Scope) -> i64 ! OutOfMemoryError | JsException ? &mut Allocator {
+unsafe effect fn invokeCallback<'m, C: Composition>(engine: &mut Engine<'m, host.Services<C>>, context: *mut HeapHeader, callback: ValueBits, kind: i32, id: i32, text: ?*mut u8, binary: bool, length: usize, a: u32, b: u32, out: ?*mut u8, outMax: usize, scope: &mut Scope) -> i64 ! OutOfMemoryError | JsException ? &mut Allocator {
   scope.values[1] = ValueBits.Null
   if binary {
     let memory = engine.memory
@@ -405,19 +406,19 @@ unsafe effect fn invokeCallback<'m>(engine: &mut Engine<'m, host.Services>, cont
   return u64.toI64(backing.byteLength)
 }
 // TLSWrap::PskServerCallback: JS (onPskServerCallback) answers with the key for identity.
-export "C" fn silkTlsPskServer(sslPointer: ?*mut u8, identity: ?*mut u8, psk: ?*mut u8, maxLength: u32) -> u32 {
+export "C" fn silkTlsPskServer<C: Composition>(sslPointer: ?*mut u8, identity: ?*mut u8, psk: ?*mut u8, maxLength: u32) -> u32 {
   let hp = unsafe sessionHandle(sslPointer) if Pointer.isNull<Handle>(hp) || Pointer.isNull<u8>(identity) { return 0 }
   let anchor = () let h = unsafe Pointer.borrow<(), Handle>(&anchor, unsafe nonnull(hp)) let owner = h.owner let id = h.id drop h
-  let n = unsafe callJS(owner, 1, id, identity, false, 0, maxLength, 0, psk, u32.toUsize(maxLength))
+  let n = unsafe callJS<C>(owner, 1, id, identity, false, 0, maxLength, 0, psk, u32.toUsize(maxLength))
   if n <= 0 { return 0 } return i64.toU32(n)
 }
 // TLSWrap::PskClientCallback: JS answers with a two-byte identity length, the identity and the key.
-export "C" fn silkTlsPskClient(sslPointer: ?*mut u8, hint: ?*mut u8, identity: ?*mut u8, maxIdentity: u32, psk: ?*mut u8, maxPsk: u32) -> u32 {
+export "C" fn silkTlsPskClient<C: Composition>(sslPointer: ?*mut u8, hint: ?*mut u8, identity: ?*mut u8, maxIdentity: u32, psk: ?*mut u8, maxPsk: u32) -> u32 {
   let hp = unsafe sessionHandle(sslPointer) if Pointer.isNull<Handle>(hp) { return 0 }
   let anchor = () let h = unsafe Pointer.borrow<(), Handle>(&anchor, unsafe nonnull(hp)) let owner = h.owner let id = h.id drop h
   let room = 2 + u32.toUsize(maxIdentity) + u32.toUsize(maxPsk)
   let answer = unsafe crypto.calloc(1, room) if Pointer.isNull<u8>(answer) { return 0 }
-  let n = unsafe callJS(owner, 2, id, hint, false, 0, maxPsk, maxIdentity, answer, room)
+  let n = unsafe callJS<C>(owner, 2, id, hint, false, 0, maxPsk, maxIdentity, answer, room)
   let mut result: u32 = 0
   if n >= 2 {
     let total = i64.toUsize(n)
@@ -446,12 +447,12 @@ export "C" fn silkTlsTrace(write: i32, version: i32, kind: i32, data: ?*mut u8, 
   unsafe ssl.SSL_trace(write, version, kind, data, length, session, arg)
   if marked != 0 { let _ignored = unsafe ssl.ERR_pop_to_mark() } else { unsafe crypto.ERR_clear_error() }
 }
-export "C" fn silkTlsTicket(session: ?*mut u8, name: ?*mut u8, iv: ?*mut u8, cipher: ?*mut u8, mac: ?*mut u8, encrypt: i32) -> i32 {
+export "C" fn silkTlsTicket<C: Composition>(session: ?*mut u8, name: ?*mut u8, iv: ?*mut u8, cipher: ?*mut u8, mac: ?*mut u8, encrypt: i32) -> i32 {
   let opaque = unsafe ssl.SSL_CTX_get_ex_data(unsafe ssl.SSL_get_SSL_CTX(session), 0)
   if Pointer.isNull<u8>(opaque) { return -1 }
   let p = unsafe Intrinsic.pointerReinterpret<*mut u8, *mut Handle>(unsafe nonnull(opaque))
   let anchor = () let h = unsafe Pointer.borrow<(), Handle>(&anchor, p) let keys = h.tickets let fromJS = h.ticketCallback let owner = h.owner let id = h.id drop h
-  if fromJS { return unsafe ticketFromJS(owner, id, name, iv, cipher, mac, encrypt) }
+  if fromJS { return unsafe ticketFromJS<C>(owner, id, name, iv, cipher, mac, encrypt) }
   if Pointer.isNull<u8>(keys) { return -1 }
   let mut i: u64 = 0
   while i < 16 {
@@ -470,14 +471,14 @@ export "C" fn silkTlsTicket(session: ?*mut u8, name: ?*mut u8, iv: ?*mut u8, cip
 // SecureContext::TicketKeyCallback: JS's onticketkeycallback(name, iv, enc) answers with its
 // result, the HMAC and AES keys and, when encrypting, the key name and IV; the answer comes
 // back as a 4-byte result, a 2-byte HMAC key length, the HMAC key, the AES key, name and IV.
-unsafe fn ticketFromJS(owner: *mut State, id: i32, name: ?*mut u8, iv: ?*mut u8, cipher: ?*mut u8, mac: ?*mut u8, encrypt: i32) -> i32 {
+unsafe fn ticketFromJS<C: Composition>(owner: *mut State, id: i32, name: ?*mut u8, iv: ?*mut u8, cipher: ?*mut u8, mac: ?*mut u8, encrypt: i32) -> i32 {
   let input = unsafe crypto.calloc(1, 32) if Pointer.isNull<u8>(input) { return -1 }
   let mut i: u64 = 0
   while i < 16 { unsafe Pointer.put<u8>(unsafe buffers.dataAt(input, i), unsafe Pointer.read<u8>(unsafe buffers.dataAt(name, i))) unsafe Pointer.put<u8>(unsafe buffers.dataAt(input, 16 + i), unsafe Pointer.read<u8>(unsafe buffers.dataAt(iv, i))) i = i + 1 }
   let room: usize = 4 + 2 + 1024 + 48
   let answer = unsafe crypto.calloc(1, room) if Pointer.isNull<u8>(answer) { unsafe crypto.free(input) return -1 }
   let mut enc: u32 = 0 if encrypt != 0 { enc = 1 }
-  let n = unsafe callJS(owner, 3, id, input, true, 32, enc, 0, answer, room)
+  let n = unsafe callJS<C>(owner, 3, id, input, true, 32, enc, 0, answer, room)
   unsafe crypto.free(input)
   let mut result: i32 = -1
   if n >= 6 {
@@ -537,7 +538,7 @@ unsafe fn loadCertificates(ctx: ?*mut u8, data: ?*mut u8, n: usize, trust: bool)
   }
   let _ignored = unsafe crypto.BIO_free(bio) if ok && count > 0 { unsafe crypto.ERR_clear_error() } return ok && count > 0
 }
-unsafe fn execute(state: *mut State, name: &[u8], c: &mut Call) -> bool {
+unsafe fn execute<C: Composition>(state: *mut State, name: &[u8], c: &mut Call) -> bool {
   unsafe crypto.ERR_clear_error() c.kind = 1
   if c.lengths[1] > 2147483647 && (equal(name, b"ca") || equal(name, b"clientCa") || equal(name, b"cert") || equal(name, b"crl") || equal(name, b"dhparam") || equal(name, b"key") || equal(name, b"pfx") || equal(name, b"feed") || equal(name, b"write")) { return false }
   if c.lengths[1] > 4294967295 && (equal(name, b"sessionId") || equal(name, b"contextALPN") || equal(name, b"setALPN") || equal(name, b"serverALPN")) { return false }
@@ -649,7 +650,7 @@ unsafe fn execute(state: *mut State, name: &[u8], c: &mut Call) -> bool {
     if equal(name, b"enableTicketKeyCallback") {
       let h2 = unsafe Pointer.borrowMut<(), Handle>(&mut anchor, hp) h2.ticketCallback = true drop h2
       if unsafe ssl.SSL_CTX_set_ex_data(ptr, 0, unsafe raw(hp)) != 1 { return false }
-      let callback: ssl.TicketCallback = silkTlsTicket
+      let callback: ssl.TicketCallback = silkTlsTicket<C>
       return unsafe ssl.SSL_CTX_callback_ctrl(ptr, 72, callback) == 1
     }
     if equal(name, b"ticketKeys") {
@@ -657,7 +658,7 @@ unsafe fn execute(state: *mut State, name: &[u8], c: &mut Call) -> bool {
       let h2 = unsafe Pointer.borrowMut<(), Handle>(&mut anchor, hp)
       unsafe crypto.free(h2.tickets) h2.tickets = c.data[1] c.data[1] = nil() drop h2
       if unsafe ssl.SSL_CTX_set_ex_data(ptr, 0, unsafe raw(hp)) != 1 { return false }
-      let callback: ssl.TicketCallback = silkTlsTicket
+      let callback: ssl.TicketCallback = silkTlsTicket<C>
       return unsafe ssl.SSL_CTX_callback_ctrl(ptr, 72, callback) == 1
     }
     if equal(name, b"cipherNames") {
@@ -871,8 +872,8 @@ unsafe fn execute(state: *mut State, name: &[u8], c: &mut Call) -> bool {
   // OCSP stapling: a client asks with status_request and reads the staple; a server
   // sees the request and keeps JS's answer for silkTlsStatus.
   if equal(name, b"enablePsk") {
-    if server { let callback: ssl.PskServerCallback = silkTlsPskServer unsafe ssl.SSL_set_psk_server_callback(ptr, callback) }
-    else { let callback: ssl.PskClientCallback = silkTlsPskClient unsafe ssl.SSL_set_psk_client_callback(ptr, callback) }
+    if server { let callback: ssl.PskServerCallback = (silkTlsPskServer<C>) unsafe ssl.SSL_set_psk_server_callback(ptr, callback) }
+    else { let callback: ssl.PskClientCallback = (silkTlsPskClient<C>) unsafe ssl.SSL_set_psk_client_callback(ptr, callback) }
     return true
   }
   if equal(name, b"pskHint") { return unsafe ssl.SSL_use_psk_identity_hint(ptr, c.data[1]) == 1 }
@@ -990,7 +991,7 @@ unsafe effect fn argument<'m, S: EngineServices>(engine: &mut Engine<'m, S>, con
   if backing.physicalCapacity == 0 { unsafe copyRaw(c.data[i], backing.data, c.lengths[i]) return () }
   let mut n: u64 = 0 while n < backing.byteLength { unsafe Pointer.put<u8>(unsafe buffers.dataAt(c.data[i], n), u64.toU8(unsafe buffers.loadScalar(backing, n, 0))) n = n + 1 }
 }
-unsafe effect fn dispatchCall<'m, S: EngineServices>(engine: &mut Engine<'m, S>, context: *mut HeapHeader, state: *mut State, argv: &FrameSlots, c: &mut Call) -> ValueBits ! OutOfMemoryError | JsException ? &mut Allocator {
+unsafe effect fn dispatchCall<'m, C: Composition>(engine: &mut Engine<'m, host.Services<C>>, context: *mut HeapHeader, state: *mut State, argv: &FrameSlots, c: &mut Call) -> ValueBits ! OutOfMemoryError | JsException ? &mut Allocator {
   let name = run unsafe host.text(&mut engine, context, unsafe common.argument(argv, 0)) let args = unsafe common.argument(argv, 1) let mut i: u32 = 0
   // The callback OpenSSL callbacks call through callJS; the state keeps it.
   if equal(name.asSlice(), b"setCallback") {
@@ -1003,7 +1004,7 @@ unsafe effect fn dispatchCall<'m, S: EngineServices>(engine: &mut Engine<'m, S>,
     let result = run Effect.result(unsafe argument(&mut engine, context, &mut c, u32.toUsize(i), value)) unsafe owners.release(&mut engine, context, value)
     match move result { Result<(), OutOfMemoryError | JsException>.Success { .. } => () Result<(), OutOfMemoryError | JsException>.Failure { error } => { fail move error } } i = i + 1
   }
-  let ok = unsafe execute(state, name.asSlice(), &mut c)
+  let ok = unsafe execute<C>(state, name.asSlice(), &mut c)
   // A JS callback that threw inside OpenSSL leaves its exception for the op's caller.
   if unsafe exceptions.has(unsafe runtime.contextRuntime(context)) { unsafe crypto.ERR_clear_error() fail JsException {} }
   if !ok {
@@ -1019,11 +1020,11 @@ unsafe effect fn dispatchCall<'m, S: EngineServices>(engine: &mut Engine<'m, S>,
   if c.kind == 2 { let mut text = List<u8>.make() let mut n: usize = 0 while n < c.length { run text.append(unsafe Pointer.read<u8>(unsafe buffers.dataAt(c.output, usize.toU64(n)))) n = n + 1 } return run unsafe host.string(&mut engine, context, text.asSlice()) }
   let memory = engine.memory return run unsafe buffers.newArrayBufferCopy(&mut engine, memory, unsafe lendRealm(&context, context), c.output, usize.toU64(c.length))
 }
-pub unsafe effect fn dispatch<'m>(engine: &mut Engine<'m, host.Services>, context: *mut HeapHeader, state: *mut State, argc: i32, argv: &FrameSlots) -> ValueBits ! OutOfMemoryError | JsException ? &mut Allocator {
+pub unsafe effect fn dispatch<'m, C: Composition>(engine: &mut Engine<'m, host.Services<C>>, context: *mut HeapHeader, state: *mut State, argc: i32, argv: &FrameSlots) -> ValueBits ! OutOfMemoryError | JsException ? &mut Allocator {
   let mut c = Call { data: [nil(); 6], lengths: [0; 6], numbers: [0; 6], output: nil(), length: 0, number: 0, kind: 0 }
   let mut anchor = () let s = unsafe Pointer.borrowMut<(), State>(&mut anchor, state)
   let previousEngine = s.engine let previousContext = s.context
-  s.engine = unsafe raw(Pointer.fromMutRef<Engine<'m, host.Services>>(&mut engine.*)) s.context = context drop s
+  s.engine = unsafe raw(Pointer.fromMutRef<Engine<'m, host.Services<C>>>(&mut engine.*)) s.context = context drop s
   let result = run Effect.result(unsafe dispatchCall(&mut engine, context, state, argv, &mut c))
   let restored = unsafe Pointer.borrowMut<(), State>(&mut anchor, state) restored.engine = previousEngine restored.context = previousContext drop restored
   let mut i: usize = 0 while i < 6 { if !Pointer.isNull<u8>(c.data[i]) { unsafe crypto.OPENSSL_cleanse(c.data[i], c.lengths[i]) } unsafe crypto.free(c.data[i]) i = i + 1 } unsafe crypto.free(c.output)
@@ -1125,9 +1126,6 @@ pub fn keepExports() -> () {
   let _silkTlsAlpn: extern "C" fn(?*mut u8, *mut ?*mut u8, *mut u8, ?*mut u8, u32, ?*mut u8) -> i32 = silkTlsAlpn
   let _silkTlsClientHello: extern "C" fn(?*mut u8, *mut i32, ?*mut u8) -> i32 = silkTlsClientHello
   let _silkTlsStatus: extern "C" fn(?*mut u8, ?*mut u8, ?*mut u8, ?*mut u8, ?*mut u8, i32) -> i32 = silkTlsStatus
-  let _silkTlsPskServer: extern "C" fn(?*mut u8, ?*mut u8, ?*mut u8, u32) -> u32 = silkTlsPskServer
-  let _silkTlsPskClient: extern "C" fn(?*mut u8, ?*mut u8, ?*mut u8, u32, ?*mut u8, u32) -> u32 = silkTlsPskClient
   let _silkTlsInfo: extern "C" fn(?*mut u8, i32, i32) -> () = silkTlsInfo
   let _silkTlsTrace: extern "C" fn(i32, i32, i32, ?*mut u8, usize, ?*mut u8, ?*mut u8) -> () = silkTlsTrace
-  let _silkTlsTicket: extern "C" fn(?*mut u8, ?*mut u8, ?*mut u8, ?*mut u8, ?*mut u8, i32) -> i32 = silkTlsTicket
 }

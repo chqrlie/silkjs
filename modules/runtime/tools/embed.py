@@ -87,6 +87,10 @@ def cache_build_identity(debug, environment=None):
         paths.update((root / 'tools').glob('*.py'))
         for path in sorted(paths):
             include(namespace + '/' + path.relative_to(root).as_posix(), path.read_bytes())
+    # The runtime's packages beside the core: WebAssembly and the executable.
+    for package in ('wamr', 'cli'):
+        for path in sorted((ROOT / package / 'src').rglob('*.silk')):
+            include('runtime/' + package + '/' + path.relative_to(ROOT / package).as_posix(), path.read_bytes())
     # The runtime's C over WAMR moved to its own package; the identity still covers it.
     glue = ROOT.parent / 'native/wamr/glue'
     for path in sorted(glue.glob('*')):

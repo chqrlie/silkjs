@@ -121,10 +121,8 @@ unsafe fn externalString(env: ?*mut u8, data: ?*mut u8, length: usize, encoding:
   }
   return OK
 }
-@callbacks("finalize")
-pub unsafe export "C" fn node_api_create_external_string_latin1(env: ?*mut u8, data: ?*mut u8, length: usize, finalize: Finalize, hint: ?*mut u8, result: ?*mut ?*mut u8, copied: ?*mut bool) -> i32 { return unsafe externalString(env, data, length, 1, finalize, hint, result, copied) }
-@callbacks("finalize")
-pub unsafe export "C" fn node_api_create_external_string_utf16(env: ?*mut u8, data: ?*mut u8, length: usize, finalize: Finalize, hint: ?*mut u8, result: ?*mut ?*mut u8, copied: ?*mut bool) -> i32 { return unsafe externalString(env, data, length, 2, finalize, hint, result, copied) }
+pub unsafe fn node_api_create_external_string_latin1(env: ?*mut u8, data: ?*mut u8, length: usize, finalize: Finalize, hint: ?*mut u8, result: ?*mut ?*mut u8, copied: ?*mut bool) -> i32 { return unsafe externalString(env, data, length, 1, finalize, hint, result, copied) }
+pub unsafe fn node_api_create_external_string_utf16(env: ?*mut u8, data: ?*mut u8, length: usize, finalize: Finalize, hint: ?*mut u8, result: ?*mut ?*mut u8, copied: ?*mut bool) -> i32 { return unsafe externalString(env, data, length, 2, finalize, hint, result, copied) }
 unsafe fn readString(env: ?*mut u8, value: ?*mut u8, buffer: ?*mut u8, size: usize, result: ?*mut usize, encoding: i32) -> i32 {
   if !unsafe owner(env) { return INVALID_ARG }
   if Pointer.isNull<u8>(buffer) && Pointer.isNull<usize>(result) { return unsafe status(env, INVALID_ARG) }
@@ -477,8 +475,7 @@ pub export "C" fn napi_define_properties(env: ?*mut u8, target: ?*mut u8, count:
   }
   return OK
 }
-@deferredCallbacks("constructor")
-pub unsafe export "C" fn napi_define_class(env: ?*mut u8, name: ?*const u8, length: usize, constructor: Callback, data: ?*mut u8, count: usize, properties: ?*const PropertyDescriptor, result: ?*mut ?*mut u8) -> i32 {
+pub unsafe fn napi_define_class(env: ?*mut u8, name: ?*const u8, length: usize, constructor: Callback, data: ?*mut u8, count: usize, properties: ?*const PropertyDescriptor, result: ?*mut ?*mut u8) -> i32 {
   let mut code = unsafe checked(env)
   if code != OK { return code }
   if Intrinsic.pointerIsNull<?*const u8>(name) || Intrinsic.pointerIsNull<Callback>(constructor) || Pointer.isNull<?*mut u8>(result) || (count != 0 && Intrinsic.pointerIsNull<?*const PropertyDescriptor>(properties)) { return unsafe status(env, INVALID_ARG) }
@@ -560,8 +557,7 @@ unsafe fn registerFinalizer(env: ?*mut u8, data: ?*mut u8, finalize: Finalize, h
   if code != OK { unsafe napi.cancelFinalizer(env, made) }
   return code
 }
-@deferredCallbacks("finalize")
-pub unsafe export "C" fn napi_wrap(env: ?*mut u8, target: ?*mut u8, data: ?*mut u8, finalize: Finalize, hint: ?*mut u8, result: ?*mut ?*mut u8) -> i32 {
+pub unsafe fn napi_wrap(env: ?*mut u8, target: ?*mut u8, data: ?*mut u8, finalize: Finalize, hint: ?*mut u8, result: ?*mut ?*mut u8) -> i32 {
   let mut code = unsafe checked(env) if code != OK { return code }
   code = unsafe object(env, target) if code != OK { return code }
   if !Pointer.isNull<?*mut u8>(result) && Intrinsic.pointerIsNull<Finalize>(finalize) { return unsafe status(env, INVALID_ARG) }
@@ -592,8 +588,7 @@ unsafe fn unwrap(env: ?*mut u8, target: ?*mut u8, result: ?*mut ?*mut u8, remove
 }
 pub export "C" fn napi_unwrap(env: ?*mut u8, target: ?*mut u8, result: ?*mut ?*mut u8) -> i32 { return unsafe unwrap(env, target, result, false) }
 pub export "C" fn napi_remove_wrap(env: ?*mut u8, target: ?*mut u8, result: ?*mut ?*mut u8) -> i32 { return unsafe unwrap(env, target, result, true) }
-@deferredCallbacks("finalize")
-pub unsafe export "C" fn napi_create_external(env: ?*mut u8, data: ?*mut u8, finalize: Finalize, hint: ?*mut u8, result: ?*mut ?*mut u8) -> i32 {
+pub unsafe fn napi_create_external(env: ?*mut u8, data: ?*mut u8, finalize: Finalize, hint: ?*mut u8, result: ?*mut ?*mut u8) -> i32 {
   let mut code = unsafe checked(env) if code != OK { return code }
   if Pointer.isNull<?*mut u8>(result) { return unsafe status(env, INVALID_ARG) }
   let mut id: usize = 0
@@ -614,8 +609,7 @@ pub export "C" fn napi_get_value_external(env: ?*mut u8, value: ?*mut u8, result
   unsafe napi.store<?*mut u8>(result, unsafe napi.finalizerData(env, f64.toUsize(id)))
   return OK
 }
-@deferredCallbacks("finalize")
-pub unsafe export "C" fn napi_add_finalizer(env: ?*mut u8, target: ?*mut u8, data: ?*mut u8, finalize: Finalize, hint: ?*mut u8, result: ?*mut ?*mut u8) -> i32 {
+pub unsafe fn napi_add_finalizer(env: ?*mut u8, target: ?*mut u8, data: ?*mut u8, finalize: Finalize, hint: ?*mut u8, result: ?*mut ?*mut u8) -> i32 {
   let mut code = unsafe checked(env) if code != OK { return code }
   if Intrinsic.pointerIsNull<Finalize>(finalize) { return unsafe status(env, INVALID_ARG) }
   code = unsafe object(env, target) if code != OK { return code }
@@ -675,8 +669,7 @@ pub export "C" fn napi_create_arraybuffer(env: ?*mut u8, length: usize, data: ?*
   if !Pointer.isNull<?*mut u8>(data) { unsafe napi.store<?*mut u8>(data, p.data) }
   return OK
 }
-@deferredCallbacks("finalize")
-pub unsafe export "C" fn napi_create_external_arraybuffer(env: ?*mut u8, data: ?*mut u8, length: usize, finalize: Finalize, hint: ?*mut u8, result: ?*mut ?*mut u8) -> i32 {
+pub unsafe fn napi_create_external_arraybuffer(env: ?*mut u8, data: ?*mut u8, length: usize, finalize: Finalize, hint: ?*mut u8, result: ?*mut ?*mut u8) -> i32 {
   let code = unsafe checked(env) if code != OK { return code }
   if Pointer.isNull<?*mut u8>(result) || (Pointer.isNull<u8>(data) && length != 0) { return unsafe status(env, INVALID_ARG) }
   let id = unsafe napi.finalizer(env, data, finalize, hint)
@@ -805,8 +798,7 @@ pub export "C" fn napi_create_buffer(env: ?*mut u8, length: usize, data: ?*mut ?
   code = unsafe napi_create_arraybuffer(env, length, data, Pointer.fromMutRef<?*mut u8>(&mut backing)) if code != OK { return code }
   return unsafe node_api_create_buffer_from_arraybuffer(env, backing, 0, length, result)
 }
-@deferredCallbacks("finalize")
-pub unsafe export "C" fn napi_create_external_buffer(env: ?*mut u8, length: usize, data: ?*mut u8, finalize: Finalize, hint: ?*mut u8, result: ?*mut ?*mut u8) -> i32 {
+pub unsafe fn napi_create_external_buffer(env: ?*mut u8, length: usize, data: ?*mut u8, finalize: Finalize, hint: ?*mut u8, result: ?*mut ?*mut u8) -> i32 {
   let mut code = unsafe checked(env) if code != OK { return code }
   if Pointer.isNull<?*mut u8>(result) { return unsafe status(env, INVALID_ARG) }
   let mut backing = nil()

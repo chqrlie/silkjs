@@ -2,7 +2,7 @@
 //! No native callbacks or JS reentry occur inside a syscall. The current branded
 //! memory backing is supplied afresh by the JS binding on every invocation.
 import silk.mem.allocator { Allocator, OutOfMemoryError }
-import ext.diagnostics_fatal { RuntimeHeap }
+import silkjsruntime.ext.diagnostics_fatal { RuntimeHeap }
 import silkjs.js_owned_value { lendFor }
 import silkjs.js_realm { lendRealm }
 import silk.core.effect { Effect }
@@ -25,9 +25,9 @@ import silkjs.js_core_types { FrameSlots, NativeErrorKind }
 import silkjs.js_exceptions { JsException }
 import silkjs.js_coercion_host { CoercionHooks }
 import silkjs.js_string_types { StringLengthError }
-import libs.core.owners { Scope }
-import libs.core.owners as owners
-import libs.core.common as common
+import silkjsruntime.libs.core.owners { Scope }
+import silkjsruntime.libs.core.owners as owners
+import silkjsruntime.libs.core.common as common
 import silkjs.js_std_support as text
 import silkjs.js_buffer_storage as buffers
 import silkjs.js_bigint_coercions as bigint
@@ -35,7 +35,8 @@ import silkjs.js_proxy_core as core
 import silkjs.js_errors as errors
 import silkjs.js_runtime as runtime
 import silkjs.js_exceptions as exceptions
-import libs.core.host as host
+import silkjsruntime.libs.core.capabilities { Composition }
+import silkjsruntime.libs.core.host as host
 import ext.wasi_abi as c
 
 pub struct State { first: ?*mut Handle, next: i32 }
@@ -81,7 +82,7 @@ unsafe fn dispose(state: *mut State, id: i32) -> () {
     link = Pointer.fromMutRef<?*mut Handle>(&mut h.next) drop h
   }
 }
-pub unsafe fn close<'m>(engine: &mut Engine<'m, host.Services>, context: *mut HeapHeader, state: *mut State) -> () {
+pub unsafe fn close<'m, C: Composition>(engine: &mut Engine<'m, host.Services<C>>, context: *mut HeapHeader, state: *mut State) -> () {
   let a = ()
   while true {
     let s = unsafe Pointer.borrow<(), State>(&a, state) let p = s.first drop s
@@ -229,7 +230,7 @@ unsafe fn publishVectors(call: &mut Call, vectors: ?*mut u8, count: u32, written
     unsafe publish(&mut call, v.data, size) left = left - size i = i + 1
   }
 }
-unsafe effect fn integer<'m>(engine: &mut Engine<'m, host.Services>, context: *mut HeapHeader, value: ValueBits) -> u64 ! OutOfMemoryError | JsException ? &mut Allocator {
+unsafe effect fn integer<'m, C: Composition>(engine: &mut Engine<'m, host.Services<C>>, context: *mut HeapHeader, value: ValueBits) -> u64 ! OutOfMemoryError | JsException ? &mut Allocator {
   if !value.isBigInt() { return u32.toU64(number(value)) }
   let mut n: i64 = 0 let outcome = run Effect.result(bigint.toBigInt64(&mut engine, unsafe lendRealm(&context, context), &mut n, unsafe lendFor(value)))
   match move outcome {
@@ -238,7 +239,7 @@ unsafe effect fn integer<'m>(engine: &mut Engine<'m, host.Services>, context: *m
   }
   return i64.wrappingToU64(n)
 }
-unsafe effect fn strings<'m>(engine: &mut Engine<'m, host.Services>, context: *mut HeapHeader, arena: &mut Arena, values: ValueBits, count: u32) -> ?*mut u8 ! OutOfMemoryError | JsException ? &mut Allocator {
+unsafe effect fn strings<'m, C: Composition>(engine: &mut Engine<'m, host.Services<C>>, context: *mut HeapHeader, arena: &mut Arena, values: ValueBits, count: u32) -> ?*mut u8 ! OutOfMemoryError | JsException ? &mut Allocator {
   let output = unsafe scratch(&mut arena, (u32.toUsize(count) + 1) * Layout.of<?*mut u8>().bytes)
   if arena.error != 0 { fail OutOfMemoryError {} }
   let mut i: u32 = 0
@@ -258,7 +259,7 @@ unsafe effect fn strings<'m>(engine: &mut Engine<'m, host.Services>, context: *m
   }
   return output
 }
-unsafe effect fn initError<'m>(engine: &mut Engine<'m, host.Services>, context: *mut HeapHeader, status: u16, scope: &mut Scope) -> ValueBits ! OutOfMemoryError | JsException ? &mut Allocator {
+unsafe effect fn initError<'m, C: Composition>(engine: &mut Engine<'m, host.Services<C>>, context: *mut HeapHeader, status: u16, scope: &mut Scope) -> ValueBits ! OutOfMemoryError | JsException ? &mut Allocator {
   let memory = engine.memory scope.values[10] = run errors.newError(&mut engine, memory, unsafe lendRealm(&context, context))
   let code = unsafe c.uvwasi_embedder_err_code_to_string(status)
   scope.values[11] = (run text.cstring(&mut engine, unsafe lendRealm(&context, context), unsafe Intrinsic.pointerRequalify<?*const u8, *const u8>(code))).intoBits()
@@ -271,9 +272,9 @@ unsafe effect fn initError<'m>(engine: &mut Engine<'m, host.Services>, context: 
   while i < suffix.length { run messageBytes.append(suffix[i]) i = i + 1 }
   let message = run text.string(&mut engine, unsafe lendRealm(&context, context), messageBytes.asSlice())
   run unsafe common.define(&mut engine, context, scope.values[10], b"message", message.intoBits(), 7)
-  return run unsafe exceptions.throwValue<ValueBits, Engine<'m, host.Services>>(&mut engine, unsafe runtime.contextRuntime(context), scope.take(10))
+  return run unsafe exceptions.throwValue<ValueBits, Engine<'m, host.Services<C>>>(&mut engine, unsafe runtime.contextRuntime(context), scope.take(10))
 }
-unsafe effect fn create<'m>(engine: &mut Engine<'m, host.Services>, context: *mut HeapHeader, state: *mut State, arena: &mut Arena, scope: &mut Scope) -> ValueBits ! OutOfMemoryError | JsException ? &mut Allocator {
+unsafe effect fn create<'m, C: Composition>(engine: &mut Engine<'m, host.Services<C>>, context: *mut HeapHeader, state: *mut State, arena: &mut Arena, scope: &mut Scope) -> ValueBits ! OutOfMemoryError | JsException ? &mut Allocator {
   let argv = run unsafe strings(&mut engine, context, &mut arena, scope.values[1], number(scope.values[0]))
   let envp = run unsafe strings(&mut engine, context, &mut arena, scope.values[3], number(scope.values[2]))
   let preopens = run unsafe strings(&mut engine, context, &mut arena, scope.values[5], number(scope.values[4]) * 2)
@@ -678,7 +679,7 @@ unsafe fn syscall(uv: *mut c.Uvwasi, call: &mut Call, op: u32, a: &[u64; 9]) -> 
   return 28
 }
 
-unsafe effect fn dispatchBody<'m>(engine: &mut Engine<'m, host.Services>, context: *mut HeapHeader, state: *mut State, argv: &FrameSlots, scope: &mut Scope) -> ValueBits ! OutOfMemoryError | JsException ? &mut Allocator {
+unsafe effect fn dispatchBody<'m, C: Composition>(engine: &mut Engine<'m, host.Services<C>>, context: *mut HeapHeader, state: *mut State, argv: &FrameSlots, scope: &mut Scope) -> ValueBits ! OutOfMemoryError | JsException ? &mut Allocator {
   let op = number(unsafe common.argument(argv, 0))
   let id = u32.wrappingToI32(number(unsafe common.argument(argv, 1)))
   if op == 1 { unsafe dispose(state, id) return ValueBits.Undefined }
@@ -707,7 +708,7 @@ unsafe effect fn dispatchBody<'m>(engine: &mut Engine<'m, host.Services>, contex
   unsafe clear(&mut call.arena)
   return ValueBits.Int { value: u16.toI32(status) }
 }
-pub unsafe effect fn dispatch<'m>(engine: &mut Engine<'m, host.Services>, context: *mut HeapHeader, state: *mut State, id: u32, argc: i32, argv: &FrameSlots) -> ValueBits ! OutOfMemoryError | JsException ? &mut Allocator {
+pub unsafe effect fn dispatch<'m, C: Composition>(engine: &mut Engine<'m, host.Services<C>>, context: *mut HeapHeader, state: *mut State, id: u32, argc: i32, argv: &FrameSlots) -> ValueBits ! OutOfMemoryError | JsException ? &mut Allocator {
   let mut scope = Scope.make()
   let outcome = run Effect.result(unsafe dispatchBody(&mut engine, context, state, argv, &mut scope))
   unsafe owners.cleanup(&mut engine, context, move scope)

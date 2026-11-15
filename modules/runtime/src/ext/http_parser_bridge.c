@@ -3,14 +3,16 @@
 #include <stdlib.h>
 #include "llhttp.h"
 
+/* The runtime's event callback, handed over at creation: it is instantiated for the runtime's
+ * capabilities, so it has no symbol to call by name. */
+typedef int (*SilkHTTPParserEvent)(void* owner, int event, const unsigned char* data,
+                                   size_t length, const unsigned char* position);
+
 typedef struct {
   llhttp_t parser;
   const unsigned char* position;
+  SilkHTTPParserEvent event;
 } SilkHTTPParser;
-
-extern int silkHTTPParserEvent(void* owner, int event,
-                               const unsigned char* data, size_t length,
-                               const unsigned char* position);
 
 /* api.c alone is compiled with these internal symbols renamed. The wrappers
  * retain llhttp's exact callback cursor; no framing code or vendor file changes. */
@@ -29,14 +31,14 @@ POSITION(on_chunk_complete)
 
 #define EVENT(name, number) \
   static int name(llhttp_t* parser) { \
-    return silkHTTPParserEvent(parser->data, number, NULL, 0, \
+    return ((SilkHTTPParser*) parser)->event(parser->data, number, NULL, 0, \
                                ((SilkHTTPParser*) parser)->position); \
   }
 #define DATA(name, number) \
   static int name(llhttp_t* parser, const char* data, size_t length) { \
     const unsigned char* end = (const unsigned char*) data + length; \
     ((SilkHTTPParser*) parser)->position = end; \
-    return silkHTTPParserEvent(parser->data, number, \
+    return ((SilkHTTPParser*) parser)->event(parser->data, number, \
                                (const unsigned char*) data, length, end); \
   }
 EVENT(message_begin, 0)
@@ -69,11 +71,12 @@ static const llhttp_settings_t settings = {
   .on_chunk_extension_value = chunk_extension_value,
 };
 
-void* silk_http_parser_new(void* owner) {
+void* silk_http_parser_new(void* owner, SilkHTTPParserEvent event) {
   llhttp_t* parser = calloc(1, sizeof(SilkHTTPParser));
   if (parser != NULL) {
     llhttp_init(parser, HTTP_REQUEST, &settings);
     parser->data = owner;
+    ((SilkHTTPParser*) parser)->event = event;
   }
   return parser;
 }

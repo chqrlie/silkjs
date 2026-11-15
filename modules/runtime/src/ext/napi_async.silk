@@ -49,11 +49,11 @@ unsafe extern "C" fn calloc(count: usize, size: usize) -> ?*mut u8
 unsafe extern "C" fn free(data: ?*mut u8) -> ()
 
 type Execute = extern "C" fn(?*mut u8, ?*mut u8) -> ()
-type Complete = ?extern "C" fn(?*mut u8, i32, ?*mut u8) -> ()
-type Finalize = ?extern "C" fn(?*mut u8, ?*mut u8, ?*mut u8) -> ()
-type CallJs = ?extern "C" fn(?*mut u8, ?*mut u8, ?*mut u8, ?*mut u8) -> ()
-type CleanupHook = ?extern "C" fn(?*mut u8) -> ()
-type AsyncCleanupHook = ?extern "C" fn(?*mut u8, ?*mut u8) -> ()
+pub type Complete = ?extern "C" fn(?*mut u8, i32, ?*mut u8) -> ()
+pub type Finalize = ?extern "C" fn(?*mut u8, ?*mut u8, ?*mut u8) -> ()
+pub type CallJs = ?extern "C" fn(?*mut u8, ?*mut u8, ?*mut u8, ?*mut u8) -> ()
+pub type CleanupHook = ?extern "C" fn(?*mut u8) -> ()
+pub type AsyncCleanupHook = ?extern "C" fn(?*mut u8, ?*mut u8) -> ()
 
 /// An async context: a JavaScript async resource that callback scopes enter.
 struct Context { env: *mut u8, resource: ?*mut u8, next: ?*mut Context, scopes: usize, destroyed: bool }
@@ -67,7 +67,7 @@ const WORK_COMPLETE: i32 = 4
 /// What a blocking thread reads while the work runs. The owner never writes it while it is queued.
 struct Task { job: pool.Job, execute: Execute, env: *mut u8, data: ?*mut u8, work: *mut Work }
 /// Async work. Only the owner thread reads or writes it.
-struct Work {
+pub struct Work {
   env: *mut u8, state: *mut Async, task: *mut Task, context: *mut Context, complete: Complete, data: ?*mut u8,
   next: ?*mut Work, finished: ?*mut Work, phase: i32, status: i32, deleteRequested: bool
 }
@@ -78,7 +78,7 @@ struct Queue { head: ?*mut Item, tail: ?*mut Item, count: usize, threads: usize,
 impl Transferable for Queue {}
 /// A thread-safe function. Producers on any thread use `queue`, `space` and `waker`; every other
 /// field belongs to the owner thread.
-struct Function {
+pub struct Function {
   env: *mut u8, state: *mut Async, queue: Mutex<Queue>, space: Condition, waker: Waker, maximum: usize,
   callback: ?*mut u8, resource: *mut Context, context: ?*mut u8, finalizeData: ?*mut u8, finalize: Finalize, call: CallJs,
   next: ?*mut Function, referenced: bool
@@ -86,7 +86,7 @@ struct Function {
 
 /// A cleanup hook. Removed hooks stay allocated until dispose, since an async hook may be removed
 /// from a native thread while its owner callback runs.
-struct Hook { sync: CleanupHook, asynchronous: AsyncCleanupHook, data: ?*mut u8, removed: bool, started: bool, next: ?*mut Hook, state: *mut Async }
+pub struct Hook { sync: CleanupHook, asynchronous: AsyncCleanupHook, data: ?*mut u8, removed: bool, started: bool, next: ?*mut Hook, state: *mut Async }
 struct Hooks { first: ?*mut Hook, pending: usize }
 impl Transferable for Hooks {}
 
@@ -356,9 +356,7 @@ unsafe fn workOf(env: ?*mut u8, work: ?*mut Work) -> bool {
   if Pointer.isNull<Work>(work) { return false }
   let a = () let entry = unsafe Pointer.borrow<(), Work>(&a, unsafe nn(work)) return Pointer.address(entry.env) == Pointer.address(unsafe nn(env))
 }
-@threadCallbacks("execute")
-@deferredCallbacks("callback")
-unsafe export "C" fn napi_create_async_work(env: ?*mut u8, resource: ?*mut u8, name: ?*mut u8, execute: ?extern "C" fn(?*mut u8, ?*mut u8) -> (), callback: Complete, data: ?*mut u8, result: ?*mut ?*mut Work) -> i32 {
+pub unsafe fn napi_create_async_work(env: ?*mut u8, resource: ?*mut u8, name: ?*mut u8, execute: ?extern "C" fn(?*mut u8, ?*mut u8) -> (), callback: Complete, data: ?*mut u8, result: ?*mut ?*mut Work) -> i32 {
   let code = unsafe napi.check(env)
   if code != OK { return code }
   if Intrinsic.pointerIsNull<?extern "C" fn(?*mut u8, ?*mut u8) -> ()>(execute) || Pointer.isNull<?*mut Work>(result) || Pointer.isNull<u8>(name) { return unsafe status(env, INVALID_ARG) }
@@ -436,8 +434,7 @@ unsafe fn functionOf(env: ?*mut u8, function: ?*mut Function) -> bool {
 unsafe fn holdLoop(state: *mut Async, held: bool) -> () {
   let a = () let s = unsafe Pointer.borrow<(), Async>(&a, state) let io = s.io drop s if held { unsafe loops.hold(io) } else { unsafe loops.unhold(io) }
 }
-@deferredCallbacks("finalize", "call")
-unsafe export "C" fn napi_create_threadsafe_function(env: ?*mut u8, callback: ?*mut u8, resource: ?*mut u8, name: ?*mut u8, maximum: usize, threads: usize, finalizeData: ?*mut u8, finalize: Finalize, context: ?*mut u8, call: CallJs, result: ?*mut ?*mut Function) -> i32 {
+pub unsafe fn napi_create_threadsafe_function(env: ?*mut u8, callback: ?*mut u8, resource: ?*mut u8, name: ?*mut u8, maximum: usize, threads: usize, finalizeData: ?*mut u8, finalize: Finalize, context: ?*mut u8, call: CallJs, result: ?*mut ?*mut Function) -> i32 {
   let mut code = unsafe napi.check(env)
   if code != OK { return code }
   if (Pointer.isNull<u8>(callback) && Intrinsic.pointerIsNull<CallJs>(call)) || threads == 0 || Pointer.isNull<u8>(name) || Pointer.isNull<?*mut Function>(result) { return unsafe status(env, INVALID_ARG) }
@@ -680,8 +677,7 @@ unsafe fn dispatchAll(state: *mut Async) -> bool {
 
 // Cleanup hooks.
 
-@deferredCallbacks("callback")
-unsafe export "C" fn napi_add_env_cleanup_hook(env: ?*mut u8, callback: CleanupHook, data: ?*mut u8) -> i32 {
+pub unsafe fn napi_add_env_cleanup_hook(env: ?*mut u8, callback: CleanupHook, data: ?*mut u8) -> i32 {
   if !unsafe owner(env) { return INVALID_ARG }
   if Intrinsic.pointerIsNull<CleanupHook>(callback) { return unsafe status(env, INVALID_ARG) }
   if unsafe closing(env) { return unsafe status(env, CLOSING) }
@@ -702,8 +698,7 @@ unsafe export "C" fn napi_add_env_cleanup_hook(env: ?*mut u8, callback: CleanupH
   hooks.first = hook
   return unsafe status(env, OK)
 }
-@callbacks("callback")
-unsafe export "C" fn napi_remove_env_cleanup_hook(env: ?*mut u8, callback: CleanupHook, data: ?*mut u8) -> i32 {
+pub unsafe fn napi_remove_env_cleanup_hook(env: ?*mut u8, callback: CleanupHook, data: ?*mut u8) -> i32 {
   if !unsafe owner(env) { return INVALID_ARG }
   if Intrinsic.pointerIsNull<CleanupHook>(callback) { return unsafe status(env, INVALID_ARG) }
   let state = unsafe stateOf(env)
@@ -719,8 +714,7 @@ unsafe export "C" fn napi_remove_env_cleanup_hook(env: ?*mut u8, callback: Clean
   }
   return unsafe status(env, INVALID_ARG)
 }
-@deferredCallbacks("callback")
-unsafe export "C" fn napi_add_async_cleanup_hook(env: ?*mut u8, callback: AsyncCleanupHook, data: ?*mut u8, result: ?*mut ?*mut Hook) -> i32 {
+pub unsafe fn napi_add_async_cleanup_hook(env: ?*mut u8, callback: AsyncCleanupHook, data: ?*mut u8, result: ?*mut ?*mut Hook) -> i32 {
   if !unsafe owner(env) { return INVALID_ARG }
   if Intrinsic.pointerIsNull<AsyncCleanupHook>(callback) { return unsafe status(env, INVALID_ARG) }
   if unsafe closing(env) { return unsafe status(env, CLOSING) }
