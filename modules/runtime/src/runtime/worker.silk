@@ -59,7 +59,6 @@ import ext.vm_native
 import ext.process_native
 import ext.vm_global
 import ext.webstorage_native
-import ext.http2_native
 import ext.worker_native
 import ext.sqlite_native
 import ext.napi_native
@@ -340,7 +339,7 @@ unsafe fn openHandles<'m, C: Composition>(engine: &Engine<'m, Services<C>>) -> b
   static if capabilities.hasTls<C>() { if let Option<*mut tls_native.State>.Some { value } = Pointer.nonNullMut<tls_native.State>(services.tls) { open = unsafe reportOpen(b"TLS", unsafe tls_native.openHandles(value)) || open } }
   open = unsafe reportOpen(b"zlib", unsafe Composition.compressionOpenHandles(&engine.*)) || open
   if let Option<*mut process_native.State>.Some { value } = Pointer.nonNullMut<process_native.State>(services.processes) { open = unsafe reportOpen(b"child process", unsafe process_native.openHandles(value)) || open }
-  static if capabilities.hasHttp2<C>() { if let Option<*mut http2_native.State>.Some { value } = Pointer.nonNullMut<http2_native.State>(services.http2) { open = unsafe reportOpen(b"HTTP/2", unsafe http2_native.openHandles(value)) || open } }
+  open = unsafe reportOpen(b"HTTP/2", unsafe Composition.http2OpenHandles(&engine.*)) || open
   static if Composition.databasePresent() { if let Option<*mut sqlite_native.State>.Some { value } = Pointer.nonNullMut<sqlite_native.State>(services.sqlite) { open = unsafe reportOpen(b"SQLite", unsafe sqlite_native.openHandles(value)) || open } }
   open = unsafe reportOpen(b"WASI", unsafe Composition.wasmOpenHandles(&engine.*)) || open
   return open
@@ -634,7 +633,7 @@ unsafe effect fn execute<'m, D: Driver, C: Composition>(engine: &mut Engine<'m, 
   static if capabilities.hasTls<C>() { engine.services.tls = run tls_native.open(allocator) }
   run Composition.compressionOpen(&mut engine)
   engine.services.processes = run process_native.make(io, workers)
-  static if capabilities.hasHttp2<C>() { engine.services.http2 = run http2_native.open() }
+  run Composition.http2Open(&mut engine)
   static if Composition.databasePresent() { engine.services.sqlite = run sqlite_native.open(allocator) }
   static if Composition.addonsPresent() { engine.services.napi = run napi_native.open(allocator, unsafe Intrinsic.pointerReinterpret<*mut worker_native.State, *mut u8>(workers), worker_native.silkNodeFatalReport, io) }
   static if capabilities.hasWasm<C>() {
@@ -836,15 +835,7 @@ unsafe effect fn realm<'m, D: Driver, C: Composition>(engine: &mut Engine<'m, Se
         _ => ()
       }
       }
-      static if capabilities.hasHttp2<C>() {
-      match Pointer.nonNullMut<http2_native.State>(engine.services.http2) {
-        Option<*mut http2_native.State>.Some { value: http2 } => {
-          unsafe http2_native.close(http2)
-          engine.services.http2 = Pointer.null<http2_native.State>()
-        }
-        _ => ()
-      }
-      }
+      unsafe Composition.http2Close(&mut engine)
       static if Composition.databasePresent() {
       match Pointer.nonNullMut<sqlite_native.State>(engine.services.sqlite) {
         Option<*mut sqlite_native.State>.Some { value: sqlite } => {

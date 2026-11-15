@@ -9,5 +9,6 @@ silkjs = { path = "../../engine" }
 silkjsruntime = { path = ".." }
 wasm = { path = "../wamr", package = "silkjsruntime-wamr" }
 compress = { path = "../compress", package = "silkjsruntime-compress" }
+http2 = { path = "../http2", package = "silkjsruntime-nghttp2" }
 # The package manager: `silkjsruntime install` and the other commands.
 pm = { path = "../../pm" }

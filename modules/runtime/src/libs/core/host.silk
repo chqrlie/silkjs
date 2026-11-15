@@ -72,7 +72,6 @@ import ext.vm_native
 import ext.vm_interrupt
 import ext.process_native
 import ext.vm_global
-import ext.http2_native
 import ext.worker_native
 import ext.immediates
 import ext.sqlite_native
@@ -132,7 +131,6 @@ pub struct Services<C> {
   pub crypto: ?*mut crypto_native.State,
   pub network: ?*mut net_native.State,
   pub tls: ?*mut tls_native.State,
-  pub http2: ?*mut http2_native.State,
   pub sqlite: ?*mut sqlite_native.State,
   pub napi: ?*mut napi_native.State,
   pub httpParser: ?*mut http_parser_native.State,
@@ -168,7 +166,7 @@ impl<C> Services<C> {
     permissionGuard: ValueBits.Undefined,
     meta: ValueBits.Undefined, asyncEvent: ValueBits.Undefined, asyncDestroyEvent: ValueBits.Undefined,
     destroyQueue: Queue.make(), io: Pointer.null<fs_async.State>(), crypto: Pointer.null<crypto_native.State>(),
-    network: Pointer.null<net_native.State>(), tls: Pointer.null<tls_native.State>(), http2: Pointer.null<http2_native.State>(),
+    network: Pointer.null<net_native.State>(), tls: Pointer.null<tls_native.State>(),
     sqlite: Pointer.null<sqlite_native.State>(),
     napi: Pointer.null<napi_native.State>(),
     httpParser: Pointer.null<http_parser_native.State>(),
@@ -259,10 +257,6 @@ unsafe fn tlsState<'m, C: Composition>(engine: &Engine<'m, Services<C>>) -> *mut
 unsafe fn processState<'m, C: Composition>(engine: &Engine<'m, Services<C>>) -> *mut process_native.State {
   if Pointer.isNull<process_native.State>(engine.services.processes) { Intrinsic.trap("process executor is not initialized") }
   return unsafe Intrinsic.pointerRequalify<?*mut process_native.State, *mut process_native.State>(engine.services.processes)
-}
-unsafe fn http2State<'m, C: Composition>(engine: &Engine<'m, Services<C>>) -> *mut http2_native.State {
-  if Pointer.isNull<http2_native.State>(engine.services.http2) { Intrinsic.trap("HTTP/2 provider is not initialized") }
-  return unsafe Intrinsic.pointerRequalify<?*mut http2_native.State, *mut http2_native.State>(engine.services.http2)
 }
 unsafe fn workerState<'m, C: Composition>(engine: &Engine<'m, Services<C>>) -> *mut worker_native.State {
   if Pointer.isNull<worker_native.State>(engine.services.workers) { Intrinsic.trap("worker provider is not initialized") }
@@ -1004,8 +998,7 @@ impl<C: Composition> EngineServices for Services<C> {
     }
     static if capabilities.hasHttp2<C>() {
     if id == 5000 {
-      let http2 = unsafe http2State(&engine.*)
-      return run unsafe http2_native.dispatch(&mut engine, context, http2, argc, argv)
+      return run unsafe Composition.http2Call(&mut engine, context, argc, argv)
     }
     }
     if id == 6000 {

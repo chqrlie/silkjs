@@ -17,10 +17,19 @@ ROOT = Path(__file__).resolve().parents[1]
 # The same host (the core's src/embed_smoke.silk) twice: without WebAssembly (./smoke, EmptyWasm),
 # and with it (./cli, WamrWasm). Only the second program depends on WAMR.
 # The first has no file system either (EmptyFiles); the second's is in memory (MemoryFiles).
+# The libraries of capabilities in packages of their own are linked only into the second: these
+# are a symbol of each, which the first must not define.
+LIBRARIES = {'WAMR': 'wasm_runtime_full_init', 'zlib': 'deflate', 'brotli': 'BrotliEncoderCreateInstance',
+             'zstd': 'ZSTD_createCStream', 'nghttp2': 'nghttp2_session_client_new'}
 PROGRAMS = [
     ('embed-smoke', ROOT / 'smoke', 'src/main.silk', 'undefined', False),
     ('embed-smoke-wamr', ROOT / 'cli', 'src/embed_smoke_wamr.silk', 'object', True),
 ]
+
+
+def defined(executable):
+    listing = subprocess.run(['nm', '--defined-only', str(executable)], capture_output=True, text=True, check=True).stdout
+    return {line.split()[-1] for line in listing.splitlines() if line.split()}
 
 
 def expected(wasm, files):
@@ -66,6 +75,12 @@ def main():
         executable = ROOT / 'build' / name / name
         result = subprocess.run([str(executable)], capture_output=True, text=True, timeout=60, stdin=subprocess.DEVNULL)
         lines = result.stdout.splitlines()
+        symbols = defined(executable)
+        linked = [library for library, symbol in LIBRARIES.items() if symbol in symbols]
+        wanted = list(LIBRARIES) if files else []
+        if linked != wanted:
+            print(f'{name} failed: links {linked or "no library"}, expected {wanted or "none"}')
+            failed = True
         if result.returncode != 3 or lines != expected(wasm, files):
             print(f'{name} failed: status {result.returncode}')
             print('stdout:\n' + result.stdout)

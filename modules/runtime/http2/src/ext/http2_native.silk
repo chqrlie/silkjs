@@ -8,6 +8,7 @@
 import silk.mem.allocator { Allocator, OutOfMemoryError }
 import silkjs.js_owned_value { lendFor }
 import silkjs.js_realm { lendRealm }
+import silkjs.js_std_support as text
 import silk.core.effect { Effect }
 import silk.core.result { Result }
 import silk.collections.list { List }
@@ -29,10 +30,10 @@ import silkjs.js_exceptions { JsException }
 import silkjs.js_errors as errors
 import silkjs.js_runtime as runtime
 import silkjs.js_exceptions as exceptions
-import libs.core.owners as owners
-import libs.core.common as common
+import silkjsruntime.libs.core.owners as owners
+import silkjsruntime.libs.core.common as common
 import silkjs.js_buffer_storage as buffers
-import libs.core.host as host
+import silkjsruntime.libs.core.host as host
 import ext.http2_abi as c
 
 pub struct State { first: ?*mut Session, next: i32 }
@@ -459,6 +460,14 @@ unsafe effect fn dispatchCall<'m, S: EngineServices>(engine: &mut Engine<'m, S>,
   let memory = engine.memory return run unsafe buffers.newArrayBufferCopy(&mut engine, memory, unsafe lendRealm(&context, context), call.output, usize.toU64(call.length))
 }
 pub unsafe effect fn dispatch<'m, S: EngineServices>(engine: &mut Engine<'m, S>, context: *mut HeapHeader, state: *mut State, argc: i32, argv: &FrameSlots) -> ValueBits ! OutOfMemoryError | JsException ? &mut Allocator {
+  // nghttp2's version, for process.versions.
+  let op = run unsafe host.text(&mut engine, context, unsafe common.argument(argv, 0))
+  if equal(op.asSlice(), b"version") {
+    let anchor = () let info = unsafe Pointer.borrow<(), c.Nghttp2Info>(&anchor, unsafe c.nghttp2_version(0))
+    let version = info.versionText drop info
+    let value = run text.cstring(&mut engine, unsafe lendRealm(&context, context), version)
+    return value.intoBits()
+  }
   let mut call = Call { data: [nil(); 6], lengths: [0; 6], numbers: [0; 6], output: nil(), length: 0, number: 0, binary: false }
   let result = run Effect.result(unsafe dispatchCall(&mut engine, context, state, argv, &mut call)) let mut i: usize = 0 while i < 6 { unsafe c.free(call.data[i]) i = i + 1 } unsafe c.free(call.output)
   return match move result { Result<ValueBits, OutOfMemoryError | JsException>.Success { value } => value Result<ValueBits, OutOfMemoryError | JsException>.Failure { error } => { fail move error } }
