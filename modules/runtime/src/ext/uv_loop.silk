@@ -28,6 +28,7 @@ import ext.uv_fs { UvStat, UvTimespec }
 import silk.concurrency.atomic { CompareExchange }
 import ext.process_abi { Options, Stdio }
 import ext.uv_fsevents as fsevents
+import ext.uv_spawn_darwin as spawn_darwin
 
 pub type CloseCallback = extern "C" fn(*mut u8) -> ()
 pub type AsyncCallback = extern "C" fn(*mut u8) -> ()
@@ -1359,7 +1360,8 @@ unsafe fn processClose(handle: *mut Handle) -> () {
   unsafe stop(handle)
   if last && !Pointer.isNull<Handle>(child) { unsafe signalStop(unsafe nn(child)) }
 }
-/// Starts a child process, as libuv's uv_spawn on its fork path. `stdio` entries either inherit a
+/// Starts a child process, as libuv's uv_spawn: with posix_spawn on Darwin (ext.uv_spawn_darwin),
+/// else, or when that declines, on its fork path. `stdio` entries either inherit a
 /// descriptor (flags 2) or are ignored (0); libuv's stream and pipe containers are not offered, since
 /// the runtime's streams are not loop handles. The handle is initialized whatever the status, so the
 /// caller closes it; a negative status is the errno of the fork or of the child's setup or exec.
@@ -1398,6 +1400,23 @@ pub unsafe fn uv_spawn(loopMemory: *mut u8, memory: *mut u8, options: *const Opt
   let child = unsafe nn(l3.child) drop l3
   let watching = unsafe signalStart(child, silkUvChildSignal, SIGCHLD, false)
   if watching != 0 { unsafe free(storage) return watching }
+  // Darwin starts the child with posix_spawn, as libuv; it forks only when that path declines
+  // (UV_ENOSYS: a user or group change, or a function the system lacks).
+  static if Intrinsic.targetOperatingSystem() == "darwin" {
+    let mut spawned: i32 = 0
+    let posix = unsafe spawn_darwin.spawnPosix(o, count, use, Pointer.fromMutRef<i32>(&mut spawned))
+    if posix != spawn_darwin.UV_ENOSYS {
+      unsafe free(storage)
+      if posix == 0 {
+        let mut fifth = () let h0 = unsafe Pointer.borrowMut<(), Handle>(&mut fifth, handle)
+        let l5 = unsafe Pointer.borrowMut<(), Loop>(&mut second, loop)
+        h0.pid = spawned h0.exited = o.exitCallback h0.nextProcess = l5.processes l5.processes = handle
+        drop h0 drop l5
+        unsafe start(handle)
+      }
+      return posix
+    }
+  }
   // Both ends close on exec: the parent reads until the child has run exec, or reads its error.
   let mut errorPipe: [i32; 2] = [-1; 2]
   let piped = unsafe makePipe(&mut errorPipe, false)
