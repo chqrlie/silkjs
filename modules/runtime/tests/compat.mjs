@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -385,6 +385,11 @@ await tick(); await tick();
 console.log(log.join('\n'));
 `);
 cases.push({ name: 'promise-combinators-mixed', args: [join(directory, 'promise-combinators-mixed.mjs')] });
+// node:zlib on Silk code (ZLIB_NOTES.md): the programs of tests/fixtures/zlib, which print what
+// zlib reports and not the compressed bytes, since Node builds another zlib.
+for (const name of ['common.cjs', 'streams.json', 'behaviour.cjs', 'fuzz.cjs']) file('zlib/' + name, readFileSync(new URL('./fixtures/zlib/' + name, import.meta.url)));
+cases.push({ name: 'zlib-behaviour-matrix', args: [join(directory, 'zlib/behaviour.cjs')] });
+for (const seed of ['7', '99', '2026']) cases.push({ name: 'zlib-fuzz-roundtrips-and-damage-' + seed, args: [join(directory, 'zlib/fuzz.cjs'), seed] });
 let passed = 0, failed = 0;
 try {
   if (!cases.some(item => filter.test(item.name))) throw new Error('No compatibility scenarios match ' + filter);
