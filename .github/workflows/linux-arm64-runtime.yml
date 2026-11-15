@@ -55,6 +55,11 @@ jobs:
         run: |
           (time python3 tools/build.py --release --output "$RUNNER_TEMP/silkjs") 2>&1 | tail -40
           "$RUNNER_TEMP/silkjs" -p 'process.versions.uv + " " + process.platform + " " + process.arch'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: silkjs-${{ matrix.source }}
+          path: ${{ runner.temp }}/silkjs
+          retention-days: 3
       - name: Differential cases against Node 24
         working-directory: modules/runtime
         run: |
@@ -111,3 +116,22 @@ jobs:
             ${{ runner.temp }}/*.txt
             ${{ runner.temp }}/*.tap
             ${{ runner.temp }}/fx/*.out
+  bench:
+    # main f3d5ea8 against this branch on one runner, rounds alternating which goes first
+    # (tools/ci_bench.py): HTTP servers under wrk, setImmediate, spawnSync, cat, SQLite, cold start.
+    needs: runtime
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: silkjs-*
+          path: ${{ runner.temp }}/bin
+      - name: Benchmarks, main against the branch
+        working-directory: modules/runtime
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq wrk
+          chmod +x "$RUNNER_TEMP"/bin/*/silkjs
+          ls -la "$RUNNER_TEMP"/bin/*/silkjs
+          python3 tools/ci_bench.py "$RUNNER_TEMP/bin/silkjs-f3d5ea8affce5bc169df95191b55ab47e3db2740/silkjs" "$RUNNER_TEMP/bin/silkjs-branch/silkjs" --rounds 8 | tee "$RUNNER_TEMP/bench.txt"
