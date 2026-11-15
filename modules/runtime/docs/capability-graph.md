@@ -12,26 +12,26 @@ declarations, the libc and library surface each service reaches today. Requires 
 
 | Service | Built-ins | JavaScript KiB | Load-time requires | Lazy requires | Silk files | Silk KiB | `extern "C"` |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Core | 336 | 3,560.1 | 954 | 377 | 49 | 764.1 | 80 |
+| Core | 336 | 3,560.2 | 954 | 377 | 52 | 779.6 | 89 |
 | Platform | 0 | 0.0 | 0 | 0 | 2 | 10.8 | 0 |
 | ModuleResolver | 15 | 181.7 | 22 | 20 | 2 | 6.9 | 0 |
 | Files | 18 | 238.9 | 76 | 40 | 5 | 81.2 | 49 |
-| Network | 45 | 1,423.8 | 275 | 64 | 4 | 253.6 | 107 |
+| Network | 45 | 1,423.8 | 275 | 64 | 4 | 255.4 | 107 |
 | Processes | 10 | 88.4 | 50 | 14 | 3 | 68.5 | 60 |
-| SystemInfo | 2 | 8.5 | 5 | 2 | 2 | 38.3 | 57 |
-| Workers | 6 | 47.8 | 15 | 21 | 4 | 117.1 | 24 |
-| Crypto | 28 | 453.6 | 159 | 55 | 3 | 162.5 | 280 |
-| Tls | 12 | 315.8 | 44 | 9 | 3 | 102.5 | 213 |
-| Compression | 7 | 61.0 | 25 | 1 | 2 | 40.5 | 50 |
+| SystemInfo | 2 | 8.5 | 5 | 2 | 2 | 37.6 | 56 |
+| Workers | 6 | 47.8 | 15 | 21 | 4 | 117.0 | 24 |
+| Crypto | 28 | 453.6 | 159 | 55 | 3 | 163.1 | 281 |
+| Tls | 12 | 315.8 | 44 | 9 | 3 | 104.1 | 213 |
+| Compression | 7 | 61.0 | 25 | 1 | 2 | 40.4 | 50 |
 | Http | 2 | 33.6 | 8 | 3 | 3 | 37.4 | 28 |
-| Http2 | 7 | 242.8 | 51 | 2 | 2 | 57.4 | 104 |
+| Http2 | 7 | 242.8 | 51 | 2 | 2 | 57.3 | 104 |
 | Wasm | 3 | 35.9 | 3 | 1 | 5 | 179.3 | 156 |
 | Database | 6 | 54.8 | 8 | 7 | 2 | 86.2 | 7 |
 | TypeStripping | 2 | 3,716.1 | 2 | 4 | 0 | 0.0 | 0 |
 | Inspector | 15 | 83.7 | 30 | 24 | 18 | 234.1 | 33 |
 | NativeAddons | 1 | 10.6 | 0 | 7 | 4 | 221.7 | 205 |
 | Executable | 47 | 577.1 | 323 | 35 | 6 | 39.2 | 21 |
-| **Total** | 562 | 11,134.3 | 2050 | 686 | 119 | 2,501.3 | 1474 |
+| **Total** | 562 | 11,134.4 | 2050 | 686 | 122 | 2,520.1 | 1483 |
 
 ## Linked size
 
@@ -90,7 +90,7 @@ build without the capability would drop, at most.
 | `internal/deps/acorn/acorn/dist/acorn` | Core | 240.6 |
 | `internal/tls/roots` | Tls | 177.4 |
 | `internal/web/vendor/text-encoding/data/gb18030.cp` | Core | 139.8 |
-| `internal/bootstrap/silk` | Core | 138.6 |
+| `internal/bootstrap/silk` | Core | 138.7 |
 | `internal/loader/loader` | ModuleResolver | 122.4 |
 | `internal/http2/core` | Http2 | 118.5 |
 | `internal/webstreams/readablestream` | Core | 116.6 |
@@ -403,7 +403,7 @@ Load-time edges block an empty service outright; lazy ones fail only on the path
 
 | Service | Modules |
 | --- | --- |
-| Core | `embed_smoke.silk`, `ext/blocking_pool.silk`, `ext/buffer_codec.silk`, `ext/builtin_cache.silk`, `ext/call_sites.silk`, `ext/diagnostics_fatal.silk`, `ext/diagnostics_hub.silk`, `ext/fs_async.silk`, `ext/immediates.silk`, `ext/introspection.silk`, `ext/keep_exports.silk`, `ext/module_cache.silk`, `ext/permission_gate.silk`, `ext/pg_rows.silk`, `ext/process_diagnostics.silk`, `ext/script_cache.silk`, `ext/script_metadata.silk`, `ext/system_errors.silk`, `ext/url_native.silk`, `ext/util_native.silk`, `ext/vm_global.silk`, `ext/vm_interrupt.silk`, `ext/vm_native.silk`, `files_tests.silk`, `lib.silk`, `libs/core/async_events.silk`, `libs/core/capabilities.silk`, `libs/core/common.silk`, `libs/core/host.silk`, `libs/core/intl.silk`, `libs/core/modules.silk`, `libs/core/owners.silk`, `runtime/embed.silk`, `runtime/embedded.silk`, `runtime/session.silk`, `runtime/worker.silk`, `wamr/src/lib.silk`, `wamr/src/wamr.silk`, `compress/src/compress.silk`, `compress/src/lib.silk`, `http2/src/lib.silk`, `http2/src/nghttp2.silk`, `llhttp/src/lib.silk`, `llhttp/src/llhttp.silk`, `sqlite/src/lib.silk`, `sqlite/src/sqlite_database.silk`, `cli/src/embed_smoke_wamr.silk`, `cli/src/napi_exports.silk` |
+| Core | `embed_smoke.silk`, `ext/blocking_pool.silk`, `ext/buffer_codec.silk`, `ext/builtin_cache.silk`, `ext/call_sites.silk`, `ext/diagnostics_fatal.silk`, `ext/diagnostics_hub.silk`, `ext/fs_async.silk`, `ext/immediates.silk`, `ext/introspection.silk`, `ext/keep_exports.silk`, `ext/library_hooks.silk`, `ext/module_cache.silk`, `ext/permission_gate.silk`, `ext/pg_rows.silk`, `ext/process_diagnostics.silk`, `ext/script_cache.silk`, `ext/script_metadata.silk`, `ext/system_errors.silk`, `ext/url_native.silk`, `ext/util_native.silk`, `ext/vm_global.silk`, `ext/vm_interrupt.silk`, `ext/vm_native.silk`, `files_tests.silk`, `lib.silk`, `libs/core/async_events.silk`, `libs/core/capabilities.silk`, `libs/core/common.silk`, `libs/core/host.silk`, `libs/core/intl.silk`, `libs/core/modules.silk`, `libs/core/owners.silk`, `runtime/embed.silk`, `runtime/embedded.silk`, `runtime/session.silk`, `runtime/worker.silk`, `wamr/src/lib.silk`, `wamr/src/wamr.silk`, `compress/src/compress.silk`, `compress/src/lib.silk`, `http2/src/lib.silk`, `http2/src/nghttp2.silk`, `llhttp/src/lib.silk`, `llhttp/src/llhttp.silk`, `sqlite/src/lib.silk`, `sqlite/src/sqlite_database.silk`, `openssl/src/lib.silk`, `openssl/src/openssl_capabilities.silk`, `cli/src/embed_smoke_wamr.silk`, `cli/src/napi_exports.silk` |
 | Platform | `ext/platform_native.silk`, `libs/core/platforms.silk` |
 | ModuleResolver | `ext/module_native.silk`, `libs/core/module_sources.silk` |
 | Files | `ext/fs_descriptors.silk`, `ext/fs_native.silk`, `ext/fs_ops.silk`, `ext/uv_fs.silk`, `libs/core/files.silk` |
@@ -411,8 +411,8 @@ Load-time edges block an empty service outright; lazy ones fail only on the path
 | Processes | `ext/process_abi.silk`, `ext/process_native.silk`, `ext/spawn_sync.silk` |
 | SystemInfo | `ext/os_abi.silk`, `ext/os_native.silk` |
 | Workers | `ext/worker_locks.silk`, `ext/worker_native.silk`, `ext/worker_resource_controls.silk`, `ext/worker_transport.silk` |
-| Crypto | `ext/crypto_native.silk`, `ext/openssl.silk`, `ext/openssl_provider.silk` |
-| Tls | `ext/openssl_x509.silk`, `ext/tls_abi.silk`, `ext/tls_native.silk` |
+| Crypto | `openssl/src/ext/crypto_native.silk`, `openssl/src/ext/openssl.silk`, `openssl/src/ext/openssl_provider.silk` |
+| Tls | `openssl/src/ext/openssl_x509.silk`, `openssl/src/ext/tls_abi.silk`, `openssl/src/ext/tls_native.silk` |
 | Compression | `compress/src/ext/compression_abi.silk`, `compress/src/ext/compression_native.silk` |
 | Http | `llhttp/src/ext/http_parser_abi.silk`, `llhttp/src/ext/http_parser_native.silk` |
 | Http2 | `http2/src/ext/http2_abi.silk`, `http2/src/ext/http2_native.silk` |

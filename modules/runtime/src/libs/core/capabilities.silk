@@ -13,6 +13,7 @@
 //! [`Capabilities`] that every embedder must then fill.
 import silk.mem.allocator { Allocator, OutOfMemoryError }
 import silk.core.ownership { Copy }
+import silk.mem.pointer { Pointer }
 import silk.collections.list { List }
 import ext.fs_ops { Call, Outcome }
 import silkjs.js_engine { Engine }
@@ -25,6 +26,7 @@ import silkjs.js_gc { Tracer }
 import silkjs.js_runtime_registry { ClassIdAllocator }
 import ext.diagnostics_fatal { RuntimeHeap }
 import ext.fs_async as fs_async
+import ext.library_hooks { SecureOps, ThreadSetup }
 import libs.core.host { Services }
 
 /// The first native function id that belongs to the embedder's [`HostApi`]: `NativeFunctionId.Host`
@@ -259,33 +261,92 @@ impl Http2 for EmptyHttp2 {
 /// Crypto: `node:crypto` and `globalThis.crypto`, over OpenSSL. Native ids 2100 and 2101 are this
 /// capability's. A library service, as `Compression` is. Without it `require('crypto')` fails with
 /// `ERR_NO_CRYPTO`, as in a Node build without OpenSSL.
+///
+/// The real implementation is `OpenSslCrypto` of ./openssl (silkjsruntime-openssl), which brings
+/// OpenSSL.
 pub interface Crypto {
   /// A constant of the implementation type: whether crypto is there.
   static fn present() -> bool
+  /// The instance a new worker thread starts with, made from its parent's: nothing opened yet.
+  fn forWorker(self: &Self) -> Self
+  /// Opens this runtime's native state, before the bootstrap runs; `main` on the main thread.
+  effect fn open(self: &mut Self, main: bool) -> () ! OutOfMemoryError
+  /// What runs before a worker thread starts (OpenSSL's providers are set up first).
+  unsafe fn threadSetup(self: &Self) -> ThreadSetup
+  /// Native function `id`: 2100 (`crypto`, on this thread) or 2101 (`cryptoAsync`, on the
+  /// blocking threads of `io`).
+  unsafe effect fn call<'m, C: Composition>(self: &Self, engine: &mut Engine<'m, Services<C>>, context: *mut HeapHeader, id: u32, io: *mut fs_async.State, argc: i32, argv: &FrameSlots) -> ValueBits
+    ! OutOfMemoryError | JsException ? &mut Allocator
+  /// Delivers finished work. True when something ran.
+  unsafe effect fn poll<'m, C: Composition>(self: &Self, engine: &mut Engine<'m, Services<C>>, context: *mut HeapHeader) -> bool
+    ! OutOfMemoryError | JsException ? &mut Allocator
+  /// Appends the work in flight to `array`, for `process.getActiveResourcesInfo()`.
+  unsafe effect fn appendResources<'m, C: Composition>(self: &Self, engine: &mut Engine<'m, Services<C>>, context: *mut HeapHeader, array: ValueBits, index: &mut u32) -> ()
+    ! JsException ? &mut Allocator
+  /// Keys and contexts still open, for the report of what keeps the loop alive.
+  unsafe fn openHandles(self: &Self) -> usize
+  /// Waits for work in flight and closes the state.
+  unsafe fn close<'m, C: Composition>(self: &mut Self, engine: &mut Engine<'m, Services<C>>, context: *mut HeapHeader, io: *mut fs_async.State) -> ()
 }
-/// OpenSSL's crypto.
-pub struct OpenSslCrypto {}
-impl Copy for OpenSslCrypto {}
-impl Crypto for OpenSslCrypto { static fn present() -> bool { return true } }
 /// No crypto.
 pub struct EmptyCrypto {}
 impl Copy for EmptyCrypto {}
-impl Crypto for EmptyCrypto { static fn present() -> bool { return false } }
+impl Crypto for EmptyCrypto {
+  static fn present() -> bool { return false }
+  fn forWorker(self: &Self) -> Self { return EmptyCrypto {} }
+  effect fn open(self: &mut Self, main: bool) -> () ! OutOfMemoryError {}
+  unsafe fn threadSetup(self: &Self) -> ThreadSetup { return ThreadSetup.none() }
+  unsafe effect fn call<'m, C: Composition>(self: &Self, engine: &mut Engine<'m, Services<C>>, context: *mut HeapHeader, id: u32, io: *mut fs_async.State, argc: i32, argv: &FrameSlots) -> ValueBits
+    ! OutOfMemoryError | JsException ? &mut Allocator {
+    Intrinsic.trap("crypto is not there")
+  }
+  unsafe effect fn poll<'m, C: Composition>(self: &Self, engine: &mut Engine<'m, Services<C>>, context: *mut HeapHeader) -> bool
+    ! OutOfMemoryError | JsException ? &mut Allocator { return false }
+  unsafe effect fn appendResources<'m, C: Composition>(self: &Self, engine: &mut Engine<'m, Services<C>>, context: *mut HeapHeader, array: ValueBits, index: &mut u32) -> ()
+    ! JsException ? &mut Allocator {}
+  unsafe fn openHandles(self: &Self) -> usize { return 0 }
+  unsafe fn close<'m, C: Composition>(self: &mut Self, engine: &mut Engine<'m, Services<C>>, context: *mut HeapHeader, io: *mut fs_async.State) -> () {}
+}
 
 /// TLS: `node:tls` and `node:https`, over OpenSSL. Native id 2500 is this capability's, and the
 /// sessions that a socket's upgrade (2405, Network's) attaches. It needs `Crypto` (`checkCombination`).
+///
+/// The real implementation is `OpenSslTls` of ./openssl (silkjsruntime-openssl).
 pub interface Tls {
   /// A constant of the implementation type: whether TLS is there.
   static fn present() -> bool
+  /// The operations the network's native TLS sockets run on a session.
+  fn secureOps(self: &Self) -> SecureOps
+  /// The instance a new worker thread starts with, made from its parent's: nothing opened yet.
+  fn forWorker(self: &Self) -> Self
+  /// Opens this runtime's native state, before the bootstrap runs.
+  effect fn open(self: &mut Self, allocator: *mut RuntimeHeap) -> () ! OutOfMemoryError
+  /// The sessions, which `SecureOps.attach` takes; null when none are open.
+  unsafe fn sessions(self: &Self) -> ?*mut u8
+  /// Native function 2500 (`tls`).
+  unsafe effect fn call<'m, C: Composition>(self: &Self, engine: &mut Engine<'m, Services<C>>, context: *mut HeapHeader, argc: i32, argv: &FrameSlots) -> ValueBits
+    ! OutOfMemoryError | JsException ? &mut Allocator
+  /// Sessions and contexts still open, for the report of what keeps the loop alive.
+  unsafe fn openHandles(self: &Self) -> usize
+  /// Closes the sessions and the state.
+  unsafe fn close<'m, C: Composition>(self: &mut Self, engine: &mut Engine<'m, Services<C>>, context: *mut HeapHeader) -> ()
 }
-/// OpenSSL's TLS.
-pub struct OpenSslTls {}
-impl Copy for OpenSslTls {}
-impl Tls for OpenSslTls { static fn present() -> bool { return true } }
 /// No TLS.
 pub struct EmptyTls {}
 impl Copy for EmptyTls {}
-impl Tls for EmptyTls { static fn present() -> bool { return false } }
+impl Tls for EmptyTls {
+  static fn present() -> bool { return false }
+  fn secureOps(self: &Self) -> SecureOps { return SecureOps.none() }
+  fn forWorker(self: &Self) -> Self { return EmptyTls {} }
+  effect fn open(self: &mut Self, allocator: *mut RuntimeHeap) -> () ! OutOfMemoryError {}
+  unsafe fn sessions(self: &Self) -> ?*mut u8 { return Pointer.null<u8>() }
+  unsafe effect fn call<'m, C: Composition>(self: &Self, engine: &mut Engine<'m, Services<C>>, context: *mut HeapHeader, argc: i32, argv: &FrameSlots) -> ValueBits
+    ! OutOfMemoryError | JsException ? &mut Allocator {
+    Intrinsic.trap("TLS is not there")
+  }
+  unsafe fn openHandles(self: &Self) -> usize { return 0 }
+  unsafe fn close<'m, C: Composition>(self: &mut Self, engine: &mut Engine<'m, Services<C>>, context: *mut HeapHeader) -> () {}
+}
 
 /// The database: `node:sqlite` and `localStorage`, over SQLite. Native ids 7000 and 7001 are this
 /// capability's. It needs `Files` (`checkCombination`). A library service, as `Compression` is.
@@ -502,7 +563,7 @@ pub interface ModuleResolver {
 /// a capability the program does not want is given its empty implementation.
 ///
 /// ```silk
-/// let capabilities = Capabilities { platform: OsPlatform {}, modules: NodeResolution {}, files: OsFiles {}, compression: NativeCompression.make(), http2: Nghttp2.make(), crypto: OpenSslCrypto {}, tls: OpenSslTls {}, database: SqliteDatabase.make(), addons: DlopenAddons {}, processes: OsProcesses {}, network: OsNetwork {}, http: Llhttp.make(), systemInfo: OsSystemInfo {}, typeStripping: Amaro {}, workers: ThreadWorkers {}, inspector: NodeInspector {}, wasm: EmptyWasm {}, hostApi: EmptyHostApi {} }
+/// let capabilities = Capabilities { platform: OsPlatform {}, modules: NodeResolution {}, files: OsFiles {}, compression: NativeCompression.make(), http2: Nghttp2.make(), crypto: OpenSslCrypto.make(), tls: OpenSslTls.make(), database: SqliteDatabase.make(), addons: DlopenAddons {}, processes: OsProcesses {}, network: OsNetwork {}, http: Llhttp.make(), systemInfo: OsSystemInfo {}, typeStripping: Amaro {}, workers: ThreadWorkers {}, inspector: NodeInspector {}, wasm: EmptyWasm {}, hostApi: EmptyHostApi {} }
 /// ```
 pub struct Capabilities<P, M, F, Z, H, K, T, D, N, R, E, L, S, Y, X, I, W, A> {
   pub platform: P,
@@ -592,6 +653,21 @@ pub interface Composition {
   unsafe fn wasmFinalize<'m>(engine: &mut Engine<'m, Services<Self>>, rt: *mut HeapHeader, object: *mut HeapHeader) -> ()
   unsafe fn wasmOpenHandles<'m>(engine: &Engine<'m, Services<Self>>) -> usize
   effect fn compressionOpen<'m>(engine: &mut Engine<'m, Services<Self>>) -> () ! OutOfMemoryError
+  effect fn cryptoOpen<'m>(engine: &mut Engine<'m, Services<Self>>, main: bool) -> () ! OutOfMemoryError
+  unsafe fn cryptoThreadSetup<'m>(engine: &Engine<'m, Services<Self>>) -> ThreadSetup
+  unsafe effect fn cryptoCall<'m>(engine: &mut Engine<'m, Services<Self>>, context: *mut HeapHeader, id: u32, io: *mut fs_async.State, argc: i32, argv: &FrameSlots) -> ValueBits
+    ! OutOfMemoryError | JsException ? &mut Allocator
+  unsafe effect fn cryptoPoll<'m>(engine: &mut Engine<'m, Services<Self>>, context: *mut HeapHeader) -> bool ! OutOfMemoryError | JsException ? &mut Allocator
+  unsafe effect fn cryptoAppendResources<'m>(engine: &mut Engine<'m, Services<Self>>, context: *mut HeapHeader, array: ValueBits, index: &mut u32) -> () ! JsException ? &mut Allocator
+  unsafe fn cryptoOpenHandles<'m>(engine: &Engine<'m, Services<Self>>) -> usize
+  unsafe fn cryptoClose<'m>(engine: &mut Engine<'m, Services<Self>>, context: *mut HeapHeader, io: *mut fs_async.State) -> ()
+  fn tlsSecureOps<'m>(engine: &Engine<'m, Services<Self>>) -> SecureOps
+  effect fn tlsOpen<'m>(engine: &mut Engine<'m, Services<Self>>, allocator: *mut RuntimeHeap) -> () ! OutOfMemoryError
+  unsafe fn tlsSessions<'m>(engine: &Engine<'m, Services<Self>>) -> ?*mut u8
+  unsafe effect fn tlsCall<'m>(engine: &mut Engine<'m, Services<Self>>, context: *mut HeapHeader, argc: i32, argv: &FrameSlots) -> ValueBits
+    ! OutOfMemoryError | JsException ? &mut Allocator
+  unsafe fn tlsOpenHandles<'m>(engine: &Engine<'m, Services<Self>>) -> usize
+  unsafe fn tlsClose<'m>(engine: &mut Engine<'m, Services<Self>>, context: *mut HeapHeader) -> ()
   effect fn databaseOpen<'m>(engine: &mut Engine<'m, Services<Self>>, allocator: *mut RuntimeHeap) -> () ! OutOfMemoryError
   unsafe effect fn databaseCall<'m>(engine: &mut Engine<'m, Services<Self>>, context: *mut HeapHeader, argc: i32, argv: &FrameSlots) -> ValueBits
     ! OutOfMemoryError | JsException ? &mut Allocator
@@ -659,7 +735,7 @@ impl<P: Platform + Copy, M: ModuleResolver + Copy, F: Files + Copy, Z: Compressi
   static fn filesDirect() -> bool { return directFiles<F>() }
   unsafe fn filesExecute(self: &Self, call: &Call, out: &mut Outcome) -> () { unsafe self.files.execute(&call, &mut out) }
   fn forWorker(self: &Self) -> Self {
-    return Capabilities<P, M, F, Z, H, K, T, D, N, R, E, L, S, Y, X, I, W, A> { platform: self.platform.forWorker(), modules: self.modules.forWorker(), files: self.files.forWorker(), compression: self.compression.forWorker(), http2: self.http2.forWorker(), crypto: self.crypto, tls: self.tls, database: self.database.forWorker(), addons: self.addons, processes: self.processes, network: self.network, http: self.http.forWorker(), systemInfo: self.systemInfo, typeStripping: self.typeStripping, workers: self.workers, inspector: self.inspector, wasm: self.wasm.forWorker(), hostApi: self.hostApi.forWorker() }
+    return Capabilities<P, M, F, Z, H, K, T, D, N, R, E, L, S, Y, X, I, W, A> { platform: self.platform.forWorker(), modules: self.modules.forWorker(), files: self.files.forWorker(), compression: self.compression.forWorker(), http2: self.http2.forWorker(), crypto: self.crypto.forWorker(), tls: self.tls.forWorker(), database: self.database.forWorker(), addons: self.addons, processes: self.processes, network: self.network, http: self.http.forWorker(), systemInfo: self.systemInfo, typeStripping: self.typeStripping, workers: self.workers, inspector: self.inspector, wasm: self.wasm.forWorker(), hostApi: self.hostApi.forWorker() }
   }
   effect fn platformGetenv<'m>(engine: &Engine<'m, Services<Self>>, name: &[u8], into: &mut List<u8>) -> bool ! OutOfMemoryError ? &mut Allocator {
     let platform = engine.services.capabilities.platform return run platform.getenv(name, &mut into.*)
@@ -755,6 +831,37 @@ impl<P: Platform + Copy, M: ModuleResolver + Copy, F: Files + Copy, Z: Compressi
   unsafe fn databaseOpenHandles<'m>(engine: &Engine<'m, Services<Self>>) -> usize { let database = engine.services.capabilities.database return unsafe database.openHandles() }
   unsafe fn databaseClose<'m>(engine: &mut Engine<'m, Services<Self>>, context: *mut HeapHeader) -> () {
     let mut database = engine.services.capabilities.database unsafe database.close(&mut engine, context) engine.services.capabilities.database = database
+  }
+  effect fn cryptoOpen<'m>(engine: &mut Engine<'m, Services<Self>>, main: bool) -> () ! OutOfMemoryError {
+    run engine.services.capabilities.crypto.open(main)
+  }
+  unsafe fn cryptoThreadSetup<'m>(engine: &Engine<'m, Services<Self>>) -> ThreadSetup { let crypto = engine.services.capabilities.crypto return unsafe crypto.threadSetup() }
+  unsafe effect fn cryptoCall<'m>(engine: &mut Engine<'m, Services<Self>>, context: *mut HeapHeader, id: u32, io: *mut fs_async.State, argc: i32, argv: &FrameSlots) -> ValueBits
+    ! OutOfMemoryError | JsException ? &mut Allocator {
+    let crypto = engine.services.capabilities.crypto return run unsafe crypto.call(&mut engine, context, id, io, argc, argv)
+  }
+  unsafe effect fn cryptoPoll<'m>(engine: &mut Engine<'m, Services<Self>>, context: *mut HeapHeader) -> bool ! OutOfMemoryError | JsException ? &mut Allocator {
+    let crypto = engine.services.capabilities.crypto return run unsafe crypto.poll(&mut engine, context)
+  }
+  unsafe effect fn cryptoAppendResources<'m>(engine: &mut Engine<'m, Services<Self>>, context: *mut HeapHeader, array: ValueBits, index: &mut u32) -> () ! JsException ? &mut Allocator {
+    let crypto = engine.services.capabilities.crypto run unsafe crypto.appendResources(&mut engine, context, array, &mut index)
+  }
+  unsafe fn cryptoOpenHandles<'m>(engine: &Engine<'m, Services<Self>>) -> usize { let crypto = engine.services.capabilities.crypto return unsafe crypto.openHandles() }
+  unsafe fn cryptoClose<'m>(engine: &mut Engine<'m, Services<Self>>, context: *mut HeapHeader, io: *mut fs_async.State) -> () {
+    let mut crypto = engine.services.capabilities.crypto unsafe crypto.close(&mut engine, context, io) engine.services.capabilities.crypto = crypto
+  }
+  fn tlsSecureOps<'m>(engine: &Engine<'m, Services<Self>>) -> SecureOps { let tls = engine.services.capabilities.tls return tls.secureOps() }
+  effect fn tlsOpen<'m>(engine: &mut Engine<'m, Services<Self>>, allocator: *mut RuntimeHeap) -> () ! OutOfMemoryError {
+    run engine.services.capabilities.tls.open(allocator)
+  }
+  unsafe fn tlsSessions<'m>(engine: &Engine<'m, Services<Self>>) -> ?*mut u8 { let tls = engine.services.capabilities.tls return unsafe tls.sessions() }
+  unsafe effect fn tlsCall<'m>(engine: &mut Engine<'m, Services<Self>>, context: *mut HeapHeader, argc: i32, argv: &FrameSlots) -> ValueBits
+    ! OutOfMemoryError | JsException ? &mut Allocator {
+    let tls = engine.services.capabilities.tls return run unsafe tls.call(&mut engine, context, argc, argv)
+  }
+  unsafe fn tlsOpenHandles<'m>(engine: &Engine<'m, Services<Self>>) -> usize { let tls = engine.services.capabilities.tls return unsafe tls.openHandles() }
+  unsafe fn tlsClose<'m>(engine: &mut Engine<'m, Services<Self>>, context: *mut HeapHeader) -> () {
+    let mut tls = engine.services.capabilities.tls unsafe tls.close(&mut engine, context) engine.services.capabilities.tls = tls
   }
   effect fn compressionOpen<'m>(engine: &mut Engine<'m, Services<Self>>) -> () ! OutOfMemoryError {
     run engine.services.capabilities.compression.open()

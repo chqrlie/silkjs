@@ -52,9 +52,7 @@ import libs.core.host
 import ext.introspection
 import ext.fs_native
 import ext.fs_async
-import ext.crypto_native
 import ext.net_native
-import ext.tls_native
 import ext.vm_native
 import ext.process_native
 import ext.vm_global
@@ -333,8 +331,8 @@ unsafe fn openHandles<'m, C: Composition>(engine: &Engine<'m, Services<C>>) -> b
   let services = &engine.services
   let mut open = false
   static if Composition.networkPresent() { if let Option<*mut net_native.State>.Some { value } = Pointer.nonNullMut<net_native.State>(services.network) { open = unsafe reportOpen(b"network and DNS", unsafe net_native.openHandles(value)) || open } }
-  static if capabilities.hasCrypto<C>() { if let Option<*mut crypto_native.State>.Some { value } = Pointer.nonNullMut<crypto_native.State>(services.crypto) { open = unsafe reportOpen(b"crypto", unsafe crypto_native.openHandles(value)) || open } }
-  static if capabilities.hasTls<C>() { if let Option<*mut tls_native.State>.Some { value } = Pointer.nonNullMut<tls_native.State>(services.tls) { open = unsafe reportOpen(b"TLS", unsafe tls_native.openHandles(value)) || open } }
+  open = unsafe reportOpen(b"crypto", unsafe Composition.cryptoOpenHandles(&engine.*)) || open
+  open = unsafe reportOpen(b"TLS", unsafe Composition.tlsOpenHandles(&engine.*)) || open
   open = unsafe reportOpen(b"zlib", unsafe Composition.compressionOpenHandles(&engine.*)) || open
   if let Option<*mut process_native.State>.Some { value } = Pointer.nonNullMut<process_native.State>(services.processes) { open = unsafe reportOpen(b"child process", unsafe process_native.openHandles(value)) || open }
   open = unsafe reportOpen(b"HTTP/2", unsafe Composition.http2OpenHandles(&engine.*)) || open
@@ -621,14 +619,14 @@ unsafe effect fn execute<'m, D: Driver, C: Composition>(engine: &mut Engine<'m, 
     run unsafe intl.install(&mut engine, context, &process.namespace)
   }
   engine.services.io = run fs_async.make()
-  static if capabilities.hasCrypto<C>() { engine.services.crypto = run crypto_native.open(main) }
+  run Composition.cryptoOpen(&mut engine, main)
   let io = unsafe Intrinsic.pointerRequalify<?*mut fs_async.State, *mut fs_async.State>(engine.services.io)
   let workers = unsafe Intrinsic.pointerRequalify<?*mut worker_native.State, *mut worker_native.State>(engine.services.workers)
-  run unsafe worker_native.attach(workers, io, engine.services.crypto)
+  run unsafe worker_native.attach(workers, io, unsafe Composition.cryptoThreadSetup(&engine.*))
   let mailbox = match unsafe worker_native.mailbox(workers) { Option<Mailbox>.Some { value } => value _ => { Intrinsic.trap("worker diagnostics are not attached") } }
   static if Composition.inspectorPresent() { engine.services.inspector = run inspector_native.create(unsafe fs_async.wakerAddress(io), mailbox) }
-  static if Composition.networkPresent() { engine.services.network = run net_native.open(io) }
-  static if capabilities.hasTls<C>() { engine.services.tls = run tls_native.open(allocator) }
+  static if Composition.networkPresent() { engine.services.network = run net_native.open(io, Composition.tlsSecureOps(&engine.*)) }
+  run Composition.tlsOpen(&mut engine, allocator)
   run Composition.compressionOpen(&mut engine)
   engine.services.processes = run process_native.make(io, workers)
   run Composition.http2Open(&mut engine)
@@ -824,27 +822,14 @@ unsafe effect fn realm<'m, D: Driver, C: Composition>(engine: &mut Engine<'m, Se
         _ => ()
       }
       }
-      static if capabilities.hasTls<C>() {
-      match Pointer.nonNullMut<tls_native.State>(engine.services.tls) {
-        Option<*mut tls_native.State>.Some { value: tls } => {
-          unsafe tls_native.close(&mut engine, context, tls)
-          engine.services.tls = Pointer.null<tls_native.State>()
-        }
-        _ => ()
-      }
-      }
+      unsafe Composition.tlsClose(&mut engine, context)
       unsafe Composition.http2Close(&mut engine)
       unsafe Composition.databaseClose(&mut engine, context)
       unsafe Composition.httpClose(&mut engine, context)
       unsafe Composition.wasmCloseWasi(&mut engine, context)
       unsafe Composition.wasmClose(&mut engine, context)
       unsafe Composition.compressionClose(&mut engine, context, io)
-      static if capabilities.hasCrypto<C>() {
-      match Pointer.nonNullMut<crypto_native.State>(engine.services.crypto) {
-        Option<*mut crypto_native.State>.Some { value: crypto } => { unsafe crypto_native.close(&mut engine, context, crypto, io) engine.services.crypto = Pointer.null<crypto_native.State>() }
-        _ => ()
-      }
-      }
+      unsafe Composition.cryptoClose(&mut engine, context, io)
       unsafe fs_async.close(&mut engine, context, io) engine.services.io = Pointer.null<fs_async.State>()
     }
     _ => ()

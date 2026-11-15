@@ -1,7 +1,7 @@
 //! Runtime-owned OpenSSL handles and libuv work requests. Worker callbacks only
 //! touch C-owned payloads; JavaScript conversion and callback delivery stay on the loop.
-import ext.blocking_pool as pool
-import ext.fs_async as fs_async
+import silkjsruntime.ext.blocking_pool as pool
+import silkjsruntime.ext.fs_async as fs_async
 import silk.mem.allocator { Allocator, OutOfMemoryError }
 import silkjs.js_owned_value { Value,  lendFor }
 import silkjs.js_realm { lendRealm }
@@ -21,6 +21,7 @@ import silk.num.i64
 import silk.num.usize
 import silk.num.f64
 import silkjs.js_engine { Engine }
+import silkjs.js_std_support as text
 import silkjs.js_engine_host { EngineServices }
 import silkjs.js_heap { HeapHeader }
 import silkjs.js_value { ValueBits }
@@ -30,17 +31,17 @@ import silkjs.js_coercion_host { CoercionHooks }
 import silkjs.js_errors as errors
 import silkjs.js_runtime as runtime
 import silkjs.js_exceptions as exceptions
-import libs.core.owners as owners
-import libs.core.common as common
+import silkjsruntime.libs.core.owners as owners
+import silkjsruntime.libs.core.common as common
 import silkjs.js_buffer_storage as buffers
 import silkjs.js_promise as promise
-import libs.core.host as host
+import silkjsruntime.libs.core.host as host
 import ext.openssl as ssl
 import ext.openssl_x509 as xssl
 import ext.openssl_provider as pssl
 import ext.tls_abi as tssl
 
-import ext.resource_snapshot as resources
+import silkjsruntime.ext.resource_snapshot as resources
 unsafe effect fn throwPlainError<'m, S: EngineServices>(engine: &mut Engine<'m, S>, context: *mut HeapHeader, message: &[u8]) -> ValueBits ! JsException ? &mut Allocator {
   let memory = engine.memory
   let error = run errors.newError(&mut engine, memory, unsafe lendRealm(&context, context))
@@ -888,7 +889,17 @@ unsafe effect fn finish<'m, S: EngineServices>(engine: &mut Engine<'m, S>, conte
   let memory = engine.memory
   return run unsafe buffers.newArrayBufferCopy(&mut engine, memory, unsafe lendRealm(&context, context), j.output, usize.toU64(j.length))
 }
+unsafe extern "C" fn OpenSSL_version(kind: i32) -> *const u8
+// Runs before a worker thread starts (library_hooks.ThreadSetup): see configure.
+pub export "C" fn silkCryptoThreadSetup(data: ?*mut u8) -> () {
+  if !Pointer.isNull<u8>(data) { unsafe configure(unsafe Intrinsic.pointerReinterpret<*mut u8, *mut State>(unsafe nonnull(data))) }
+}
 pub unsafe effect fn dispatch<'m, S: EngineServices>(engine: &mut Engine<'m, S>, context: *mut HeapHeader, state: *mut State, argc: i32, argv: &FrameSlots) -> ValueBits ! OutOfMemoryError | JsException ? &mut Allocator {
+  // A call with no arguments asks for OpenSSL's version, for process.versions.
+  if argc == 0 {
+    let version = run text.cstring(&mut engine, unsafe lendRealm(&context, context), unsafe OpenSSL_version(6))
+    return version.intoBits()
+  }
   let j = run newJob() let mut anchor = () let entry = unsafe Pointer.borrowMut<(), Job>(&mut anchor, j)
   let prepared = run Effect.result(unsafe prepare(&mut engine, context, state, &mut entry, argv, false)) drop entry
   match move prepared { Result<(), OutOfMemoryError | JsException>.Success { .. } => () Result<(), OutOfMemoryError | JsException>.Failure { error } => { unsafe destroyJob(j) fail move error } }

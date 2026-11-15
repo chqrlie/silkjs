@@ -930,10 +930,11 @@ const nodeVersion = '24.22.1';
 // first, the rest by name. The libraries answer for themselves; the bundled
 // JavaScript and vendored C sources carry the version of their pinned copy.
 function componentVersions() {
-  const [uv, openssl] = native.osNative('componentVersions', []);
+  const [uv] = native.osNative('componentVersions', []);
+  const openssl = presentServices.has('Crypto') ? native.crypto() : undefined;
   // The libraries of a capability answer only when it is there.
-  const [zlib, brotli, zstd] = presentServices.has('Compression') ? native.compression('versions', []) : [];
-  const nghttp2 = presentServices.has('Http2') ? native.http2('version', []) : undefined;
+  const [zlib, brotli, zstd] = presentServices.has('Compression') ? native.compression() : [];
+  const nghttp2 = presentServices.has('Http2') ? native.http2() : undefined;
   const sqlite = presentServices.has('Database') ? native.sqliteNative('version', []) : undefined;
   const versions = {
     node: nodeVersion, acorn: '8.18.0', amaro: '1.1.11',
@@ -946,6 +947,7 @@ function componentVersions() {
   if (zstd === undefined) delete versions.zstd;
   if (nghttp2 === undefined) delete versions.nghttp2;
   if (sqlite === undefined) delete versions.sqlite;
+  if (openssl === undefined) delete versions.openssl;
   if (!hasWasm) delete versions.uvwasi;
   return versions;
 }

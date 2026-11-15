@@ -692,12 +692,21 @@ that depends on the core, as `WamrWasm` does in ./wamr:
 | ./http2 (`silkjsruntime-nghttp2`) | `Nghttp2` | nghttp2 |
 | ./llhttp (`silkjsruntime-llhttp`) | `Llhttp` | llhttp and its bridge |
 | ./sqlite (`silkjsruntime-sqlite`) | `SqliteDatabase` | SQLite (lib-sqlite) |
+| ./openssl (`silkjsruntime-openssl`) | `OpenSslCrypto`, `OpenSslTls` | OpenSSL |
 | ./wamr (`silkjsruntime-wamr`) | `WamrWasm` | WAMR, SIMDe |
 
 The core's manifest no longer lists those libraries. The embedding smoke test checks with `nm`
 that the program of the core alone defines no symbol of any of them, and that the program with
 every capability defines one of each. Their C entry points are kept by the implementation's
 `open` (`keepExports`), since a dependency's C exports are emitted only when taken as values.
+
+Two core services reach OpenSSL without being its natives: the network runs the TLS sessions of
+native sockets (2405), and a worker thread's start sets OpenSSL's providers up first. Both go
+through C function tables the core defines and the implementation fills
+(`ext/library_hooks`: `SecureOps` from `Tls.secureOps`, `ThreadSetup` from
+`Crypto.threadSetup`), so the core names no OpenSSL symbol; the empty implementations give tables
+that attach no session and set nothing up. A library's version is a call of its native with no
+arguments, so ordinary calls pay nothing for it.
 
 ## Risks and decisions taken
 

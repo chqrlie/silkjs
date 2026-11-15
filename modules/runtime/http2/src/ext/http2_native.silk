@@ -460,9 +460,8 @@ unsafe effect fn dispatchCall<'m, S: EngineServices>(engine: &mut Engine<'m, S>,
   let memory = engine.memory return run unsafe buffers.newArrayBufferCopy(&mut engine, memory, unsafe lendRealm(&context, context), call.output, usize.toU64(call.length))
 }
 pub unsafe effect fn dispatch<'m, S: EngineServices>(engine: &mut Engine<'m, S>, context: *mut HeapHeader, state: *mut State, argc: i32, argv: &FrameSlots) -> ValueBits ! OutOfMemoryError | JsException ? &mut Allocator {
-  // nghttp2's version, for process.versions.
-  let op = run unsafe host.text(&mut engine, context, unsafe common.argument(argv, 0))
-  if equal(op.asSlice(), b"version") {
+  // A call with no arguments asks for nghttp2's version, for process.versions.
+  if argc == 0 {
     let anchor = () let info = unsafe Pointer.borrow<(), c.Nghttp2Info>(&anchor, unsafe c.nghttp2_version(0))
     let version = info.versionText drop info
     let value = run text.cstring(&mut engine, unsafe lendRealm(&context, context), version)

@@ -401,8 +401,8 @@ unsafe effect fn versions<'m, S: EngineServices>(engine: &mut Engine<'m, S>, con
   return output
 }
 pub unsafe effect fn dispatch<'m, S: EngineServices>(engine: &mut Engine<'m, S>, context: *mut HeapHeader, state: *mut State, argc: i32, argv: &FrameSlots) -> ValueBits ! OutOfMemoryError | JsException ? &mut Allocator {
-  let name = run unsafe host.text(&mut engine, context, unsafe common.argument(argv, 0))
-  if equal(name.asSlice(), b"versions") { return run unsafe versions(&mut engine, context) }
+  // A call with no arguments asks for the versions.
+  if argc == 0 { return run unsafe versions(&mut engine, context) }
   let p = run newJob() let mut anchor = () let j = unsafe Pointer.borrowMut<(), Job>(&mut anchor, p)
   let prepared = run Effect.result(unsafe prepare(&mut engine, context, state, &mut j, argv)) drop j
   match move prepared { Result<(), OutOfMemoryError | JsException>.Success { .. } => () Result<(), OutOfMemoryError | JsException>.Failure { error } => { unsafe destroyJob(p) fail move error } }

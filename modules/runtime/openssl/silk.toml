@@ -1,0 +1,14 @@
+[package]
+name = "silkjsruntime-openssl"
+description = "Crypto and TLS for the SilkJS runtime, over OpenSSL: the real implementations of its Crypto and Tls capabilities"
+version = "0.1.0"
+silk-version = "0.1.0-dev.78+e02346fdb3aa"
+kind = "library"
+# `openssl_capabilities` is OpenSslCrypto and OpenSslTls.
+exports = ["openssl_capabilities"]
+
+[dependencies]
+silkjs = { path = "../../engine" }
+silkjsruntime = { path = ".." }
+# OpenSSL, compiled into a program only when it depends on this package.
+opensslnative = { path = "../../native/openssl", package = "silkjs-openssl" }

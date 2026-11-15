@@ -64,10 +64,8 @@ import silkjs.js_runtime_registry { ClassIdAllocator }
 import ext.fs_native
 import ext.fs_async
 import ext.fs_descriptors as descriptors
-import ext.crypto_native
 import ext.net_native
 import ext.os_native
-import ext.tls_native
 import ext.vm_native
 import ext.vm_interrupt
 import ext.process_native
@@ -126,9 +124,7 @@ pub struct Services<C> {
   pub asyncDestroyEvent: ValueBits,
   pub destroyQueue: Queue,
   pub io: ?*mut fs_async.State,
-  pub crypto: ?*mut crypto_native.State,
   pub network: ?*mut net_native.State,
-  pub tls: ?*mut tls_native.State,
   pub napi: ?*mut napi_native.State,
   pub tracing: ?*mut trace_native.State,
   pub inspector: ?*mut inspector_native.State,
@@ -161,8 +157,8 @@ impl<C> Services<C> {
     cacheRead: ValueBits.Undefined, cacheWrite: ValueBits.Undefined, fdWarning: ValueBits.Undefined,
     permissionGuard: ValueBits.Undefined,
     meta: ValueBits.Undefined, asyncEvent: ValueBits.Undefined, asyncDestroyEvent: ValueBits.Undefined,
-    destroyQueue: Queue.make(), io: Pointer.null<fs_async.State>(), crypto: Pointer.null<crypto_native.State>(),
-    network: Pointer.null<net_native.State>(), tls: Pointer.null<tls_native.State>(),
+    destroyQueue: Queue.make(), io: Pointer.null<fs_async.State>(),
+    network: Pointer.null<net_native.State>(),
    
     napi: Pointer.null<napi_native.State>(),
    
@@ -238,17 +234,9 @@ unsafe fn ioState<'m, C: Composition>(engine: &Engine<'m, Services<C>>) -> *mut 
   if Pointer.isNull<fs_async.State>(engine.services.io) { Intrinsic.trap("filesystem executor is not initialized") }
   return unsafe Intrinsic.pointerRequalify<?*mut fs_async.State, *mut fs_async.State>(engine.services.io)
 }
-unsafe fn cryptoState<'m, C: Composition>(engine: &Engine<'m, Services<C>>) -> *mut crypto_native.State {
-  if Pointer.isNull<crypto_native.State>(engine.services.crypto) { Intrinsic.trap("crypto executor is not initialized") }
-  return unsafe Intrinsic.pointerRequalify<?*mut crypto_native.State, *mut crypto_native.State>(engine.services.crypto)
-}
 unsafe fn networkState<'m, C: Composition>(engine: &Engine<'m, Services<C>>) -> *mut net_native.State {
   if Pointer.isNull<net_native.State>(engine.services.network) { Intrinsic.trap("network executor is not initialized") }
   return unsafe Intrinsic.pointerRequalify<?*mut net_native.State, *mut net_native.State>(engine.services.network)
-}
-unsafe fn tlsState<'m, C: Composition>(engine: &Engine<'m, Services<C>>) -> *mut tls_native.State {
-  if Pointer.isNull<tls_native.State>(engine.services.tls) { Intrinsic.trap("TLS provider is not initialized") }
-  return unsafe Intrinsic.pointerRequalify<?*mut tls_native.State, *mut tls_native.State>(engine.services.tls)
 }
 unsafe fn processState<'m, C: Composition>(engine: &Engine<'m, Services<C>>) -> *mut process_native.State {
   if Pointer.isNull<process_native.State>(engine.services.processes) { Intrinsic.trap("process executor is not initialized") }
@@ -318,8 +306,7 @@ unsafe effect fn appendResourceSnapshots<'m, C: Composition>(engine: &mut Engine
     run unsafe net_native.appendResources(&mut engine, context, network, array, &mut index)
   }
   static if capabilities.hasCrypto<C>() {
-    let crypto = unsafe cryptoState(&engine.*)
-    run unsafe crypto_native.appendResources(&mut engine, context, crypto, array, &mut index)
+    run unsafe Composition.cryptoAppendResources(&mut engine, context, array, &mut index)
   }
   static if capabilities.hasCompression<C>() {
     run unsafe Composition.compressionAppendResources(&mut engine, context, array, &mut index)
@@ -441,8 +428,7 @@ unsafe effect fn pollOnce<'m, C: Composition>(engine: &mut Engine<'m, Services<C
   if unsafe exceptions.has(unsafe runtime.contextRuntime(context)) { fail JsException {} }
   let mut cryptoRan = false
   static if capabilities.hasCrypto<C>() {
-    let crypto = unsafe cryptoState(&engine.*)
-    cryptoRan = run unsafe crypto_native.poll(&mut engine, context, crypto)
+    cryptoRan = run unsafe Composition.cryptoPoll(&mut engine, context)
   }
   let mut netRan = false
   static if capabilities.hasNetwork<C>() {
@@ -929,11 +915,8 @@ impl<C: Composition> EngineServices for Services<C> {
     }
     static if capabilities.hasCrypto<C>() {
     if id == 2100 || id == 2101 {
-      // dispatch and submit configure the providers (crypto_native.configureFor).
-      let crypto = unsafe cryptoState(&engine.*)
-      if id == 2100 { return run unsafe crypto_native.dispatch(&mut engine, context, crypto, argc, argv) }
       let io = unsafe ioState(&engine.*)
-      return run unsafe crypto_native.submit(&mut engine, context, crypto, io, argc, argv)
+      return run unsafe Composition.cryptoCall(&mut engine, context, id, io, argc, argv)
     }
     }
     if url_native.handles(id) { return run unsafe url_native.dispatch(&mut engine, context, id, argc, argv) }
@@ -962,14 +945,13 @@ impl<C: Composition> EngineServices for Services<C> {
     // A socket's TLS session and gather writes: Network's, with TLS's sessions when there are any.
     if id == 2405 {
       let network = unsafe networkState(&engine.*)
-      let sessions = engine.services.tls
+      let sessions = unsafe Composition.tlsSessions(&engine.*)
       return run unsafe net_native.secure(&mut engine, context, network, sessions, argv)
     }
     }
     static if capabilities.hasTls<C>() {
     if id == 2500 {
-      let tls = unsafe tlsState(&engine.*)
-      return run unsafe tls_native.dispatch(&mut engine, context, tls, argc, argv)
+      return run unsafe Composition.tlsCall(&mut engine, context, argc, argv)
     }
     }
     static if capabilities.hasCompression<C>() {
