@@ -100,8 +100,11 @@ the runtime from this branch and, as the baseline, from `main` at f3d5ea8 (libuv
 the differential cases and the fixtures with each; `macos-libuv-suite.yml` runs libuv's own suite
 against real libuv and against the exports, with `tools/libuv_diagnostic.c` beside it.
 
-All rows: one run of branch commit d53e515 and of `main` f3d5ea8 on the same runner (both jobs
-of one workflow run), plus libuv's suite in that run and in the quick workflow's run of the same commit.
+All rows: one run of branch commit 2fc889c (the final one) and of `main` f3d5ea8 on the same runner
+(both jobs of one workflow run), plus libuv's suite in that run and in the quick workflow's run of
+the same commit. The Linux arm64 workflow's run of 2fc889c gives the same picture: differential
+cases 75 passed, 0 failed with each; fixtures 82 of 96 on `main`, 84 of 98 on the branch, every
+shared fixture the same; libuv's suite 442 of 442 with both libraries.
 
 | Check on macOS | main f3d5ea8 | this branch |
 | --- | --- | --- |
@@ -281,13 +284,16 @@ Reading it:
   alternated they are -0.2% and -0.6%. The binary that ran second in each round was penalized.
 - The engine benchmarks (section 4 of the guide) were not run: no engine source changed.
 
-### The final build (Linux x64), and what remains against main
+### The final build (Linux x64, commit 2fc889c), and what remains against main
 
-Interleaved against main f3d5ea8 (8 rounds, order alternated; main / branch, medians): setImmediate
-1.59 M / 1.68 M per s; serve() 121.5 k / 118.2 k req/s; node:http 9,350 / 9,337 req/s; Express over
-HTTPS 2,945 / 3,003 req/s; ws 1.54 M / 1.58 M msg/s; Postgres 7,186 / 7,472; spawnSync 1,455 /
-1,411 us; cat 745 / 675 ms; sqlite `db.exec` 1000 to 8000 statements +2.0, +3.6, -5.7, -8.3%. Cold
-start and page faults at or below main in every case.
+Interleaved against main f3d5ea8 (10 rounds, order alternated; main / branch, medians): setImmediate
+1.77 M / 1.84 M per s; serve() 122.5 k / 125.2 k req/s; node:http 9,763 / 9,916 req/s; Express over
+HTTPS 2,921 / 2,971 req/s; ws 1.56 M / 1.58 M msg/s; Postgres 6,788 / 7,094; spawnSync 1,399 /
+1,403 us; cat 730 / 704 ms; sqlite `db.exec` 1000 to 8000 statements -3.9, +0.6, -1.8, -2.1%;
+resident memory node:http 33.9 / 31.9 MB, serve() 30.6 / 30.1, Express 55.9 / 56.2, ws 78.0 / 79.9.
+Cold start and page faults at or below main in every case. Same build: differential cases 75
+passed, 0 failed; fixtures 83 of 96 (main 81 of 94, every shared fixture the same); libuv's suite
+438 of 442 with both libraries, and the diagnostic the same as libuv's.
 
 - **sqlite `db.exec` and code placement.** Three earlier runs of the final build read `db.exec`
   5 to 13% slower. cachegrind runs the same 488.9 M instructions on main, the earlier branch build
