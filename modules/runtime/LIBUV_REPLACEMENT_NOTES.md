@@ -133,8 +133,21 @@ register at once: with them on it, the runs of e55510b and 271451f timed out in
 `cluster-transport-smoke.cjs` and `heap-image-smoke.cjs`, which pass on `main` and pass again on
 d53e515.
 
-Not covered by any run: Linux arm64 (type-checked only), the select() thread libuv starts for
-descriptors kqueue refuses (`/dev/tty`; not done), and a fork after FSEvents started.
+libuv's select() thread for descriptors kqueue refuses (`uv__stream_try_select`, in `uv_tty_init`
+and `uv_pipe_open`: `/dev/tty`, `/dev/null`) is `ext.uv_loop`'s `ioSelectIfRefused`: the same
+probe on a queue of its own, then a thread per stream that selects for the events the stream
+watches, hands them to the loop through an internal async handle and waits until the loop has
+called the stream back. `tools/libuv_diagnostic.c` checks it against libuv on macOS with a pipe
+opened on `/dev/null` (a read to EOF and a write), and the libuv-suite workflow fails when the
+diagnostic's output differs from libuv's. The runtime's own JavaScript streams are the engine's
+(`modules/engine`), as on `main`, and do not go through this loop.
+
+A fork after FSEvents started is libuv's `fork_fs_events_child_dir` (the parent watches a
+directory, which is FSEvents on macOS, then forks; the child watches in a new loop, forks the
+default loop and closes it), which passes on macOS with both libraries.
+
+Linux arm64 runs in `.github/workflows/linux-arm64-runtime.yml` (an arm64 Ubuntu runner, the same
+steps as the macOS workflow, this branch against `main` f3d5ea8).
 
 ## Compiler walls and tooling issues
 

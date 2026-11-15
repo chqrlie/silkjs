@@ -175,9 +175,16 @@ def diagnose(path, source, work, compiler, silk_runner):
         done = subprocess.run([program], cwd=directory, env={**os.environ, **environment}, capture_output=True, text=True, timeout=120)
         outputs.append(done.stdout + done.stderr + f'exit {done.returncode}\n')
     print('--- diagnostic, libuv / Silk')
-    for left, right in zip(outputs[0].splitlines(), outputs[1].splitlines()):
+    lefts, rights = outputs[0].splitlines(), outputs[1].splitlines()
+    differences = 0
+    for index in range(max(len(lefts), len(rights))):
+        left = lefts[index] if index < len(lefts) else '(none)'
+        right = rights[index] if index < len(rights) else '(none)'
+        if left != right:
+            differences += 1
         print(('   ' if left == right else '!! ') + left + ('' if left == right else '   |   ' + right))
-    print('--- end of diagnostic')
+    print('--- end of diagnostic: ' + ('the same' if differences == 0 else f'{differences} lines differ'))
+    return differences
 
 
 def main():
@@ -196,8 +203,9 @@ def main():
              '-o', os.path.join(work, 'objects', 'diagnostic.o')])
     silk_runner = build_silk(work, os.path.join(work, 'objects'), compiler)
     real_runner = build_real(source, work)
+    diagnostic_differences = 0
     if options.diagnostic:
-        diagnose(options.diagnostic, source, work, compiler, silk_runner)
+        diagnostic_differences = diagnose(options.diagnostic, source, work, compiler, silk_runner)
     directory = os.path.join(work, 'run')
     if os.path.exists(directory):
         shutil.rmtree(directory)
@@ -235,7 +243,7 @@ def main():
                 print('\n'.join(block.splitlines()[:40]))
         return 1
     print('no test fails with Silk that passes with libuv')
-    return 0
+    return 1 if diagnostic_differences else 0
 
 
 if __name__ == '__main__':

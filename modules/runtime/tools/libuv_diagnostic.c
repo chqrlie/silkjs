@@ -15,6 +15,12 @@
 
 static void on_event(uv_fs_event_t *h, const char *name, int events, int status) { (void) h; (void) name; (void) events; (void) status; }
 static void on_poll(uv_poll_t *h, int status, int events) { printf("poll_cb status=%d events=%d\n", status, events); uv_poll_stop(h); }
+#ifdef __APPLE__
+static char select_buffer[64];
+static void on_alloc(uv_handle_t *h, size_t size, uv_buf_t *buf) { (void) h; (void) size; *buf = uv_buf_init(select_buffer, sizeof select_buffer); }
+static void on_read(uv_stream_t *s, ssize_t nread, const uv_buf_t *buf) { (void) buf; printf("read_cb nread=%zd\n", nread); uv_read_stop(s); uv_close((uv_handle_t *) s, NULL); }
+static void on_write(uv_write_t *req, int status) { printf("write_cb status=%d\n", status); uv_close((uv_handle_t *) req->handle, NULL); }
+#endif
 
 int uv_suite_diagnostic(void) {
   uv_loop_t *loop = uv_default_loop();
@@ -60,6 +66,27 @@ int uv_suite_diagnostic(void) {
     uv_run(loop, UV_RUN_DEFAULT);
     close(sv[0]); close(sv[1]);
   }
+#ifdef __APPLE__
+  /* kqueue refuses /dev/null (EINVAL): libuv watches such a pipe with a select() thread. */
+  {
+    uv_pipe_t in;
+    int fd = open("/dev/null", O_RDONLY);
+    r = uv_pipe_init(loop, &in, 0); printf("pipe_init %d\n", r);
+    r = uv_pipe_open(&in, fd); printf("pipe_open(/dev/null, read) %d\n", r);
+    r = uv_read_start((uv_stream_t *) &in, on_alloc, on_read); printf("read_start %d\n", r);
+    r = uv_run(loop, UV_RUN_DEFAULT); printf("run %d\n", r);
+  }
+  {
+    uv_pipe_t out;
+    uv_write_t req;
+    int fd = open("/dev/null", O_WRONLY);
+    uv_buf_t buf = uv_buf_init("written", 7);
+    r = uv_pipe_init(loop, &out, 0); printf("pipe_init %d\n", r);
+    r = uv_pipe_open(&out, fd); printf("pipe_open(/dev/null, write) %d\n", r);
+    r = uv_write(&req, (uv_stream_t *) &out, &buf, 1, on_write); printf("write %d\n", r);
+    r = uv_run(loop, UV_RUN_DEFAULT); printf("run %d\n", r);
+  }
+#endif
   r = uv_loop_close(loop); printf("loop_close %d\n", r);
   fflush(stdout);
   return 0;

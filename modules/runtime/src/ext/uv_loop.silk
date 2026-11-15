@@ -933,7 +933,7 @@ pub unsafe fn uv_close(memory: *mut u8, callback: CloseCallback) -> () {
   if kind == UV_TIMER { let _ignored = unsafe uv_timer_stop(memory) }
   if kind == UV_IDLE || kind == UV_PREPARE || kind == UV_CHECK { unsafe phaseStop(handle) }
   let io = (unsafe Pointer.borrow<(), Handle>(&anchor, handle)).flags & IO != 0
-  if io { let _unwatched = unsafe ioWatch(memory, 0, silkUvNoPoll) unsafe stop(handle) }
+  if io { let _unwatched = unsafe ioWatch(memory, 0, silkUvNoPoll) unsafe selectRelease(handle) unsafe stop(handle) }
   let h2 = unsafe Pointer.borrowMut<(), Handle>(&mut anchor, handle)
   h2.flags = h2.flags | CLOSING
   // A stat poll closes once its last context is gone (libuv's uv__fs_poll_close).
@@ -2644,7 +2644,10 @@ pub unsafe fn ioInit(loopMemory: *mut u8, memory: *mut u8, kind: i32) -> () {
 /// Sets the descriptor of a descriptor handle (-1 for none). Its watch must be off.
 pub unsafe fn ioSetDescriptor(memory: *mut u8, fd: i32) -> () {
   let mut anchor = () let h = unsafe Pointer.borrowMut<(), Handle>(&mut anchor, unsafe handleOf(memory))
-  h.fd = fd
+  // Another descriptor: a select thread watching the old one stops.
+  if fd != h.fd && !Pointer.isNull<u8>(h.context) && (h.flags & IO) != 0 { drop h unsafe selectRelease(unsafe handleOf(memory)) }
+  let h2 = unsafe Pointer.borrowMut<(), Handle>(&mut anchor, unsafe handleOf(memory))
+  h2.fd = fd
 }
 pub unsafe fn ioDescriptor(memory: *const u8) -> i32 {
   let anchor = () let h = unsafe Pointer.borrow<(), Handle>(&anchor, unsafe handleOfConst(memory))
@@ -2661,6 +2664,11 @@ pub unsafe fn ioWatch(memory: *mut u8, events: i32, callback: PollCallback) -> i
   if h.fd < 0 { if wanted == 0 { return 0 } return -9 }
   // The runtime's descriptor watchers register at once, as before the libuv facade: only uv_poll
   // handles take libuv's deferred change list (queueSetLoop).
+  if (h.flags & IO) != 0 && !Pointer.isNull<u8>(h.context) {
+    let state = unsafe nn(h.context) h.registered = wanted h.polled = callback drop h
+    unsafe selectWatch(state, wanted)
+    return 0
+  }
   let loop = h.loop let fd = h.fd let previous = h.registered drop h
   let anchorLoop = () let l = unsafe Pointer.borrow<(), Loop>(&anchorLoop, loop) let queue = l.backend drop l
   let status = unsafe queueSet(queue, fd, usize.toU64(Pointer.address<Handle>(handle)), previous, wanted)
@@ -2668,6 +2676,202 @@ pub unsafe fn ioWatch(memory: *mut u8, events: i32, callback: PollCallback) -> i
   let h2 = unsafe Pointer.borrowMut<(), Handle>(&mut anchor, handle)
   h2.registered = wanted h2.polled = callback
   return 0
+}
+// ---- macOS: descriptors kqueue refuses ---------------------------------------------------------
+// libuv's uv__stream_try_select: kqueue refuses some descriptors with EINVAL (/dev/tty, /dev/null).
+// A descriptor handle given one is watched by a select() thread of its own instead: the thread
+// waits for the events the handle is watched for, hands what is ready to the loop through an
+// internal async handle, and waits until the loop has called the handle back before it selects
+// again. A select handle keeps its SelectState in `context` (a stat poll's field).
+static if Intrinsic.targetOperatingSystem() == "darwin" {
+  unsafe extern "C" fn selectUnlimited(count: i32, readable: ?*mut u8, writable: ?*mut u8, failed: ?*mut u8, timeout: ?*mut u8) -> i32 as "select$DARWIN_EXTSN"
+  unsafe extern "C" fn pthread_join(thread: usize, result: ?*mut ?*mut u8) -> i32
+  struct SelectState {
+    handle: *mut Handle, async: *mut u8, fd: i32, interruptRead: i32, interruptWrite: i32, ackRead: i32, ackWrite: i32,
+    thread: usize, wanted: u32, events: u32, stop: u32, sets: *mut u8, setBytes: usize
+  }
+  const EINVAL_ERROR: i32 = 22
+  unsafe fn selectOf(pointer: *mut u8) -> *mut SelectState { return unsafe Intrinsic.pointerReinterpret<*mut u8, *mut SelectState>(pointer) }
+  unsafe fn byteAt(base: *mut u8, index: usize) -> *mut u8 { return unsafe Pointer.atMut<u8>(unsafe Pointer.assumeManyMut<u8>(base), index) }
+  unsafe fn setBit(set: *mut u8, fd: i32) -> () {
+    let at = unsafe byteAt(set, i32.toUsize(fd / 8))
+    unsafe Pointer.write<u8>(at, unsafe Pointer.read<u8>(at) | u8.shiftLeft(1, i32.wrappingToU8(fd % 8)))
+  }
+  unsafe fn hasBit(set: *mut u8, fd: i32) -> bool {
+    return (unsafe Pointer.read<u8>(unsafe byteAt(set, i32.toUsize(fd / 8))) & u8.shiftLeft(1, i32.wrappingToU8(fd % 8))) != 0
+  }
+  unsafe fn poke(fd: i32) -> () {
+    let one: [u8; 1] = [1]
+    while true { let written = unsafe write(fd, Pointer.fromRef<u8>(&one[0]), 1) if written >= 0 || unsafe errno() != EINTR { return } }
+  }
+  /// Whether kqueue refuses `fd`, asked of a queue of its own as libuv does (EV_ADD of a read
+  /// filter, refused with EINVAL): 1 refused, 0 accepted, or a negative errno.
+  unsafe fn kqueueRefuses(fd: i32) -> i32 {
+    let probe = unsafe kqueue()
+    if probe < 0 { return -(unsafe errno()) }
+    let changes = [kernelEvent(i32.toUsize(fd), FILTER_READ, EV_ADD | 4, 0, 0)]
+    let mut answer: [KernelEvent; 1] = [kernelEvent(0, 0, 0, 0, 0)]
+    let tiny = TimeSpec { seconds: 0, nanoseconds: 1 }
+    let mut count: i32 = -1
+    while true {
+      count = unsafe kevent(probe, Pointer.fromSlice<KernelEvent>(&changes), 1, Pointer.fromMutSlice<KernelEvent>(&mut answer), 1, Pointer.fromRef<TimeSpec>(&tiny))
+      if count != -1 || unsafe errno() != EINTR { break }
+    }
+    let code = unsafe errno()
+    let _closed = unsafe close(probe)
+    if count == -1 { return -code }
+    if count == 0 || (answer[0].flags & EV_ERROR) == 0 || answer[0].data != i32.toIsize(EINVAL_ERROR) { return 0 }
+    return 1
+  }
+  export "C" fn silkUvSelectThread(argument: ?*mut u8) -> ?*mut u8 {
+    let name = b"libuv-select\0"
+    unsafe setThreadName(Pointer.fromRef<u8>(&name[0]))
+    let state = unsafe selectOf(unsafe nn(argument))
+    let mut anchor = ()
+    let s = unsafe Pointer.borrowMut<(), SelectState>(&mut anchor, state)
+    let fd = s.fd let interrupt = s.interruptRead let ack = s.ackRead let async = s.async let readSet = s.sets let bytes = s.setBytes
+    drop s
+    let writeSet = unsafe byteAt(readSet, bytes)
+    let top = if fd > interrupt { fd } else { interrupt }
+    let mut buffer: [u8; 1024] = [0; 1024]
+    while true {
+      let s1 = unsafe Pointer.borrowMut<(), SelectState>(&mut anchor, state)
+      if unsafe Atomic.load<u32>(Pointer.fromMutRef<u32>(&mut s1.stop), MemoryOrder.SequentiallyConsistent) != 0 { break }
+      let wanted = u32.toI32(unsafe Atomic.load<u32>(Pointer.fromMutRef<u32>(&mut s1.wanted), MemoryOrder.SequentiallyConsistent))
+      drop s1
+      let mut index: usize = 0
+      while index < bytes * 2 { unsafe Pointer.write<u8>(unsafe byteAt(readSet, index), 0) index = index + 1 }
+      if (wanted & (UV_READABLE | UV_DISCONNECT)) != 0 { unsafe setBit(readSet, fd) }
+      if (wanted & UV_WRITABLE) != 0 { unsafe setBit(writeSet, fd) }
+      unsafe setBit(readSet, interrupt)
+      let ready = unsafe selectUnlimited(top + 1, readSet, writeSet, Pointer.null<u8>(), Pointer.null<u8>())
+      if ready == -1 { if unsafe errno() == EINTR { continue } unsafe abort() }
+      if ready == 0 { continue }
+      if unsafe hasBit(readSet, interrupt) {
+        while true {
+          let count = unsafe read(interrupt, Pointer.fromMutRef<u8>(&mut buffer[0]), 1024)
+          if count == 1024 { continue }
+          if count >= 0 { break }
+          if unsafe errno() != EINTR { break }
+        }
+      }
+      let mut events: i32 = 0
+      if unsafe hasBit(readSet, fd) { events = events | UV_READABLE }
+      if unsafe hasBit(writeSet, fd) { events = events | UV_WRITABLE }
+      if events != 0 {
+        let s2 = unsafe Pointer.borrowMut<(), SelectState>(&mut anchor, state)
+        unsafe Atomic.store<u32>(Pointer.fromMutRef<u32>(&mut s2.events), i32.toU32(events), MemoryOrder.SequentiallyConsistent)
+        drop s2
+        let _sent = unsafe uv_async_send(async)
+        // The loop answers once it has called the handle back (or once the handle closes).
+        while true {
+          let count = unsafe read(ack, Pointer.fromMutRef<u8>(&mut buffer[0]), 1)
+          if count >= 0 || unsafe errno() != EINTR { break }
+        }
+      }
+    }
+    return Pointer.null<u8>()
+  }
+  // The internal async handle's callback, on the loop's thread (libuv's uv__stream_osx_select_cb).
+  export "C" fn silkUvSelectReady(memory: *mut u8) -> () {
+    let mut anchor = ()
+    let a = unsafe Pointer.borrow<(), Handle>(&anchor, unsafe handleOf(memory))
+    let state = unsafe selectOf(unsafe nn(a.data)) drop a
+    let s = unsafe Pointer.borrowMut<(), SelectState>(&mut anchor, state)
+    let events = u32.toI32(unsafe Atomic.swap<u32>(Pointer.fromMutRef<u32>(&mut s.events), 0, MemoryOrder.SequentiallyConsistent))
+    let handle = s.handle let ack = s.ackWrite drop s
+    let h = unsafe Pointer.borrow<(), Handle>(&anchor, handle)
+    let loop = h.loop let closing = (h.flags & (CLOSING | CLOSED)) != 0 drop h
+    if closing { return }
+    if events != 0 { let _called = unsafe pollReady(loop, handle, events) }
+    let h2 = unsafe Pointer.borrow<(), Handle>(&anchor, handle)
+    let closed = (h2.flags & (CLOSING | CLOSED)) != 0 drop h2
+    // A handle closed by its callback has stopped the thread already.
+    if !closed { unsafe poke(ack) }
+  }
+  export "C" fn silkUvSelectFreed(memory: *mut u8) -> () {
+    let anchor = ()
+    let a = unsafe Pointer.borrow<(), Handle>(&anchor, unsafe handleOf(memory))
+    let state = a.data drop a
+    unsafe free(state)
+    unsafe free(memory)
+  }
+  /// libuv's uv__stream_try_select for a descriptor handle whose descriptor is set: when kqueue
+  /// refuses it, a select() thread watches it from now on. 0, or a negative errno.
+  pub unsafe fn ioSelectIfRefused(memory: *mut u8) -> i32 {
+    let handle = unsafe handleOf(memory)
+    let mut anchor = ()
+    let h = unsafe Pointer.borrow<(), Handle>(&anchor, handle)
+    let fd = h.fd let loop = h.loop let already = !Pointer.isNull<u8>(h.context) drop h
+    if fd < 0 || already { return 0 }
+    let refused = unsafe kqueueRefuses(fd)
+    if refused <= 0 { return refused }
+    let mut interrupt: [i32; 2] = [-1, -1]
+    let made = unsafe makePipe(&mut interrupt, true)
+    if made != 0 { return made }
+    let mut ack: [i32; 2] = [-1, -1]
+    let made2 = unsafe makePipe(&mut ack, false)
+    if made2 != 0 { let _a = unsafe close(interrupt[0]) let _b = unsafe close(interrupt[1]) return made2 }
+    let top = if fd > interrupt[0] { fd } else { interrupt[0] }
+    // fd_set words of 32 bits, as libuv sizes them.
+    let setBytes = (i32.toUsize(top) + 32) / 32 * 4
+    let memoryAll = unsafe calloc(1, Layout.of<SelectState>().bytes + setBytes * 2)
+    let asyncMemory = unsafe calloc(1, Layout.of<Handle>().bytes)
+    if Pointer.isNull<u8>(memoryAll) || Pointer.isNull<u8>(asyncMemory) {
+      unsafe free(memoryAll) unsafe free(asyncMemory)
+      let _a = unsafe close(interrupt[0]) let _b = unsafe close(interrupt[1]) let _c = unsafe close(ack[0]) let _d = unsafe close(ack[1])
+      return -12
+    }
+    let stateBytes = unsafe nn(memoryAll)
+    let state = unsafe selectOf(stateBytes)
+    let async = unsafe nn(asyncMemory)
+    unsafe Pointer.put<SelectState>(state, SelectState {
+      handle: handle, async: async, fd: fd, interruptRead: interrupt[0], interruptWrite: interrupt[1], ackRead: ack[0], ackWrite: ack[1],
+      thread: 0, wanted: 0, events: 0, stop: 0, sets: unsafe byteAt(stateBytes, Layout.of<SelectState>().bytes), setBytes: setBytes
+    })
+    let _init = unsafe uv_async_init(unsafe Intrinsic.pointerReinterpret<*mut Loop, *mut u8>(loop), async, silkUvSelectReady)
+    let mut second = () let ah = unsafe Pointer.borrowMut<(), Handle>(&mut second, unsafe handleOf(async))
+    ah.data = stateBytes drop ah
+    unsafe markInternal(async)
+    let mut thread: usize = 0
+    if unsafe pthread_create(Pointer.fromMutRef<usize>(&mut thread), Pointer.null<u8>(), silkUvSelectThread, stateBytes) != 0 {
+      let code = unsafe errno()
+      let _a = unsafe close(interrupt[0]) let _b = unsafe close(interrupt[1]) let _c = unsafe close(ack[0]) let _d = unsafe close(ack[1])
+      unsafe uv_close(async, silkUvSelectFreed)
+      return -code
+    }
+    let s = unsafe Pointer.borrowMut<(), SelectState>(&mut anchor, state) s.thread = thread drop s
+    let h2 = unsafe Pointer.borrowMut<(), Handle>(&mut anchor, handle) h2.context = stateBytes drop h2
+    return 0
+  }
+  // A select handle's watch: the thread's mask, then a wake so that it selects for it.
+  unsafe fn selectWatch(state: *mut u8, wanted: i32) -> () {
+    let mut anchor = () let s = unsafe Pointer.borrowMut<(), SelectState>(&mut anchor, unsafe selectOf(state))
+    unsafe Atomic.store<u32>(Pointer.fromMutRef<u32>(&mut s.wanted), i32.toU32(wanted), MemoryOrder.SequentiallyConsistent)
+    let interrupt = s.interruptWrite drop s
+    unsafe poke(interrupt)
+  }
+  // Stops a select handle's thread and gives back what it held (libuv's uv__stream_close part).
+  unsafe fn selectRelease(handle: *mut Handle) -> () {
+    let mut anchor = ()
+    let h = unsafe Pointer.borrowMut<(), Handle>(&mut anchor, handle)
+    if Pointer.isNull<u8>(h.context) { return }
+    let stateBytes = unsafe nn(h.context) h.context = Pointer.null<u8>() drop h
+    let s = unsafe Pointer.borrowMut<(), SelectState>(&mut anchor, unsafe selectOf(stateBytes))
+    unsafe Atomic.store<u32>(Pointer.fromMutRef<u32>(&mut s.stop), 1, MemoryOrder.SequentiallyConsistent)
+    let interruptRead = s.interruptRead let interruptWrite = s.interruptWrite let ackRead = s.ackRead let ackWrite = s.ackWrite
+    let thread = s.thread let async = s.async drop s
+    unsafe poke(interruptWrite)
+    unsafe poke(ackWrite)
+    let _joined = unsafe pthread_join(thread, Pointer.null<?*mut u8>())
+    let _a = unsafe close(interruptRead) let _b = unsafe close(interruptWrite) let _c = unsafe close(ackRead) let _d = unsafe close(ackWrite)
+    unsafe uv_close(async, silkUvSelectFreed)
+  }
+} else {
+  /// libuv's uv__stream_try_select is macOS's: elsewhere every descriptor goes to the queue.
+  pub unsafe fn ioSelectIfRefused(memory: *mut u8) -> i32 { return 0 }
+  unsafe fn selectWatch(state: *mut u8, wanted: i32) -> () {}
+  unsafe fn selectRelease(handle: *mut Handle) -> () {}
 }
 /// The events a descriptor handle is watched for.
 pub unsafe fn ioWatched(memory: *const u8) -> i32 {

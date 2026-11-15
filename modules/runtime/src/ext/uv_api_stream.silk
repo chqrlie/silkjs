@@ -24,9 +24,10 @@
 //! uv__udp_finish_close in the closing phase, before the close callback.
 //!
 //! Known differences from libuv:
-//! - macOS's select() thread for descriptors kqueue cannot watch (uv__stream_try_select, used by
-//!   uv_tty_init and uv_pipe_open there) is not done: on macOS a TTY or pipe whose descriptor
-//!   kqueue refuses (/dev/tty, for one) is not watched.
+//! - macOS's select() thread for descriptors kqueue refuses (uv__stream_try_select, in uv_tty_init
+//!   and uv_pipe_open) is ext.uv_loop's ioSelectIfRefused; the stream keeps its own descriptor
+//!   rather than a socket pair's end in the watcher, so uv_fileno reports the real one, as libuv's
+//!   uv__stream_fd does.
 //! - The descriptor kept for the EMFILE trick is one per process, not one per loop, and is never
 //!   closed (libuv closes it in uv_loop_close).
 //! - `uv__fd_exists` asks the loop whether a started handle watches the descriptor.
@@ -528,6 +529,12 @@ unsafe fn fdOf(outer: *mut u8) -> i32 {
 unsafe fn setFd(outer: *mut u8, fd: i32) -> () {
   let inner = unsafe innerOf(outer)
   if !isNull(inner) { unsafe uvl.ioSetDescriptor(unsafe nn(inner), fd) }
+}
+// libuv's uv__stream_try_select (macOS): a descriptor kqueue refuses gets a select() thread.
+unsafe fn trySelect(outer: *mut u8) -> i32 {
+  let inner = unsafe innerOf(outer)
+  if isNull(inner) { return 0 }
+  return unsafe uvl.ioSelectIfRefused(unsafe nn(inner))
 }
 unsafe fn closing(outer: *mut u8) -> bool {
   let inner = unsafe innerOf(outer)
@@ -1685,7 +1692,9 @@ pub export "C" fn uv_pipe_open(pipe: *mut u8, fd: i32) -> i32 {
   let mut bits: usize = 0
   if access != O_WRONLY { bits = bits | READABLE }
   if access != O_RDONLY { bits = bits | WRITABLE }
-  return unsafe streamOpenFlags(pipe, fd, bits)
+  let opened = unsafe streamOpenFlags(pipe, fd, bits)
+  if opened != 0 { return opened }
+  return unsafe trySelect(pipe)
 }
 /// libuv's uv_pipe_connect2: errors, the connect's included, reach the callback in the next
 /// pending phase.
@@ -1937,6 +1946,8 @@ pub export "C" fn uv_tty_init(loop: *mut u8, tty: *mut u8, given: i32, unused: i
   if mode != O_RDONLY { bits = bits | WRITABLE }
   unsafe raise(tty, bits & BLOCKING_WRITES)
   let _opened = unsafe streamOpenFlags(tty, fd, bits & (READABLE | WRITABLE))
+  let selected = unsafe trySelect(tty)
+  if selected != 0 { return selected }
   unsafe set<i32>(tty, S_TTY_MODE, UV_TTY_MODE_NORMAL)
   return 0
 }
