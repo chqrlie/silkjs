@@ -1,0 +1,19 @@
+//! FSEvents for directory watches on Darwin, as libuv's src/unix/fsevents.c: the stream of a watch,
+//! the thread that runs its run loop, and the conversion of FSEvents' paths and flags into libuv's
+//! (name relative to the watched directory, UV_RENAME 1 and UV_CHANGE 2). Events cross from the
+//! stream's thread to the loop's: the stream calls `notify(context)` after queuing, and the loop's
+//! thread takes them with `fseventsNext`. The module does not import the loop.
+//!
+//! This first version declines every watch with UV_ENOSYS (-78); the Darwin branch of ext.uv_loop then
+//! reports the error, as libuv does when FSEvents cannot start.
+static if Intrinsic.targetOperatingSystem() == "darwin" {
+  /// Starts watching the directory `path` (`flags` may hold UV_FS_EVENT_RECURSIVE, 4). On success
+  /// `state` receives the watch's state, and the stream calls `notify(context)` from its own thread
+  /// each time it queues events. 0, or a negative errno.
+  pub unsafe fn fseventsStart(path: *const u8, flags: u32, notify: extern "C" fn(*mut u8) -> (), context: *mut u8, state: *mut ?*mut u8) -> i32 { return -78 }
+  /// Takes the next queued event on the loop's thread: false when there is none. `name` stays valid
+  /// until the next call or `fseventsStop`.
+  pub unsafe fn fseventsNext(state: *mut u8, name: *mut ?*const u8, events: *mut i32, status: *mut i32) -> bool { return false }
+  /// Stops the watch: after it returns, `notify` is not called again, and `state` is freed.
+  pub unsafe fn fseventsStop(state: *mut u8) -> () {}
+}
