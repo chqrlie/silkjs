@@ -53,6 +53,7 @@ import ext.diagnostics_hub { Mailbox }
 import ext.diagnostics_fatal as fatalReport
 import ext.diagnostics_fatal { ReportingAllocator }
 import ext.fs_async as fs_async
+import ext.uv_os { uv_thread_setname }
 import ext.crypto_native as crypto_native
 import silk.io.reactor { Waker }
 
@@ -62,8 +63,6 @@ unsafe extern "C" fn pthread_attr_setdetachstate(attributes: *mut u8, state: i32
 unsafe extern "C" fn pthread_attr_destroy(attributes: *mut u8) -> i32
 @threadCallbacks("start")
 unsafe extern "C" fn pthread_create(thread: *mut usize, attributes: ?*const u8, start: extern "C" fn(?*mut u8) -> ?*mut u8, argument: ?*mut u8) -> i32
-@foreign(noCapture: .("name"))
-unsafe extern "C" fn uv_thread_setname(name: *const u8) -> i32
 pub struct State { pub group: Group, pub id: u32, pub control: u32, pub metadata: List<u8>, io: ?*mut fs_async.State, crypto: ?*mut crypto_native.State, held: bool, signalGuards: ?*mut SignalGuard, nextSignalGuard: u32, diagnostics: Option<Mailbox>, embedded: bool }
 pub struct Start { pub group: Group, pub id: u32, pub control: u32, pub metadata: List<u8>, name: [u8; 64] }
 struct SignalGuard { next: ?*mut SignalGuard, id: u32, watcher: Arc<vm_interrupt.Service>, slot: vm_interrupt.Slot }
