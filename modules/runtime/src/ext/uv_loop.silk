@@ -649,6 +649,8 @@ pub unsafe fn uv_loop_close(memory: *mut u8) -> i32 {
     if (h.flags & INTERNAL) == 0 { return -16 }
     handle = h.next
   }
+  // The loop's FSEvents thread ends (libuv's uv__platform_loop_delete).
+  static if Intrinsic.targetOperatingSystem() == "darwin" { unsafe fsevents.fseventsLoopDelete(memory) }
   let child = l.child
   if !Pointer.isNull<Handle>(child) { drop l unsafe signalStop(unsafe nn(child)) unsafe free(unsafe Intrinsic.pointerReinterpret<?*mut Handle, ?*mut u8>(child)) }
   let l2 = unsafe Pointer.borrowMut<(), Loop>(&mut anchor, loop)
@@ -1528,7 +1530,8 @@ static if Intrinsic.targetOperatingSystem() == "darwin" {
     if fd < 0 { let code = unsafe errno() unsafe free(copy) return -code }
     let h1 = unsafe Pointer.borrowMut<(), Handle>(&mut anchor, handle)
     h1.changed = callback h1.path = copy drop h1
-    if unsafe isDirectory(fd) == 1 {
+    // A process that forked with a run-loop thread watches directories with kqueue, as libuv.
+    if unsafe isDirectory(fd) == 1 && !unsafe fsevents.fseventsForked() {
       let _closed = unsafe close(fd)
       let wakeMemory = unsafe calloc(1, Layout.of<Handle>().bytes)
       if Pointer.isNull<u8>(wakeMemory) { unsafe free(copy) let h2 = unsafe Pointer.borrowMut<(), Handle>(&mut anchor, handle) h2.path = Pointer.null<u8>() return -12 }
@@ -1536,7 +1539,7 @@ static if Intrinsic.targetOperatingSystem() == "darwin" {
       unsafe markInternal(unsafe nn(wakeMemory))
       unsafe uv_handle_set_data(unsafe nn(wakeMemory), memory)
       let mut stream: ?*mut u8 = Pointer.null<u8>()
-      let status = unsafe fsevents.fseventsStart(unsafe nn(copy), flags, silkUvFseventsNotify, unsafe nn(wakeMemory), Pointer.fromMutRef<?*mut u8>(&mut stream))
+      let status = unsafe fsevents.fseventsStart(unsafe Intrinsic.pointerReinterpret<*mut Loop, *mut u8>(loop), unsafe nn(copy), flags, silkUvFseventsNotify, unsafe nn(wakeMemory), Pointer.fromMutRef<?*mut u8>(&mut stream))
       if status != 0 {
         unsafe uv_close(unsafe nn(wakeMemory), silkUvFseventsWakeClosed)
         unsafe free(copy) let h3 = unsafe Pointer.borrowMut<(), Handle>(&mut anchor, handle) h3.path = Pointer.null<u8>()
@@ -1564,7 +1567,8 @@ static if Intrinsic.targetOperatingSystem() == "darwin" {
     h.watch = -1 h.context = Pointer.null<u8>() h.nextWatch = Pointer.null<Handle>() drop h
     unsafe stop(handle)
     if !Pointer.isNull<u8>(stream) {
-      unsafe fsevents.fseventsStop(unsafe nn(stream))
+      // After a fork the run-loop thread is gone: the watch's state is left alone, as libuv does.
+      if !unsafe fsevents.fseventsForked() { unsafe fsevents.fseventsStop(unsafe nn(stream)) }
       unsafe uv_close(unsafe nn(unsafe Intrinsic.pointerReinterpret<?*mut Handle, ?*mut u8>(wake)), silkUvFseventsWakeClosed)
     }
     // Closing the descriptor removes its kqueue filter.
@@ -1589,8 +1593,10 @@ static if Intrinsic.targetOperatingSystem() == "darwin" {
     if unsafe armVnode(l.backend, still, usize.toU64(Pointer.address<Handle>(handle))) != 0 { unsafe abort() }
   }
   unsafe fn notifyReady(loop: *mut Loop) -> () {}
-  // After fork the vnode filters are in the old queue; watch them again in the new one.
+  // After fork the vnode filters are in the old queue; watch them again in the new one. The loop's
+  // FSEvents thread did not survive the fork (libuv's uv__io_fork).
   unsafe fn watchFork(loop: *mut Loop) -> i32 {
+    unsafe fsevents.fseventsFork(unsafe Intrinsic.pointerReinterpret<*mut Loop, *mut u8>(loop))
     let anchor = () let l = unsafe Pointer.borrow<(), Loop>(&anchor, loop)
     let queue = l.backend let mut handle = l.first drop l
     while !Pointer.isNull<Handle>(handle) {
