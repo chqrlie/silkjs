@@ -236,6 +236,53 @@ pub struct EmptyTls {}
 impl Copy for EmptyTls {}
 impl Tls for EmptyTls { static fn present() -> bool { return false } }
 
+/// The database: `node:sqlite` and `localStorage`, over SQLite. Native ids 7000 and 7001 are this
+/// capability's. It needs `Files` (`checkCombination`). A library service, as `Compression` is.
+pub interface Database {
+  /// A constant of the implementation type: whether the database is there.
+  static fn present() -> bool
+}
+/// SQLite.
+pub struct SqliteDatabase {}
+impl Copy for SqliteDatabase {}
+impl Database for SqliteDatabase { static fn present() -> bool { return true } }
+/// No database: `node:sqlite` is not there, and neither is `localStorage`.
+pub struct EmptyDatabase {}
+impl Copy for EmptyDatabase {}
+impl Database for EmptyDatabase { static fn present() -> bool { return false } }
+
+/// Native addons: Node-API and `process.dlopen`. Native ids 14000 and 14001 are this capability's.
+/// The Node-API C functions stay exported either way until the package split (step 7).
+pub interface NativeAddons {
+  /// A constant of the implementation type: whether addons load.
+  static fn present() -> bool
+}
+/// Addons loaded with dlopen.
+pub struct DlopenAddons {}
+impl Copy for DlopenAddons {}
+impl NativeAddons for DlopenAddons { static fn present() -> bool { return true } }
+/// No addons: `process.dlopen` fails with `ERR_DLOPEN_DISABLED`, as with `--no-addons`.
+pub struct EmptyAddons {}
+impl Copy for EmptyAddons {}
+impl NativeAddons for EmptyAddons { static fn present() -> bool { return false } }
+
+/// Child processes: `node:child_process`, `node:cluster` and a child's IPC channel. The process
+/// executor (native id 2700) serves signals too, which every runtime has, so it stays; without
+/// child processes the built-ins are not there.
+pub interface Processes {
+  /// A constant of the implementation type: whether child processes can be made.
+  static fn present() -> bool
+}
+/// The operating system's processes.
+pub struct OsProcesses {}
+impl Copy for OsProcesses {}
+impl Processes for OsProcesses { static fn present() -> bool { return true } }
+/// No child processes: `node:child_process` and `node:cluster` are not there, and a runtime does
+/// not connect to a parent's IPC channel.
+pub struct EmptyProcesses {}
+impl Copy for EmptyProcesses {}
+impl Processes for EmptyProcesses { static fn present() -> bool { return false } }
+
 /// The file type bits ([`ModuleResolver.kind`]) of a regular file.
 pub const MODULE_FILE: i32 = 0o100000
 /// The file type bits of a directory.
@@ -266,9 +313,9 @@ pub interface ModuleResolver {
 /// a capability the program does not want is given its empty implementation.
 ///
 /// ```silk
-/// let capabilities = Capabilities { platform: OsPlatform {}, modules: NodeResolution {}, files: OsFiles {}, compression: NativeCompression {}, http2: Nghttp2 {}, crypto: OpenSslCrypto {}, tls: OpenSslTls {}, wasm: EmptyWasm {}, hostApi: EmptyHostApi {} }
+/// let capabilities = Capabilities { platform: OsPlatform {}, modules: NodeResolution {}, files: OsFiles {}, compression: NativeCompression {}, http2: Nghttp2 {}, crypto: OpenSslCrypto {}, tls: OpenSslTls {}, database: SqliteDatabase {}, addons: DlopenAddons {}, processes: OsProcesses {}, wasm: EmptyWasm {}, hostApi: EmptyHostApi {} }
 /// ```
-pub struct Capabilities<P, M, F, Z, H, K, T, W, A> {
+pub struct Capabilities<P, M, F, Z, H, K, T, D, N, R, W, A> {
   pub platform: P,
   pub modules: M,
   pub files: F,
@@ -276,6 +323,9 @@ pub struct Capabilities<P, M, F, Z, H, K, T, W, A> {
   pub http2: H,
   pub crypto: K,
   pub tls: T,
+  pub database: D,
+  pub addons: N,
+  pub processes: R,
   pub wasm: W,
   pub hostApi: A,
 }
@@ -296,6 +346,12 @@ pub interface Composition {
   static fn cryptoPresent() -> bool
   /// `Tls.present` of the program's TLS.
   static fn tlsPresent() -> bool
+  /// `Database.present` of the program's database.
+  static fn databasePresent() -> bool
+  /// `NativeAddons.present` of the program's addons.
+  static fn addonsPresent() -> bool
+  /// `Processes.present` of the program's child processes.
+  static fn processesPresent() -> bool
   /// `Files.native` of the program's file system.
   static fn filesNative() -> bool
   /// `Files.direct` of the program's file system.
@@ -342,9 +398,15 @@ static fn presentCompression<Z: Compression>() -> bool { return Compression.pres
 static fn presentHttp2<H: Http2>() -> bool { return Http2.present() }
 static fn presentCrypto<K: Crypto>() -> bool { return Crypto.present() }
 static fn presentTls<T: Tls>() -> bool { return Tls.present() }
+static fn presentDatabase<D: Database>() -> bool { return Database.present() }
+static fn presentAddons<N: NativeAddons>() -> bool { return NativeAddons.present() }
+static fn presentProcesses<R: Processes>() -> bool { return Processes.present() }
 
-impl<P: Platform + Copy, M: ModuleResolver + Copy, F: Files + Copy, Z: Compression + Copy, H: Http2 + Copy, K: Crypto + Copy, T: Tls + Copy, W: Wasm + Copy, A: HostApi + Copy>
-  Composition for Capabilities<P, M, F, Z, H, K, T, W, A> {
+impl<P: Platform + Copy, M: ModuleResolver + Copy, F: Files + Copy, Z: Compression + Copy, H: Http2 + Copy, K: Crypto + Copy, T: Tls + Copy, D: Database + Copy,
+  N: NativeAddons + Copy, R: Processes + Copy, W: Wasm + Copy, A: HostApi + Copy> Composition for Capabilities<P, M, F, Z, H, K, T, D, N, R, W, A> {
+  static fn processesPresent() -> bool { return presentProcesses<R>() }
+  static fn databasePresent() -> bool { return presentDatabase<D>() }
+  static fn addonsPresent() -> bool { return presentAddons<N>() }
   static fn cryptoPresent() -> bool { return presentCrypto<K>() }
   static fn tlsPresent() -> bool { return presentTls<T>() }
   static fn compressionPresent() -> bool { return presentCompression<Z>() }
@@ -355,7 +417,7 @@ impl<P: Platform + Copy, M: ModuleResolver + Copy, F: Files + Copy, Z: Compressi
   static fn filesDirect() -> bool { return directFiles<F>() }
   unsafe fn filesExecute(self: &Self, call: &Call, out: &mut Outcome) -> () { unsafe self.files.execute(&call, &mut out) }
   fn forWorker(self: &Self) -> Self {
-    return Capabilities<P, M, F, Z, H, K, T, W, A> { platform: self.platform.forWorker(), modules: self.modules.forWorker(), files: self.files.forWorker(), compression: self.compression, http2: self.http2, crypto: self.crypto, tls: self.tls, wasm: self.wasm.forWorker(), hostApi: self.hostApi.forWorker() }
+    return Capabilities<P, M, F, Z, H, K, T, D, N, R, W, A> { platform: self.platform.forWorker(), modules: self.modules.forWorker(), files: self.files.forWorker(), compression: self.compression, http2: self.http2, crypto: self.crypto, tls: self.tls, database: self.database, addons: self.addons, processes: self.processes, wasm: self.wasm.forWorker(), hostApi: self.hostApi.forWorker() }
   }
   effect fn platformGetenv<'m>(engine: &Engine<'m, Services<Self>>, name: &[u8], into: &mut List<u8>) -> bool ! OutOfMemoryError ? &mut Allocator {
     let platform = engine.services.capabilities.platform return run platform.getenv(name, &mut into.*)
@@ -436,10 +498,21 @@ pub static fn hasCrypto<C: Composition>() -> bool { return Composition.cryptoPre
 /// Whether the program has TLS (`Tls.present`): a constant, for `static if`.
 pub static fn hasTls<C: Composition>() -> bool { return Composition.tlsPresent() }
 
+/// Whether the program has a database (`Database.present`): a constant, for `static if`.
+pub static fn hasDatabase<C: Composition>() -> bool { return Composition.databasePresent() }
+/// Whether the program loads addons (`NativeAddons.present`): a constant, for `static if`.
+pub static fn hasAddons<C: Composition>() -> bool { return Composition.addonsPresent() }
+
+/// Whether the program makes child processes (`Processes.present`): a constant, for `static if`.
+pub static fn hasProcesses<C: Composition>() -> bool { return Composition.processesPresent() }
+
 /// The capabilities that need others: a combination without what one needs does not build.
 pub fn checkCombination<C: Composition>() -> () {
   static if Composition.tlsPresent() && !Composition.cryptoPresent() {
     compileError("Tls needs Crypto: give Capabilities a real crypto (OpenSslCrypto), or no TLS (EmptyTls)")
+  }
+  static if Composition.databasePresent() && !Composition.filesPresent() {
+    compileError("Database needs Files: give Capabilities a file system, or no database (EmptyDatabase)")
   }
 }
 

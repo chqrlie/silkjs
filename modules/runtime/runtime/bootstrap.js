@@ -1135,7 +1135,9 @@ process.setSourceMapsEnabled = function setSourceMapsEnabled(enabled) {
 };
 process.moduleLoadList = moduleLoadList;
 define('process', module => { module.exports = process; });
-internalRequire('internal/napi').install(host, process);
+// Without native addons (NativeAddons.empty) process.dlopen fails as it does with --no-addons.
+if (presentServices.has('NativeAddons')) internalRequire('internal/napi').install(host, process);
+else process.dlopen = function dlopen() { throw Object.assign(new Error('Cannot load native addon because loading addons is disabled.'), { code: 'ERR_DLOPEN_DISABLED' }); };
 const eventGlobals = internalRequire('internal/path_events/event_target');
 for (const name of ['Event', 'CustomEvent', 'EventTarget', 'AbortController', 'AbortSignal', 'DOMException'])
   Object.defineProperty(globalThis, name, { value: eventGlobals[name], writable: true, enumerable: false, configurable: true });
@@ -2446,9 +2448,9 @@ globalThis.__silkRuntime = {
     process.execPath = native.osNative('execPath', []); process.pid = rawOS.getpid();
     if (hasWasm) native.wasmNative('register', wasmResolver);
     loader.Module._initPaths();
-    internalRequire('internal/child_process/ipc').installChild(process);
+    if (presentServices.has('Processes')) internalRequire('internal/child_process/ipc').installChild(process);
     internalRequire('internal/watch_mode/dependencies').initialize();
-    if (process.env.NODE_UNIQUE_ID !== undefined) setupClusterWorker();
+    if (process.env.NODE_UNIQUE_ID !== undefined && presentServices.has('Processes')) setupClusterWorker();
     for (const refresh of hydrations) refresh();
     performanceMilestones.bootstrapComplete = native.now() - startTime;
   }

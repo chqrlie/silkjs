@@ -12,7 +12,7 @@ declarations, the libc and library surface each service reaches today. Requires 
 
 | Service | Built-ins | JavaScript KiB | Load-time requires | Lazy requires | Silk files | Silk KiB | `extern "C"` |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Core | 326 | 3,474.2 | 948 | 353 | 41 | 725.9 | 80 |
+| Core | 326 | 3,474.7 | 948 | 353 | 41 | 731.9 | 80 |
 | Platform | 0 | 0.0 | 0 | 0 | 2 | 10.8 | 0 |
 | ModuleResolver | 15 | 181.7 | 22 | 20 | 2 | 6.9 | 0 |
 | Files | 18 | 238.9 | 76 | 40 | 5 | 81.2 | 49 |
@@ -30,8 +30,8 @@ declarations, the libc and library surface each service reaches today. Requires 
 | TypeStripping | 2 | 3,716.1 | 2 | 4 | 0 | 0.0 | 0 |
 | Inspector | 24 | 165.0 | 40 | 47 | 18 | 234.1 | 33 |
 | NativeAddons | 1 | 10.6 | 0 | 7 | 4 | 221.7 | 205 |
-| Executable | 47 | 577.1 | 323 | 35 | 6 | 38.7 | 21 |
-| **Total** | 561 | 11,130.9 | 2049 | 685 | 111 | 2,460.4 | 1474 |
+| Executable | 47 | 577.1 | 323 | 35 | 6 | 38.9 | 21 |
+| **Total** | 561 | 11,131.4 | 2049 | 685 | 111 | 2,466.5 | 1474 |
 
 ## Linked size
 
@@ -90,7 +90,7 @@ build without the capability would drop, at most.
 | `internal/deps/acorn/acorn/dist/acorn` | Core | 240.6 |
 | `internal/tls/roots` | Tls | 177.4 |
 | `internal/web/vendor/text-encoding/data/gb18030.cp` | Core | 139.8 |
-| `internal/bootstrap/silk` | Core | 137.3 |
+| `internal/bootstrap/silk` | Core | 137.7 |
 | `internal/loader/loader` | ModuleResolver | 122.4 |
 | `internal/http2/core` | Http2 | 118.5 |
 | `internal/webstreams/readablestream` | Core | 116.6 |

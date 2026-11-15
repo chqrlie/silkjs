@@ -342,7 +342,7 @@ unsafe fn openHandles<'m, C: Composition>(engine: &Engine<'m, Services<C>>) -> b
   static if capabilities.hasCompression<C>() { if let Option<*mut compression_native.State>.Some { value } = Pointer.nonNullMut<compression_native.State>(services.compression) { open = unsafe reportOpen(b"zlib", unsafe compression_native.openHandles(value)) || open } }
   if let Option<*mut process_native.State>.Some { value } = Pointer.nonNullMut<process_native.State>(services.processes) { open = unsafe reportOpen(b"child process", unsafe process_native.openHandles(value)) || open }
   static if capabilities.hasHttp2<C>() { if let Option<*mut http2_native.State>.Some { value } = Pointer.nonNullMut<http2_native.State>(services.http2) { open = unsafe reportOpen(b"HTTP/2", unsafe http2_native.openHandles(value)) || open } }
-  if let Option<*mut sqlite_native.State>.Some { value } = Pointer.nonNullMut<sqlite_native.State>(services.sqlite) { open = unsafe reportOpen(b"SQLite", unsafe sqlite_native.openHandles(value)) || open }
+  static if Composition.databasePresent() { if let Option<*mut sqlite_native.State>.Some { value } = Pointer.nonNullMut<sqlite_native.State>(services.sqlite) { open = unsafe reportOpen(b"SQLite", unsafe sqlite_native.openHandles(value)) || open } }
   open = unsafe reportOpen(b"WASI", unsafe Composition.wasmOpenHandles(&engine.*)) || open
   return open
 }
@@ -378,7 +378,7 @@ unsafe effect fn saveImage<'m, C: Composition>(engine: &mut Engine<'m, Services<
   })
   // What the bootstrap handed to native services stays behind with this process: closing
   // them gives up their hold on the heap, and hydrate hands the same things to the next ones.
-  if let Option<*mut napi_native.State>.Some { value: napi } = Pointer.nonNullMut<napi_native.State>(engine.services.napi) { unsafe napi_native.close(&mut engine, context, napi) }
+  static if Composition.addonsPresent() { if let Option<*mut napi_native.State>.Some { value: napi } = Pointer.nonNullMut<napi_native.State>(engine.services.napi) { unsafe napi_native.close(&mut engine, context, napi) } }
   let immediateQueue = unsafe host.immediatesState(&mut engine)
   unsafe immediates.close(&mut engine, rt, immediateQueue)
   if let Option<*mut inspector_native.State>.Some { value: inspector } = Pointer.nonNullMut<inspector_native.State>(engine.services.inspector) {
@@ -449,7 +449,7 @@ unsafe effect fn configure<'m, C: Composition>(engine: &mut Engine<'m, Services<
   run unsafe function(&mut engine, context, native, b"builtinService", 42)
   // The services this runtime has (docs/composable-runtime.md): the bootstrap registers only
   // their built-ins. Every one is here until each becomes a capability the embedder chooses.
-  // Files, Compression, Http2, Crypto, Tls and Wasm are the embedder's choice (`Capabilities`); the rest are
+  // Files, Compression, Http2, Crypto, Tls, Database, NativeAddons, Processes and Wasm are the embedder's choice (`Capabilities`); the rest are
   // still always here.
   let mut wasm: &[u8] = b"" static if capabilities.hasWasm<C>() { wasm = b"Wasm" }
   let mut files: &[u8] = b"" static if capabilities.hasFiles<C>() { files = b"Files" }
@@ -457,8 +457,11 @@ unsafe effect fn configure<'m, C: Composition>(engine: &mut Engine<'m, Services<
   let mut http2: &[u8] = b"" static if capabilities.hasHttp2<C>() { http2 = b"Http2" }
   let mut crypto: &[u8] = b"" static if capabilities.hasCrypto<C>() { crypto = b"Crypto" }
   let mut tls: &[u8] = b"" static if capabilities.hasTls<C>() { tls = b"Tls" }
-  let present = [b"Platform", b"ModuleResolver", files, b"Network", b"Processes", b"SystemInfo", b"Workers", crypto, tls,
-    compression, b"Http", http2, wasm, b"Database", b"TypeStripping", b"Inspector", b"NativeAddons", b"HostApi"]
+  let mut database: &[u8] = b"" static if Composition.databasePresent() { database = b"Database" }
+  let mut addons: &[u8] = b"" static if Composition.addonsPresent() { addons = b"NativeAddons" }
+  let mut processes: &[u8] = b"" static if Composition.processesPresent() { processes = b"Processes" }
+  let present = [b"Platform", b"ModuleResolver", files, b"Network", processes, b"SystemInfo", b"Workers", crypto, tls,
+    compression, b"Http", http2, wasm, database, b"TypeStripping", b"Inspector", addons, b"HostApi"]
   let services = run unsafe common.array(&mut engine, memory, context)
   let mut named: usize = 0
   while named < present.length {
@@ -506,13 +509,15 @@ unsafe effect fn configure<'m, C: Composition>(engine: &mut Engine<'m, Services<
     run unsafe function(&mut engine, context, native, b"compression", 2600)
     run unsafe function(&mut engine, context, native, b"compressionAsync", 2601)
   }
+  // The process executor serves signals too, which every runtime has; Processes leaves out its
+  // built-ins, not this.
   run unsafe function(&mut engine, context, native, b"processNative", 2700)
   static if capabilities.hasHttp2<C>() { run unsafe function(&mut engine, context, native, b"http2", 5000) }
   run unsafe function(&mut engine, context, native, b"workerNative", 6000)
-  run unsafe function(&mut engine, context, native, b"sqliteNative", 7000)
+  static if Composition.databasePresent() { run unsafe function(&mut engine, context, native, b"sqliteNative", 7000) }
   run unsafe function(&mut engine, context, native, b"moduleNative", 19000)
   run unsafe function(&mut engine, context, native, b"platformNative", 19100)
-  run unsafe function(&mut engine, context, native, b"napiNative", 14000)
+  static if Composition.addonsPresent() { run unsafe function(&mut engine, context, native, b"napiNative", 14000) }
   let inspectorNames = [
     b"inspectorNative0", b"inspectorNative1", b"inspectorNative2", b"inspectorNative3",
     b"inspectorNative4", b"inspectorNative5", b"inspectorNative6", b"inspectorNative7",
@@ -621,8 +626,8 @@ unsafe effect fn execute<'m, D: Driver, C: Composition>(engine: &mut Engine<'m, 
   static if capabilities.hasCompression<C>() { engine.services.compression = run compression_native.open() }
   engine.services.processes = run process_native.make(io, workers)
   static if capabilities.hasHttp2<C>() { engine.services.http2 = run http2_native.open() }
-  engine.services.sqlite = run sqlite_native.open(allocator)
-  engine.services.napi = run napi_native.open(allocator, unsafe Intrinsic.pointerReinterpret<*mut worker_native.State, *mut u8>(workers), worker_native.silkNodeFatalReport, io)
+  static if Composition.databasePresent() { engine.services.sqlite = run sqlite_native.open(allocator) }
+  static if Composition.addonsPresent() { engine.services.napi = run napi_native.open(allocator, unsafe Intrinsic.pointerReinterpret<*mut worker_native.State, *mut u8>(workers), worker_native.silkNodeFatalReport, io) }
   static if capabilities.hasWasm<C>() {
     run Composition.wasmOpen(&mut engine, allocator)
     if restored { unsafe Composition.wasmAdoptClasses(&mut engine, unsafe runtime.contextRuntime(context), (unsafe Pointer.read<ImageRoots>(unsafe rootsAt(image))).wasmClasses) }
@@ -777,9 +782,11 @@ unsafe effect fn realm<'m, D: Driver, C: Composition>(engine: &mut Engine<'m, Se
       unsafe gc.release(&mut engine, rt, exception)
     }
   }
+  static if Composition.addonsPresent() {
   match Pointer.nonNullMut<napi_native.State>(engine.services.napi) {
     Option<*mut napi_native.State>.Some { value: napi } => { unsafe napi_native.close(&mut engine, context, napi) }
     _ => ()
+  }
   }
   match Pointer.nonNullMut<inspector_native.State>(engine.services.inspector) {
     Option<*mut inspector_native.State>.Some { value: inspector } => {
@@ -827,12 +834,14 @@ unsafe effect fn realm<'m, D: Driver, C: Composition>(engine: &mut Engine<'m, Se
         _ => ()
       }
       }
+      static if Composition.databasePresent() {
       match Pointer.nonNullMut<sqlite_native.State>(engine.services.sqlite) {
         Option<*mut sqlite_native.State>.Some { value: sqlite } => {
           unsafe sqlite_native.close(&mut engine, context, sqlite)
           engine.services.sqlite = Pointer.null<sqlite_native.State>()
         }
         _ => ()
+      }
       }
       match Pointer.nonNullMut<http_parser_native.State>(engine.services.httpParser) {
         Option<*mut http_parser_native.State>.Some { value: parser } => {
@@ -994,17 +1003,22 @@ unsafe effect fn runtimeBody<D: Driver, C: Composition>(workers: *mut worker_nat
   drop allocationProfile
   // Addon finalizers are observable and run when the heap is destroyed; every other
   // native resource was closed with its service above.
-  let addons = match Pointer.nonNullMut<napi_native.State>(engine.services.napi) {
-    Option<*mut napi_native.State>.Some { value: napi } => unsafe napi_native.loaded(napi)
-    _ => false
+  let mut addons = false
+  static if Composition.addonsPresent() {
+    addons = match Pointer.nonNullMut<napi_native.State>(engine.services.napi) {
+      Option<*mut napi_native.State>.Some { value: napi } => unsafe napi_native.loaded(napi)
+      _ => false
+    }
   }
   if !exiting || addons {
     unsafe events.freeHandlers(&mut engine, rt)
     run unsafe gc.destroyRuntime(&mut engine, rt) |> Effect.provideMut<Allocator>(&mut allocator)
   }
+  static if Composition.addonsPresent() {
   match Pointer.nonNullMut<napi_native.State>(engine.services.napi) {
     Option<*mut napi_native.State>.Some { value: napi } => { unsafe napi_native.dispose(napi) }
     _ => ()
+  }
   }
   engine.services.napi = Pointer.null<napi_native.State>()
   match Pointer.nonNullMut<trace_native.State>(engine.services.tracing) {

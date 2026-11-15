@@ -630,6 +630,22 @@ runtime; `silk build` does.
 
 The smoke test without WebAssembly has none of the four; the one with it has all of them.
 
+**Step 6, first part: Database, NativeAddons and Processes.** `SqliteDatabase` and
+`EmptyDatabase`, `DlopenAddons` and `EmptyAddons`, `OsProcesses` and `EmptyProcesses`, in the same
+shape as the libraries of step 5. Without a database
+`node:sqlite` and `localStorage` are not there, and the database needs `Files`
+(`checkCombination`). Without addons `process.dlopen` fails with `ERR_DLOPEN_DISABLED`, as with
+`--no-addons`, and Node-API's natives, state and loop turn are not compiled; the Node-API C
+functions stay exported until the package split. Without child processes `node:child_process` and
+`node:cluster` are not there, a runtime started by a parent does not connect to its IPC channel,
+and the process executor stays: it serves signals (`process.on('SIGINT')`, the inspector's SIGUSR1)
+and handle transfer, which every runtime has, until those move to the core.
+
+What is left of step 6 is the services the runtime itself stands on today: `Workers` holds
+`process.env` and the thread identities every runtime has, `SystemInfo` gives `constants` its errno
+and signal numbers, and `Inspector` reaches into the console, diagnostics channels and tracing at
+load. Each needs that part moved to the core before it can be empty.
+
 ## Risks and decisions taken
 
 Decisions made here without asking, each reversible before step 1 lands:

@@ -439,11 +439,14 @@ fn internalBuiltin(name: &[u8]) -> bool {
 unsafe effect fn pollOnce<'m, C: Composition>(engine: &mut Engine<'m, Services<C>>, context: *mut HeapHeader, io: *mut fs_async.State, timeout: i64) -> bool
   ! OutOfMemoryError | JsException ? &mut Allocator {
   let wasmReady = unsafe wasmReady(&engine.*)
-  let napi = unsafe napiState(&engine.*)
-  let napiWasAlive = unsafe napi_native.alive(napi)
-  let napiRan = unsafe napi_native.poll(&mut engine, context, napi)
-  if unsafe exceptions.has(unsafe runtime.contextRuntime(context)) { fail JsException {} }
-  let napiAlive = unsafe napi_native.alive(napi)
+  let mut napiWasAlive = false let mut napiRan = false let mut napiAlive = false
+  static if capabilities.hasAddons<C>() {
+    let napi = unsafe napiState(&engine.*)
+    napiWasAlive = unsafe napi_native.alive(napi)
+    napiRan = unsafe napi_native.poll(&mut engine, context, napi)
+    if unsafe exceptions.has(unsafe runtime.contextRuntime(context)) { fail JsException {} }
+    napiAlive = unsafe napi_native.alive(napi)
+  }
   let wait = if !wasmReady && !napiRan { timeout } else { 0 }
   // Control messages before a wait that may block; a poll that cannot block pumps once, after.
   if wait != 0 {
@@ -730,9 +733,9 @@ impl<C: Composition> EngineServices for Services<C> {
   unsafe fn freeExternal<'m>(engine: &mut Engine<'m, Self>, rt: *mut HeapHeader, callback: NativeFunctionId, opaque: ?*mut u8, data: ?*mut u8) -> () {
     match callback {
       NativeFunctionId.Host { id } => {
-        if id == 7001 { unsafe sqlite_native.freeBuffer(data) return () }
+        static if capabilities.hasDatabase<C>() { if id == 7001 { unsafe sqlite_native.freeBuffer(data) return () } }
         if id == 13001 { unsafe sea_native.freeBuffer(opaque, data) return () }
-        if id == 14001 { let napi = unsafe napiState(&engine.*) unsafe napi_native.freeBuffer(&mut engine, napi, opaque) return () }
+        static if capabilities.hasAddons<C>() { if id == 14001 { let napi = unsafe napiState(&engine.*) unsafe napi_native.freeBuffer(&mut engine, napi, opaque) return () } }
       }
       _ => ()
     }
@@ -819,15 +822,19 @@ impl<C: Composition> EngineServices for Services<C> {
       let mailbox = if Pointer.isNull<worker_native.State>(engine.services.workers) { Option<Mailbox>.none() } else { unsafe worker_native.mailbox(unsafe workerState(&engine.*)) }
       return run unsafe profile_native.dispatch(&mut engine, context, id - profile_native.BASE, argc, argv, mailbox)
     }
+    static if capabilities.hasAddons<C>() {
     if id == 14000 {
       let napi = unsafe napiState(&engine.*)
       return run unsafe napi_native.dispatch(&mut engine, context, napi, argc, argv)
     }
+    }
     if id == platform_native.ID { return run unsafe platform_native.dispatch(&mut engine, context, argv) }
     if id == module_native.ID { return run unsafe module_native.dispatch(&mut engine, context, argv) }
+    static if capabilities.hasDatabase<C>() {
     if id == 7000 {
       let sqlite = unsafe sqliteState(&engine.*)
       return run unsafe sqlite_native.dispatch(&mut engine, context, sqlite, argc, argv)
+    }
     }
     static if capabilities.hasWasm<C>() {
       if id == 9000 || id == 10000 { return run unsafe Composition.wasmCall(&mut engine, context, id, argc, argv) }
@@ -934,8 +941,10 @@ impl<C: Composition> EngineServices for Services<C> {
         return ValueBits.Bool { value: run unsafe pollOnce(&mut engine, context, io, timeout) }
       }
       let processes = unsafe processState(&engine.*)
-      let napi = unsafe napiState(&engine.*)
-      return ValueBits.Bool { value: unsafe fs_async.hasPending(io) || unsafe process_native.hasPending(processes) || unsafe wasmReady(&engine.*) || unsafe napi_native.alive(napi) }
+      let processesPending = unsafe process_native.hasPending(processes)
+      let mut addonsAlive = false
+      static if capabilities.hasAddons<C>() { let napi = unsafe napiState(&engine.*) addonsAlive = unsafe napi_native.alive(napi) }
+      return ValueBits.Bool { value: unsafe fs_async.hasPending(io) || processesPending || unsafe wasmReady(&engine.*) || addonsAlive }
     }
     static if capabilities.hasCrypto<C>() {
     if id == 2100 || id == 2101 {

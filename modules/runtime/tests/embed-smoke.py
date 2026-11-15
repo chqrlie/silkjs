@@ -28,7 +28,8 @@ def expected(wasm, files):
         'add 5',
         'wasm ' + wasm,
         'lib 42',
-        'libraries ' + ('object object function object object' if files else 'undefined undefined undefined undefined undefined'),
+        'libraries ' + ('object object function object object object object' if files else 'undefined undefined undefined undefined undefined undefined undefined'),
+        'dlopen ' + ('ERR_DLOPEN_FAILED' if files else 'ERR_DLOPEN_DISABLED'),
         'env EMBED_SMOKE fixed /embed-smoke',
         'setenv EPERM',
         *(['fs function', 'read hello from memory', 'dir greeting.txt,out.txt 6 false'] if files else
