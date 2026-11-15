@@ -17,8 +17,16 @@ jobs:
   runtime:
     runs-on: macos-15
     timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        # This branch, and main from before the libuv replacement (C libuv linked) as the baseline
+        # its fixture results are compared with.
+        source: [branch, f3d5ea8affce5bc169df95191b55ab47e3db2740]
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.source == 'branch' && github.sha || matrix.source }}
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -64,13 +72,16 @@ jobs:
           # A failing fixture is reported, not a reason to stop the loop.
           set +e
           : > "$RUNNER_TEMP/fixtures.txt"
+          mkdir -p "$RUNNER_TEMP/fx"
           for t in tests/*-smoke.cjs tests/*-smoke.mjs tests/eventsource-dispatcher.cjs tests/wasm-fixtures.cjs tests/wasm-interruptions.cjs tests/wasm-memory-range.cjs tests/fixtures/wasi/smoke.cjs; do
             [ -f "$t" ] || continue
             timeout 300 "$RUNNER_TEMP/silkjs" "$t" > "$RUNNER_TEMP/fx.out" 2>&1; s=$?
+            cp "$RUNNER_TEMP/fx.out" "$RUNNER_TEMP/fx/$(basename "$t").out"
             echo "$s $t $(tail -1 "$RUNNER_TEMP/fx.out" | cut -c1-160)" | tee -a "$RUNNER_TEMP/fixtures.txt"
           done
           for t in tests/*.py; do
             timeout 300 python3 "$t" "$RUNNER_TEMP/silkjs" > "$RUNNER_TEMP/fx.out" 2>&1; s=$?
+            cp "$RUNNER_TEMP/fx.out" "$RUNNER_TEMP/fx/$(basename "$t").out"
             echo "$s $t $(tail -1 "$RUNNER_TEMP/fx.out" | cut -c1-160)" | tee -a "$RUNNER_TEMP/fixtures.txt"
           done
           echo "$(grep -c '^0 ' "$RUNNER_TEMP/fixtures.txt") of $(wc -l < "$RUNNER_TEMP/fixtures.txt") fixtures passed"
@@ -86,6 +97,7 @@ jobs:
         if: always()
         working-directory: modules/runtime
         run: |
+          [ -f tools/libuv_suite.py ] || exit 0
           curl --fail --location https://dist.libuv.org/dist/v1.51.0/libuv-v1.51.0.tar.gz | tar xz -C "$RUNNER_TEMP"
           set +e
           python3 tools/libuv_suite.py --libuv-src "$RUNNER_TEMP/libuv-v1.51.0" --work "$RUNNER_TEMP/uvsuite" > "$RUNNER_TEMP/libuv-suite.log" 2>&1; s=$?
@@ -95,8 +107,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: macos-runtime-logs
+          name: macos-runtime-logs-${{ matrix.source }}
           path: |
             ${{ runner.temp }}/*.log
             ${{ runner.temp }}/*.txt
             ${{ runner.temp }}/*.tap
+            ${{ runner.temp }}/fx/*.out

@@ -110,7 +110,7 @@ def build_silk(work, objects, compiler):
         main.write(''.join(f'import ext.{module}\n' for module in MODULES))
         main.write('unsafe extern "C" fn uv_suite_entry() -> i32\npub fn main() -> i32 { return unsafe uv_suite_entry() }\n')
     inputs = sorted(os.path.join(objects, name) for name in os.listdir(objects) if name.endswith('.o'))
-    libraries = ['-lpthread', '-lm'] if sys.platform == 'darwin' else [
+    libraries = [*sysroot(), '-lSystem', '-lpthread', '-lm'] if sys.platform == 'darwin' else [
         '-lpthread', '-ldl', '-lm', '-lrt', '-lutil', '-Wl,--export-dynamic',
         # The test objects are compiled against the system's C library, which may be newer than
         # the one Silk links: its versioned names resolve when the program loads.
