@@ -78,6 +78,7 @@ const TAG_SIGNAL: u64 = 2
 const TAG_INOTIFY: u64 = 3
 
 unsafe extern "C" fn calloc(count: usize, size: usize) -> ?*mut u8
+unsafe extern "C" fn realloc(pointer: ?*mut u8, size: usize) -> ?*mut u8
 unsafe extern "C" fn free(pointer: ?*mut u8) -> ()
 @foreign(noCapture: .("buffer"))
 unsafe extern "C" fn read(fd: i32, buffer: *mut u8, count: usize) -> isize
@@ -258,7 +259,10 @@ struct Loop {
   // the wake pipe was written for it.
   workLock: ?*mut u8, workFirst: ?*mut Work, workLast: ?*mut Work, workPending: u32, reserved: u32,
   // inotify watch descriptors to the first handle of each, open addressing (Linux).
-  watchSlots: ?*mut u8, watchCapacity: usize, watchCount: usize
+  watchSlots: ?*mut u8, watchCapacity: usize, watchCount: usize,
+  // Darwin: the kevent changes of poll and descriptor handles, applied by the next wait, as libuv's
+  // kqueue backend hands its watcher changes to the wait.
+  changes: ?*mut u8, changeCount: usize, changeCapacity: usize
 }
 
 export "C" fn silkUvNoClose(handle: *mut u8) -> () {}
@@ -319,13 +323,11 @@ static if Intrinsic.targetOperatingSystem() == "darwin" {
   const FILTER_READ: i16 = -1
   const FILTER_WRITE: i16 = -2
   const FILTER_VNODE: i16 = -4
-  const FILTER_USER: i16 = -10
   // libuv's kqueue.c registers UV_PRIORITIZED with EV_OOBAND (EV_FLAG1) in the filter slot. macOS
   // refuses that filter, and libuv, which hands its changes to the wait, receives the refusal as an
-  // EV_ERROR event of that filter: one UV_PRIORITIZED callback. The same here: the refusal is
-  // collected at once and replayed by a one-shot user event of the descriptor.
+  // EV_ERROR event of that filter ahead of the ready events: one UV_PRIORITIZED callback. Poll and
+  // descriptor handles register the same way here (queueSetLoop, applied by queueWait).
   const FILTER_OOBAND: i16 = 8192
-  const NOTE_TRIGGER: u32 = 16777216
   const EV_ADD: u16 = 1
   const EV_DELETE: u16 = 2
   const EV_CLEAR: u16 = 32
@@ -356,33 +358,80 @@ static if Intrinsic.targetOperatingSystem() == "darwin" {
     if wantWrite && !wasWrite { status = unsafe queueChange(queue, kernelEvent(ident, FILTER_WRITE, EV_ADD, 0, data)) }
     if !wantWrite && wasWrite { let _ignored = unsafe queueChange(queue, kernelEvent(ident, FILTER_WRITE, EV_DELETE, 0, data)) }
     if status != 0 { return status }
-    let wasPriority = (previous & UV_PRIORITIZED) != 0 let wantPriority = (events & UV_PRIORITIZED) != 0
-    if wantPriority && !wasPriority {
-      let changes = [kernelEvent(ident, FILTER_OOBAND, EV_ADD, 0, data)]
-      let mut answer: [KernelEvent; 1] = [kernelEvent(0, 0, 0, 0, 0)]
-      let zero = TimeSpec { seconds: 0, nanoseconds: 0 }
-      let count = unsafe kevent(queue, Pointer.fromSlice<KernelEvent>(&changes), 1, Pointer.fromMutSlice<KernelEvent>(&mut answer), 1, Pointer.fromRef<TimeSpec>(&zero))
-      if count < 0 { return -(unsafe errno()) }
-      if count == 1 && (answer[0].flags & EV_ERROR) != 0 {
-        status = unsafe queueChange(queue, kernelEvent(ident, FILTER_USER, EV_ADD | EV_ONESHOT, NOTE_TRIGGER, data))
-      }
-    }
-    if !wantPriority && wasPriority {
-      let _a = unsafe queueChange(queue, kernelEvent(ident, FILTER_OOBAND, EV_DELETE, 0, data))
-      let _b = unsafe queueChange(queue, kernelEvent(ident, FILTER_USER, EV_DELETE, 0, data))
-    }
     return status
   }
+  unsafe fn changeAt(l: &Loop, index: usize) -> *mut KernelEvent {
+    let base = unsafe Pointer.assumeManyMut<KernelEvent>(unsafe Intrinsic.pointerReinterpret<*mut u8, *mut KernelEvent>(unsafe nn(l.changes)))
+    return unsafe Pointer.atMut<KernelEvent>(base, index)
+  }
+  unsafe fn changesFrom(changes: *mut u8, offset: usize) -> [*]const KernelEvent {
+    let base = unsafe Pointer.assumeManyMut<KernelEvent>(unsafe Intrinsic.pointerReinterpret<*mut u8, *mut KernelEvent>(changes))
+    return unsafe Pointer.assumeMany<KernelEvent>(unsafe Intrinsic.pointerRequalify<*mut KernelEvent, *const KernelEvent>(unsafe Pointer.atMut<KernelEvent>(base, offset)))
+  }
+  unsafe fn pendChange(loop: *mut Loop, change: KernelEvent) -> i32 {
+    let mut anchor = () let l = unsafe Pointer.borrowMut<(), Loop>(&mut anchor, loop)
+    if l.changeCount == l.changeCapacity {
+      let capacity = if l.changeCapacity == 0 { 16 } else { l.changeCapacity * 2 }
+      let grown = unsafe realloc(l.changes, capacity * Layout.of<KernelEvent>().bytes)
+      if Pointer.isNull<u8>(grown) { return -12 }
+      l.changes = grown l.changeCapacity = capacity
+    }
+    unsafe Pointer.write<KernelEvent>(unsafe changeAt(&l, l.changeCount), change)
+    l.changeCount = l.changeCount + 1
+    return 0
+  }
+  // Drops the waiting changes of `ident`'s `filter`.
+  unsafe fn purgeChanges(loop: *mut Loop, ident: usize, filter: i16) -> () {
+    let mut anchor = () let l = unsafe Pointer.borrowMut<(), Loop>(&mut anchor, loop)
+    let mut kept: usize = 0 let mut index: usize = 0
+    while index < l.changeCount {
+      let change = unsafe Pointer.read<KernelEvent>(unsafe changeAt(&l, index))
+      if !(change.ident == ident && change.filter == filter) { unsafe Pointer.write<KernelEvent>(unsafe changeAt(&l, kept), change) kept = kept + 1 }
+      index = index + 1
+    }
+    l.changeCount = kept
+  }
+  /// queueSet for poll and descriptor handles: additions wait for the next queueWait, as libuv's
+  /// uv__io_poll applies its watcher queue in the wait's change list; removals happen now, and drop
+  /// any addition still waiting.
+  unsafe fn queueSetLoop(loop: *mut Loop, fd: i32, tag: u64, previous: i32, events: i32) -> i32 {
+    let anchor = () let l = unsafe Pointer.borrow<(), Loop>(&anchor, loop) let queue = l.backend drop l
+    let ident = i32.toUsize(fd) let data = u64.toUsize(tag)
+    let bitsOf: [i32; 3] = [UV_READABLE | UV_DISCONNECT, UV_WRITABLE, UV_PRIORITIZED]
+    let filters: [i16; 3] = [FILTER_READ, FILTER_WRITE, FILTER_OOBAND]
+    let mut index: usize = 0
+    while index < 3 {
+      let bits = bitsOf[index] let filter = filters[index]
+      let was = (previous & bits) != 0 let want = (events & bits) != 0
+      if want && !was { let status = unsafe pendChange(loop, kernelEvent(ident, filter, EV_ADD, 0, data)) if status != 0 { return status } }
+      if !want && was {
+        unsafe purgeChanges(loop, ident, filter)
+        let _ignored = unsafe queueChange(queue, kernelEvent(ident, filter, EV_DELETE, 0, 0))
+      }
+      index = index + 1
+    }
+    return 0
+  }
   // The events of one wait, or -1 when it was interrupted. With `blockProfile`, SIGPROF is blocked
-  // during the wait (libuv's UV_LOOP_BLOCK_SIGPROF).
-  unsafe fn queueWait(queue: i32, ready: &mut [Ready; 64], timeout: i64, blockProfile: bool) -> i32 {
+  // during the wait (libuv's UV_LOOP_BLOCK_SIGPROF). The loop's waiting changes go with it.
+  unsafe fn queueWait(loop: *mut Loop, queue: i32, ready: &mut [Ready; 64], timeout: i64, blockProfile: bool) -> i32 {
     let mut raw: [KernelEvent; 64] = [kernelEvent(0, 0, 0, 0, 0); 64]
+    let mut pending = () let p = unsafe Pointer.borrowMut<(), Loop>(&mut pending, loop)
+    let changeCount = p.changeCount let changes = p.changes p.changeCount = 0 drop p
+    // More changes than events fit: the first ones go alone, as libuv flushes a full change list.
+    let mut offset: usize = 0
+    let mut none: [KernelEvent; 0] = []
+    while changeCount - offset > 64 {
+      let _flushed = unsafe kevent(queue, unsafe changesFrom(unsafe nn(changes), offset), 64, Pointer.fromMutSlice<KernelEvent>(&mut none), 0, Pointer.null<TimeSpec>())
+      offset = offset + 64
+    }
     let span = TimeSpec { seconds: if timeout > 0 { timeout / 1000 } else { 0 }, nanoseconds: if timeout > 0 { (timeout % 1000) * 1000000 } else { 0 } }
     let nothing: [KernelEvent; 0] = []
+    let changeList: ?[*]const KernelEvent = if changeCount - offset == 0 { Pointer.fromSlice<KernelEvent>(&nothing) } else { unsafe changesFrom(unsafe nn(changes), offset) }
     let profile: [u8; 4] = [0, 0, 0, 4]
     let mut saved: [u8; 128] = [0; 128]
     if blockProfile { if unsafe pthread_sigmask(SIG_BLOCK, Pointer.fromRef<u8>(&profile[0]), Pointer.fromMutRef<u8>(&mut saved[0])) != 0 { unsafe abort() } }
-    let count = unsafe kevent(queue, Pointer.fromSlice<KernelEvent>(&nothing), 0, Pointer.fromMutSlice<KernelEvent>(&mut raw), 64, if timeout < 0 { Pointer.null<TimeSpec>() } else { Pointer.fromRef<TimeSpec>(&span) })
+    let count = unsafe kevent(queue, changeList, usize.toI32(changeCount - offset), Pointer.fromMutSlice<KernelEvent>(&mut raw), 64, if timeout < 0 { Pointer.null<TimeSpec>() } else { Pointer.fromRef<TimeSpec>(&span) })
     if blockProfile { let kept = unsafe errno() if unsafe pthread_sigmask(SIG_SETMASK, Pointer.fromRef<u8>(&saved[0]), Pointer.null<u8>()) != 0 { unsafe abort() } unsafe setErrno(kept) }
     if count < 0 { if unsafe errno() == EINTR { return -1 } unsafe abort() }
     let mut index: usize = 0
@@ -391,25 +440,11 @@ static if Intrinsic.targetOperatingSystem() == "darwin" {
       if item.filter == FILTER_READ { events = UV_READABLE if (item.flags & EV_EOF) != 0 { events = events | UV_DISCONNECT } }
       if item.filter == FILTER_WRITE { events = UV_WRITABLE if (item.flags & EV_EOF) != 0 { events = events | QUEUE_ERROR } }
       if item.filter == FILTER_OOBAND { events = UV_PRIORITIZED }
-      if item.filter == FILTER_USER { events = UV_PRIORITIZED }
       // A vnode event carries its NOTE_* bits above the poll bits.
       if item.filter == FILTER_VNODE { events = u32.toI32(u32.shiftLeft(item.fflags, 16)) }
-      if (item.flags & EV_ERROR) != 0 && item.filter != FILTER_USER { events = events | QUEUE_ERROR }
+      // A refused change: libuv's POLLERR (the refused EV_OOBAND reads as UV_PRIORITIZED alone).
+      if (item.flags & EV_ERROR) != 0 && item.filter != FILTER_OOBAND { events = events | QUEUE_ERROR | QUEUE_FAULT }
       ready[index] = Ready { tag: usize.toU64(item.udata), events: events }
-      index = index + 1
-    }
-    // A replayed priority refusal goes first, where libuv receives it: kevent reports the errors
-    // of its change list ahead of the ready events.
-    let mut front: usize = 0
-    index = 0
-    while index < i32.toUsize(count) {
-      if raw[index].filter == FILTER_USER {
-        let moved = ready[index]
-        let mut back = index
-        while back > front { ready[back] = ready[back - 1] back = back - 1 }
-        ready[front] = moved
-        front = front + 1
-      }
       index = index + 1
     }
     return count
@@ -466,9 +501,13 @@ static if Intrinsic.targetOperatingSystem() == "darwin" {
     }
     return 0
   }
+  unsafe fn queueSetLoop(loop: *mut Loop, fd: i32, tag: u64, previous: i32, events: i32) -> i32 {
+    let anchor = () let l = unsafe Pointer.borrow<(), Loop>(&anchor, loop) let queue = l.backend drop l
+    return unsafe queueSet(queue, fd, tag, previous, events)
+  }
   // The events of one wait, or -1 when it was interrupted. With `blockProfile`, SIGPROF is blocked
   // during the wait (libuv's UV_LOOP_BLOCK_SIGPROF, an epoll_pwait mask).
-  unsafe fn queueWait(queue: i32, ready: &mut [Ready; 64], timeout: i64, blockProfile: bool) -> i32 {
+  unsafe fn queueWait(loop: *mut Loop, queue: i32, ready: &mut [Ready; 64], timeout: i64, blockProfile: bool) -> i32 {
     let mut raw: [PollEvent; 64] = [pollEvent(0, 0); 64]
     let limit: i32 = if timeout < 0 { -1 } else { if timeout > 2147483647 { 2147483647 } else { i64.toI32(timeout) } }
     // SIGPROF (27) is bit 26 of the kernel's 8-byte mask.
@@ -527,7 +566,8 @@ pub unsafe fn uv_loop_init(memory: *mut u8) -> i32 {
     child: Pointer.null<Handle>(),
     pendingFirst: Pointer.null<Pending>(), pendingLast: Pointer.null<Pending>(),
     workLock: lock, workFirst: Pointer.null<Work>(), workLast: Pointer.null<Work>(), workPending: 0, reserved: 0,
-    watchSlots: Pointer.null<u8>(), watchCapacity: 0, watchCount: 0
+    watchSlots: Pointer.null<u8>(), watchCapacity: 0, watchCount: 0,
+    changes: Pointer.null<u8>(), changeCount: 0, changeCapacity: 0
   })
   unsafe updateTime(loop)
   return 0
@@ -701,6 +741,7 @@ pub unsafe fn uv_loop_close(memory: *mut u8) -> i32 {
   l2.wakeRead = -1 l2.wakeWrite = -1 l2.backend = -1
   if !Pointer.isNull<u8>(l2.workLock) { let _d = unsafe pthread_mutex_destroy(unsafe nn(l2.workLock)) unsafe free(l2.workLock) l2.workLock = Pointer.null<u8>() }
   unsafe free(l2.watchSlots) l2.watchSlots = Pointer.null<u8>() l2.watchCapacity = 0 l2.watchCount = 0
+  unsafe free(l2.changes) l2.changes = Pointer.null<u8>() l2.changeCount = 0 l2.changeCapacity = 0
   return 0
 }
 /// libuv's uv_loop_fork, in the child after fork(): a new kernel queue with every watched
@@ -711,7 +752,7 @@ pub unsafe fn uv_loop_fork(memory: *mut u8) -> i32 {
   // As libuv's uv__io_fork: epoll's descriptor is inherited and closed first; a kqueue is not
   // inherited, so its old number may already be the new queue's and is only forgotten.
   static if Intrinsic.targetOperatingSystem() != "darwin" { let _closed = unsafe close(l.backend) }
-  l.backend = -1
+  l.backend = -1 l.changeCount = 0
   let queue = unsafe queueOpen()
   if queue < 0 { return queue }
   l.backend = queue
@@ -1006,19 +1047,19 @@ pub unsafe fn uv_poll_start(memory: *mut u8, events: i32, callback: PollCallback
   let mut anchor = () let h = unsafe Pointer.borrowMut<(), Handle>(&mut anchor, handle)
   if (h.flags & (CLOSING | CLOSED)) != 0 { return -22 }
   let wanted = events & (UV_READABLE | UV_WRITABLE | UV_DISCONNECT | UV_PRIORITIZED)
-  let second = () let l = unsafe Pointer.borrow<(), Loop>(&second, h.loop)
-  let status = unsafe queueSet(l.backend, h.fd, usize.toU64(Pointer.address<Handle>(handle)), h.registered, wanted)
+  let loop = h.loop let fd = h.fd let previous = h.registered drop h
+  let status = unsafe queueSetLoop(loop, fd, usize.toU64(Pointer.address<Handle>(handle)), previous, wanted)
   if status != 0 { return status }
-  h.registered = wanted h.polled = callback drop h
+  let h2 = unsafe Pointer.borrowMut<(), Handle>(&mut anchor, handle)
+  h2.registered = wanted h2.polled = callback drop h2
   if wanted == 0 { unsafe stop(handle) } else { unsafe start(handle) }
   return 0
 }
 pub unsafe fn uv_poll_stop(memory: *mut u8) -> i32 {
   let handle = unsafe handleOf(memory)
   let mut anchor = () let h = unsafe Pointer.borrowMut<(), Handle>(&mut anchor, handle)
-  let second = () let l = unsafe Pointer.borrow<(), Loop>(&second, h.loop)
-  if h.registered != 0 { let _ignored = unsafe queueSet(l.backend, h.fd, 0, h.registered, 0) h.registered = 0 }
-  drop h
+  let loop = h.loop let fd = h.fd let previous = h.registered h.registered = 0 drop h
+  if previous != 0 { let _ignored = unsafe queueSetLoop(loop, fd, 0, previous, 0) }
   unsafe stop(handle)
   return 0
 }
@@ -2601,10 +2642,11 @@ pub unsafe fn ioWatch(memory: *mut u8, events: i32, callback: PollCallback) -> i
   let wanted = events & (UV_READABLE | UV_WRITABLE | UV_DISCONNECT | UV_PRIORITIZED)
   if wanted == h.registered { h.polled = callback return 0 }
   if h.fd < 0 { if wanted == 0 { return 0 } return -9 }
-  let second = () let l = unsafe Pointer.borrow<(), Loop>(&second, h.loop)
-  let status = unsafe queueSet(l.backend, h.fd, usize.toU64(Pointer.address<Handle>(handle)), h.registered, wanted)
+  let loop = h.loop let fd = h.fd let previous = h.registered drop h
+  let status = unsafe queueSetLoop(loop, fd, usize.toU64(Pointer.address<Handle>(handle)), previous, wanted)
   if status != 0 { return status }
-  h.registered = wanted h.polled = callback
+  let h2 = unsafe Pointer.borrowMut<(), Handle>(&mut anchor, handle)
+  h2.registered = wanted h2.polled = callback
   return 0
 }
 /// The events a descriptor handle is watched for.
@@ -2689,7 +2731,7 @@ unsafe fn ioPoll(loop: *mut Loop, initial: i64) -> () {
   while true {
     if timeout != 0 { unsafe metricsEnter(loop) }
     let l1 = unsafe Pointer.borrowMut<(), Loop>(&mut anchor, loop) l1.waitTimeout = i64.toI32(timeout) drop l1
-    let received = unsafe queueWait(queue, &mut ready, timeout, blockProfile)
+    let received = unsafe queueWait(loop, queue, &mut ready, timeout, blockProfile)
     unsafe updateTime(loop)
     let mut cycle = false
     if received <= 0 {
