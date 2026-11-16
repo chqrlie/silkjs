@@ -5,7 +5,7 @@ name: macOS setImmediate profile and focused benchmarks
 on:
   push:
     branches: [feature/replace-libuv]
-    paths: ['.github/workflows/macos-profile.yml', 'modules/runtime/src/ext/uv_loop.silk', 'modules/runtime/src/ext/fs_async.silk', 'modules/runtime/src/ext/uv_os.silk']
+    paths: ['.github/workflows/macos-profile.yml', 'modules/runtime/tools/build.py', 'modules/runtime/tools/startup-order.txt', 'modules/runtime/tools/server-order.txt', 'modules/runtime/src/ext/uv_loop.silk', 'modules/runtime/src/ext/fs_async.silk', 'modules/runtime/src/ext/uv_os.silk']
   workflow_dispatch:
 permissions:
   contents: read
