@@ -31,8 +31,13 @@ def main():
         manifest.write(f'[package]\nname = "loopharness"\nversion = "0.1.0"\nsilk-version = "{version}"\n')
     compiler = os.environ.get('SILK_CLANG', 'clang')
     # As tools/libuv_suite.py: on Linux, C library names Silk's link stub lacks (fstat) resolve when
-    # the program loads; macOS links libSystem.
-    extra = '-lSystem' if sys.platform == 'darwin' else '-lpthread -ldl -lm -lrt -Wl,--unresolved-symbols=ignore-all'
+    # the program loads.
+    if sys.platform == 'darwin':
+        # Silk's Clang brings no macOS SDK: link against Xcode's (or SDKROOT), as tools/libuv_suite.py.
+        sdk = os.environ.get('SDKROOT') or subprocess.run(['xcrun', '--show-sdk-path'], capture_output=True, text=True).stdout.strip()
+        extra = (f'-isysroot {sdk} ' if sdk else '') + '-lSystem'
+    else:
+        extra = '-lpthread -ldl -lm -lrt -Wl,--unresolved-symbols=ignore-all'
     driver = os.path.join(os.path.abspath(work), 'clang.sh')
     with open(driver, 'w') as script:
         script.write('#!/bin/sh\nfor a in "$@"; do case $a in -c|-S|-E|--version|-dumpmachine) exec %s "$@";; esac; done\n'
