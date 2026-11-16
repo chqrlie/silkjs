@@ -2,7 +2,7 @@
 
 The benchmark harness, in Silk. The `bench` tasks of [`../engine`](../engine/bench/README.md) and
 [`../runtime`](../runtime/bench/README.md) are written with it: each module's `silk.toml` lists it
-under `[profiles.tasks.dependencies]`, so it is compiled only when the tasks are.
+under `[dependencies]`. Imports from the task program determine when it is fetched and compiled.
 
 | Module | What it holds |
 | --- | --- |

@@ -16,7 +16,7 @@ def release_version() -> str:
 
 
 def host_target() -> str:
-    """The LLVM triple `silk build` targets on this host (its build/llvm/<triple> directory)."""
+    """The LLVM triple `silk build` targets on this host (its build/<triple> directory)."""
     machine = os.uname().machine
     arch = {"arm64": "aarch64", "aarch64": "aarch64", "x86_64": "x86_64", "AMD64": "x86_64"}[machine]
     if sys.platform == "darwin":
