@@ -782,24 +782,41 @@ interface, so the bridge above it (`ext/http_parser_native`) is llhttp's with th
 the same callbacks in the same order, the same pause, upgrade and error protocol, flags,
 keep-alive and body rules, `HPE_*` codes and reasons, and error positions by llhttp's rule (one
 past the byte that ended a span or step when that byte was consumed, the byte itself when it was
-refused). Strict parsing is the default and llhttp's lenient flags are honoured; RTSP and ICE
-start lines, the `PRI` upgrade and chunk extension callbacks are not there (extensions are checked
-and skipped). `process.versions.llhttp` comes from the implementation (`silk` for this one).
-`tests/http-parser-differential.mjs` runs `tests/http-parser-cases.cjs` (70 cases: requests and
+refused). Strict parsing is the default and llhttp's lenient flags are honoured, and the HTTP/2
+preface pauses the parser as llhttp's does; RTSP and ICE start lines and chunk extension callbacks
+are not there (extensions are checked and skipped). `process.versions.llhttp` comes from the implementation (`silk` for this one).
+`tests/http-parser-differential.mjs` runs `tests/http-parser-cases.cjs` (73 cases: requests and
 responses split at every byte, pipelining, chunked bodies and trailers, upgrades, pauses,
 keep-alive, lenient flags and the malformed inputs of each state) under the executable and under
 one with `SilkHttp`, and compares every event, consumed byte count, error code, reason and
-position: all 70 agree. The compatibility suite passes with it, and so do HTTP/1, HTTP/2, HTTPS
+position: all 73 agree. The compatibility suite passes with it, and so do HTTP/1, HTTP/2, HTTPS
 and TLS servers and clients and `fetch`.
 
-`cli/src/main_silk.silk` is the executable with both Silk libraries. The CI job `silk-libraries`
-(`.github/workflows/embedding.yml`) builds it and the executable with the C libraries, runs the
-compression differential against Node, the parser differential against llhttp, and the
-compatibility suite.
+**Step 8, third swap: HTTP/2.** `SilkHttp2` (./silkhttp2) is `Http2` with an HTTP/2 session
+written in Silk (`silkhttp2/src/ext/h2.silk`, HPACK in `h2_hpack.silk`) in place of nghttp2. It
+has the part of nghttp2 1.66's interface the bridge uses, so the bridge is nghttp2's with the
+import changed, and it ports nghttp2's session rules: the inbound state machine frame by frame
+and byte by byte (padding, CONTINUATION, SETTINGS entries, GOAWAY debug data, ALTSVC and ORIGIN),
+stream states and the concurrency limits, flow control with window updates the application
+drives, the urgent, regular and request queues and the DATA scheduler, SETTINGS and their
+acknowledgement, PING and SETTINGS ACK flood limits, GOAWAY, the RST_STREAM rate limit, the HTTP
+messaging checks of http.c, the error codes and their texts, and the callbacks in nghttp2's
+order. HPACK indexes and Huffman-codes as nghttp2's deflater does, with the static table and
+Huffman trie of `silk.http`. Not there, as the bridge does not use them: RFC 9218 urgencies,
+user extension frames, upgrade from HTTP/1 and no-copy DATA; nghttp2 1.66 has no RFC 7540
+priority tree either. Header blocks are decoded whole when they end rather than as they arrive.
+Node's own HTTP/2 tests (`test-http2-*`, 283, through `tests/node-suite`) measure it: 280 of the 282 that pass under Node pass, the same 280 as with nghttp2 (both fail
+the two `misbehaving-flow-control` tests). The compatibility suite passes with it, and the CI job
+runs Node's HTTP/2 tests with both and requires every test that passes with nghttp2 to pass with
+it.
 
-The other swaps follow the same path: nghttp2 with an HTTP/2 session in Silk, OpenSSL with
-`silk.crypto` and `silk.tls`, each a new implementation package of the same capability, chosen by
-the embedder.
+`cli/src/main_silk.silk` is the executable with the three Silk libraries. The CI job `silk-libraries`
+(`.github/workflows/embedding.yml`) builds it and the executable with the C libraries, runs the
+compression differential against Node, the parser differential against llhttp, Node's HTTP/2
+tests and the compatibility suite.
+
+OpenSSL is next on the same path: `silk.crypto` and `silk.tls` as another implementation of
+`Crypto` and `Tls`, chosen by the embedder.
 
 ## Risks and decisions taken
 

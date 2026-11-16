@@ -5,7 +5,8 @@
 //! byte that ended a span or completed a step when that byte was consumed, the byte itself when it
 //! was refused. Strict parsing is the default; LENIENT_HEADERS, LENIENT_CHUNKED_LENGTH,
 //! LENIENT_KEEP_ALIVE, LENIENT_TRANSFER_ENCODING, LENIENT_VERSION and LENIENT_DATA_AFTER_CLOSE are
-//! honoured. Not here: RTSP and ICE start lines, the PRI upgrade, and chunk extension callbacks
+//! honoured, and the HTTP/2 preface (`PRI * HTTP/2.0`) pauses with HPE_PAUSED_H2_UPGRADE as in
+//! llhttp. Not here: RTSP and ICE start lines and chunk extension callbacks
 //! (extensions are checked and skipped).
 import silk.mem.pointer { Pointer }
 import silk.mem.layout { Layout }
@@ -118,6 +119,9 @@ const S_MESSAGE_DONE: i32 = 41
 const S_AFTER_MESSAGE: i32 = 42
 const S_TRAILERS_DONE: i32 = 43
 const S_VALUE_DONE: i32 = 44
+// The rest of the HTTP/2 connection preface after `PRI * HTTP/2.0`.
+const S_PRI_PREFACE: i32 = 45
+const E_PAUSED_H2_UPGRADE: i32 = 23
 // What the header being read is.
 const H_GENERAL: i32 = 0
 const H_CONTENT_LENGTH: i32 = 1
@@ -501,8 +505,16 @@ pub unsafe fn llhttp_execute(parser: *mut u8, data: *const u8, length: usize) ->
       s.minor = u8.toI32(byte) - 48
       let valid = s.major == 1 && (s.minor == 0 || s.minor == 1) || s.major == 0 && s.minor == 9 || s.major == 2 && s.minor == 0
       if !valid && u32.bitAnd(s.lenient, L_VERSION) == 0 { drop s return unsafe refuse(p, E_INVALID_VERSION, b"Invalid HTTP version\0", unsafe address(data, i + 1)) }
-      s.state = if s.kind == RESPONSE { S_AFTER_VERSION } else { S_REQUEST_LF }
-      s.digits = 0 i = i + 1 continue
+      s.state = if s.kind == RESPONSE { S_AFTER_VERSION } else if s.method == 34 { S_PRI_PREFACE } else { S_REQUEST_LF }
+      s.digits = 0 s.constant = 0 i = i + 1 continue
+    }
+    if state == S_PRI_PREFACE {
+      // llhttp's req_pri_upgrade: the preface pauses the parser one past its last byte.
+      let preface = b"\r\n\r\nSM\r\n\r\n"
+      if byte != preface[s.constant] { drop s return unsafe refuse(p, E_INVALID_VERSION, b"Expected HTTP/2 Connection Preface\0", unsafe address(data, i)) }
+      s.constant = s.constant + 1
+      if s.constant == 10 { drop s return unsafe refuse(p, E_PAUSED_H2_UPGRADE, b"Pause on PRI/Upgrade\0", unsafe address(data, i + 1)) }
+      i = i + 1 continue
     }
     if state == S_REQUEST_LF {
       // After the version: CR, then LF.

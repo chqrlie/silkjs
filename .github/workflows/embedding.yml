@@ -48,8 +48,8 @@ jobs:
           done
   silk-libraries:
     # Step 8's swaps: the executable with SilkCompression (over silk.compress, no C library) and
-    # SilkHttp (an HTTP/1 parser in Silk) in place of NativeCompression and Llhttp
-    # (cli/src/main_silk.silk) must decode, flush, parse and fail as Node and llhttp do.
+    # SilkHttp and SilkHttp2 (HTTP/1 and HTTP/2 in Silk) in place of NativeCompression, Llhttp and
+    # Nghttp2 (cli/src/main_silk.silk) must behave as Node, llhttp and nghttp2 do.
     runs-on: ubuntu-26.04
     timeout-minutes: 150
     steps:
@@ -85,6 +85,19 @@ jobs:
       - name: HTTP/1 parser differential against llhttp
         working-directory: modules/runtime
         run: node tests/http-parser-differential.mjs build/silk/silkjsruntime build/native/silkjsruntime
+      - name: Node's HTTP/2 tests with SilkHttp2 and with nghttp2
+        working-directory: modules/runtime/tests/node-suite
+        run: |
+          mkdir -p "$HOME/setup/node-src" && cd "$HOME/setup/node-src" && git init -q
+          git remote add origin https://github.com/nodejs/node
+          git config core.sparseCheckout true && printf 'test/\n' > .git/info/sparse-checkout
+          git fetch -q --depth 1 origin tag v24.22.1 && git checkout -q FETCH_HEAD
+          cd "$GITHUB_WORKSPACE/modules/runtime/tests/node-suite"
+          python3 run.py "$GITHUB_WORKSPACE/modules/runtime/build/native/silkjsruntime" native.json parallel 4 '^test-http2-'
+          python3 run.py "$GITHUB_WORKSPACE/modules/runtime/build/silk/silkjsruntime" silk.json parallel 4 '^test-http2-'
+          # Every test that passes with nghttp2 must pass with SilkHttp2.
+          python3 report.py native.json silk.json fails.json | tee report.txt
+          grep -q '^eligible [0-9]* pass [0-9]* fail 0 ' report.txt
       - name: Node compatibility with the Silk libraries
         working-directory: modules/runtime
         env:
