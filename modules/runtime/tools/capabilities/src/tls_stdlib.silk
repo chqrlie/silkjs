@@ -1,0 +1,52 @@
+//! `silk task tls-stdlib`: writes build/stdlib-tls, the pinned toolchain's standard library with
+//! silktls/silk-tls-deferred.patch applied: silk.tls's deferred client verification
+//! (`Client.deferVerification`, `Client.verificationFailure`, `Client.peerCertificateDer`), which
+//! SilkTls needs and the pinned toolchain does not have yet. cli/src/main_silk_tls.silk builds with
+//! it (`--stdlib ../build/stdlib-tls`). Once a toolchain release has the change, the patch, this
+//! task and the `--stdlib` go.
+import silk.cli.task { Task, TaskError }
+import silk.collections.bytes { Bytes }
+import silk.core.option { Option }
+import silk.io.writer { WriterError }
+import silk.mem.allocator { Allocator, OutOfMemoryError }
+import silk.system.child_process { ChildProcess, ProcessError, Exited, Signaled }
+import silk.system.filesystem { FileError, FileSystem, Path }
+import silk.system.host_input { HostInput, HostInputError }
+
+// The toolchain the workspace pins (silk-version).
+const VERSION: &[u8] = b"0.1.0-dev.78+e02346fdb3aa"
+
+effect fn command(program: &[u8], first: &[u8], second: &[u8], third: &[u8]) -> bool
+  ! ProcessError | FileError | OutOfMemoryError ? &mut Allocator | &mut ChildProcess {
+  let path = run Path.fromBytes(program)
+  let mut request = run ChildProcess.request(&path)
+  run ChildProcess.addArgumentBytes(&mut request, first)
+  run ChildProcess.addArgumentBytes(&mut request, second)
+  if third.length > 0 { run ChildProcess.addArgumentBytes(&mut request, third) }
+  let outcome = run ChildProcess.submit(&request)
+  return match move outcome.value {
+    Exited { code, .. } => code == 0
+    Signaled { .. } => false
+  }
+}
+
+pub effect fn tlsStdlib() -> ()
+  ! TaskError | ProcessError | FileError | HostInputError | OutOfMemoryError | WriterError
+  ? &mut HostInput | &mut Allocator | &mut ChildProcess | &mut FileSystem {
+  let package = run Task.root()
+  let home = match move run HostInput.variableNamed("HOME") {
+    Option.Some { value } => move value
+    Option.None => { run Task.abort("HOME is not set: the toolchain is under $HOME/.silk") return () }
+  }
+  let mut source = run Bytes.copy(home.asSlice())
+  run source.append(b"/.silk/toolchains/")
+  run source.append(VERSION)
+  run source.append(b"/lib/silk/stdlib")
+  let target = run Path.resolveBytes(&package, b"../../build/stdlib-tls")
+  let patch = run Path.resolveBytes(&package, b"../../silktls/silk-tls-deferred.patch")
+  let mut client = run Bytes.copy(Path.rawBytes(&target))
+  run client.append(b"/silk/tls/client.silk")
+  if !run command(b"/bin/rm", b"-rf", Path.rawBytes(&target), b"") { run Task.abort("could not remove the previous build/stdlib-tls") }
+  if !run command(b"/bin/cp", b"-R", source.asSlice(), Path.rawBytes(&target)) { run Task.abort("could not copy the toolchain's standard library: is the pinned toolchain installed (silk use)?") }
+  if !run command(b"/usr/bin/patch", b"-s", client.asSlice(), Path.rawBytes(&patch)) { run Task.abort("silktls/silk-tls-deferred.patch does not apply to the toolchain's silk/tls/client.silk") }
+}
