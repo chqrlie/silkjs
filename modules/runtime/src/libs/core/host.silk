@@ -74,7 +74,6 @@ import ext.worker_native
 import ext.immediates
 import ext.module_native
 import ext.platform_native
-import ext.napi_native
 import ext.trace_native
 import ext.sea_native
 import ext.util_native
@@ -124,7 +123,6 @@ pub struct Services<C> {
   pub destroyQueue: Queue,
   pub io: ?*mut fs_async.State,
   pub network: ?*mut net_native.State,
-  pub napi: ?*mut napi_native.State,
   pub tracing: ?*mut trace_native.State,
   pub sea: ?*mut sea_native.State,
   pub storageClass: u32,
@@ -157,8 +155,6 @@ impl<C> Services<C> {
     meta: ValueBits.Undefined, asyncEvent: ValueBits.Undefined, asyncDestroyEvent: ValueBits.Undefined,
     destroyQueue: Queue.make(), io: Pointer.null<fs_async.State>(),
     network: Pointer.null<net_native.State>(),
-   
-    napi: Pointer.null<napi_native.State>(),
    
     tracing: Pointer.null<trace_native.State>(), sea: Pointer.null<sea_native.State>(),
     storageClass: 0, debugBuiltins: false, stopCleanup: false, capabilities: move capabilities,
@@ -242,10 +238,6 @@ unsafe fn processState<'m, C: Composition>(engine: &Engine<'m, Services<C>>) -> 
 unsafe fn workerState<'m, C: Composition>(engine: &Engine<'m, Services<C>>) -> *mut worker_native.State {
   if Pointer.isNull<worker_native.State>(engine.services.workers) { Intrinsic.trap("worker provider is not initialized") }
   return unsafe Intrinsic.pointerRequalify<?*mut worker_native.State, *mut worker_native.State>(engine.services.workers)
-}
-unsafe fn napiState<'m, C: Composition>(engine: &Engine<'m, Services<C>>) -> *mut napi_native.State {
-  if Pointer.isNull<napi_native.State>(engine.services.napi) { Intrinsic.trap("Node-API provider is not initialized") }
-  return unsafe Intrinsic.pointerRequalify<?*mut napi_native.State, *mut napi_native.State>(engine.services.napi)
 }
 // Wasm completions wait for the poll phase; without WebAssembly there are none.
 unsafe fn wasmReady<'m, C: Composition>(engine: &Engine<'m, Services<C>>) -> bool {
@@ -396,11 +388,10 @@ unsafe effect fn pollOnce<'m, C: Composition>(engine: &mut Engine<'m, Services<C
   let wasmReady = unsafe wasmReady(&engine.*)
   let mut napiWasAlive = false let mut napiRan = false let mut napiAlive = false
   static if capabilities.hasAddons<C>() {
-    let napi = unsafe napiState(&engine.*)
-    napiWasAlive = unsafe napi_native.alive(napi)
-    napiRan = unsafe napi_native.poll(&mut engine, context, napi)
+    napiWasAlive = unsafe Composition.addonsAlive(&engine.*)
+    napiRan = unsafe Composition.addonsPoll(&mut engine, context)
     if unsafe exceptions.has(unsafe runtime.contextRuntime(context)) { fail JsException {} }
-    napiAlive = unsafe napi_native.alive(napi)
+    napiAlive = unsafe Composition.addonsAlive(&engine.*)
   }
   let wait = if !wasmReady && !napiRan { timeout } else { 0 }
   // Control messages before a wait that may block; a poll that cannot block pumps once, after.
@@ -689,7 +680,7 @@ impl<C: Composition> EngineServices for Services<C> {
       NativeFunctionId.Host { id } => {
         static if capabilities.hasDatabase<C>() { if id == 7001 { unsafe Composition.databaseFreeBuffer(&engine.*, data) return () } }
         if id == 13001 { unsafe sea_native.freeBuffer(opaque, data) return () }
-        static if capabilities.hasAddons<C>() { if id == 14001 { let napi = unsafe napiState(&engine.*) unsafe napi_native.freeBuffer(&mut engine, napi, opaque) return () } }
+        static if capabilities.hasAddons<C>() { if id == 14001 { unsafe Composition.addonsFreeBuffer(&mut engine, opaque) return () } }
       }
       _ => ()
     }
@@ -779,8 +770,7 @@ impl<C: Composition> EngineServices for Services<C> {
     }
     static if capabilities.hasAddons<C>() {
     if id == 14000 {
-      let napi = unsafe napiState(&engine.*)
-      return run unsafe napi_native.dispatch(&mut engine, context, napi, argc, argv)
+      return run unsafe Composition.addonsCall(&mut engine, context, argc, argv)
     }
     }
     if id == platform_native.ID { return run unsafe platform_native.dispatch(&mut engine, context, argv) }
@@ -898,7 +888,7 @@ impl<C: Composition> EngineServices for Services<C> {
       let processes = unsafe processState(&engine.*)
       let processesPending = unsafe process_native.hasPending(processes)
       let mut addonsAlive = false
-      static if capabilities.hasAddons<C>() { let napi = unsafe napiState(&engine.*) addonsAlive = unsafe napi_native.alive(napi) }
+      addonsAlive = unsafe Composition.addonsAlive(&engine.*)
       return ValueBits.Bool { value: unsafe fs_async.hasPending(io) || processesPending || unsafe wasmReady(&engine.*) || addonsAlive }
     }
     static if capabilities.hasCrypto<C>() {

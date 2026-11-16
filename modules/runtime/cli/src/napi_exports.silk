@@ -1,10 +1,10 @@
 //! The Node-API functions that take a callback, as C exports of the executable. Addons find them by
 //! name, and Silk emits a C export only for the root package or where Silk code takes it as a value,
-//! which a function with a callback parameter cannot be. So the core keeps them as plain functions and
+//! which a function with a callback parameter cannot be. So ./napi keeps them as plain functions and
 //! this package, the executable, exports them. Until dependency exports are roots, an embedder that
 //! loads addons declares the same.
-import silkjsruntime.ext.napi_async as asyncs
-import silkjsruntime.ext.napi_async {
+import addons.ext.napi_async as asyncs
+import addons.ext.napi_async {
   AsyncCleanupHook,
   CallJs,
   CleanupHook,
@@ -13,10 +13,10 @@ import silkjsruntime.ext.napi_async {
   Hook,
   Work
 }
-import silkjsruntime.ext.napi_core as core
-import silkjsruntime.ext.napi_core { Finalize }
-import silkjsruntime.ext.napi_values as values
-import silkjsruntime.ext.napi_values { Callback, PropertyDescriptor }
+import addons.ext.napi_core as core
+import addons.ext.napi_core { Finalize }
+import addons.ext.napi_values as values
+import addons.ext.napi_values { Callback, PropertyDescriptor }
 
 /// Called by main so the module is part of the program: its exports are what it is for.
 pub fn keep() -> () {}

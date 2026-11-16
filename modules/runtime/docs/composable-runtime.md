@@ -701,6 +701,7 @@ that depends on the core, as `WamrWasm` does in ./wamr:
 | ./openssl (`silkjsruntime-openssl`) | `OpenSslCrypto`, `OpenSslTls` | OpenSSL |
 | ./inspector (`silkjsruntime-inspector`) | `NodeInspector` | the inspector's WebSocket server (its own sockets and thread) |
 | ./amaro (`silkjsruntime-amaro`) | `Amaro` | amaro's JavaScript (3.8 MB) |
+| ./napi (`silkjsruntime-napi`) | `DlopenAddons` | Node-API's C functions |
 | ./wamr (`silkjsruntime-wamr`) | `WamrWasm` | WAMR, SIMDe |
 
 The core's manifest no longer lists those libraries. The embedding smoke test checks with `nm`
@@ -734,11 +735,11 @@ expected output and its symbol checks (`silk task symbols`). The executable is t
 
 **What is left of step 7.**
 
-- `DlopenAddons` stays in the core. Node-API is several hundred C functions that addons find by
-  name, and Silk emits a dependency's C exports only when something takes them as values. The
-  compiler change that makes every loaded dependency's exports roots is done in Silk and waits for
-  a release; with it, Node-API moves to a package the way the others did, and
-  `cli/src/napi_exports.silk` goes away.
+- `DlopenAddons` is ./napi (`silkjsruntime-napi`): Node-API's C functions, which addons find by
+  name, are emitted because `DlopenAddons.open` takes them as values (`keepExports`), as the other
+  packages do. The 15 that take a callback cannot be taken as values, so a program that loads
+  addons exports those itself (`cli/src/napi_exports.silk`); the compiler change that makes every
+  loaded dependency's exports roots, done in Silk and waiting for a release, removes that file.
 - libuv stays in the core until the loop plan replaces it; `OsFiles`, `OsNetwork`,
   `OsProcesses`, `OsSystemInfo` and `ThreadWorkers` stay with it for now (a `silkjsruntime-os`
   package once libuv is gone, so that the core touches no libc).

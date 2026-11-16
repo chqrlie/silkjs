@@ -7,7 +7,7 @@ import silkjs.js_libc_platform as platform
 import silkjsruntime.runtime.worker
 import silkjsruntime.ext.keep_exports
 import napi_exports
-import silkjsruntime.libs.core.capabilities { Compression, Capabilities, EmptyHostApi, DlopenAddons, OsProcesses, OsNetwork, OsSystemInfo, ThreadWorkers }
+import silkjsruntime.libs.core.capabilities { Compression, Capabilities, EmptyHostApi, OsProcesses, OsNetwork, OsSystemInfo, ThreadWorkers }
 import silkjsruntime.libs.core.module_sources { NodeResolution }
 import silkjsruntime.libs.core.platforms { OsPlatform }
 import silkjsruntime.libs.core.files { OsFiles }
@@ -19,6 +19,7 @@ import database.sqlite_database { SqliteDatabase }
 import openssl.openssl_capabilities { OpenSslCrypto, OpenSslTls }
 import inspector.node_inspector { NodeInspector }
 import amaro.amaro_stripping { Amaro }
+import addons.dlopen_addons { DlopenAddons }
 import pm.cli
 import silk.collections.bytes { Bytes }
 import silk.core.option { Option }
@@ -74,7 +75,7 @@ effect fn program<Z: Compression + Copy>(compression: Z) -> i32 ! HostInputError
   napi_exports.keep()
   let arguments = run HostInput.arguments()
   // The executable has every capability: the real implementation of each, and no host functions.
-  let capabilities = Capabilities { platform: OsPlatform {}, modules: NodeResolution {}, files: OsFiles {}, compression: compression, http2: Nghttp2.make(), crypto: OpenSslCrypto.make(), tls: OpenSslTls.make(), database: SqliteDatabase.make(), addons: DlopenAddons {}, processes: OsProcesses {}, network: OsNetwork {}, http: Llhttp.make(), systemInfo: OsSystemInfo {}, typeStripping: Amaro {}, workers: ThreadWorkers {}, inspector: NodeInspector.make(), wasm: WamrWasm.make(), hostApi: EmptyHostApi {} }
+  let capabilities = Capabilities { platform: OsPlatform {}, modules: NodeResolution {}, files: OsFiles {}, compression: compression, http2: Nghttp2.make(), crypto: OpenSslCrypto.make(), tls: OpenSslTls.make(), database: SqliteDatabase.make(), addons: DlopenAddons.make(), processes: OsProcesses {}, network: OsNetwork {}, http: Llhttp.make(), systemInfo: OsSystemInfo {}, typeStripping: Amaro {}, workers: ThreadWorkers {}, inspector: NodeInspector.make(), wasm: WamrWasm.make(), hostApi: EmptyHostApi {} }
   return run worker.executeProgram(&arguments, move capabilities)
 }
 pub effect fn main() -> i32 ? &mut HostInput { return run mainWith(NativeCompression.make()) }

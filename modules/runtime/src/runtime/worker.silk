@@ -58,7 +58,6 @@ import ext.process_native
 import ext.vm_global
 import ext.webstorage_native
 import ext.worker_native
-import ext.napi_native
 import ext.profile_native
 import libs.core.capabilities { INSPECTOR_FIRST }
 import libs.core.intl as intl
@@ -372,7 +371,7 @@ unsafe effect fn saveImage<'m, C: Composition>(engine: &mut Engine<'m, Services<
   })
   // What the bootstrap handed to native services stays behind with this process: closing
   // them gives up their hold on the heap, and hydrate hands the same things to the next ones.
-  static if Composition.addonsPresent() { if let Option<*mut napi_native.State>.Some { value: napi } = Pointer.nonNullMut<napi_native.State>(engine.services.napi) { unsafe napi_native.close(&mut engine, context, napi) } }
+  unsafe Composition.addonsClose(&mut engine, context)
   let immediateQueue = unsafe host.immediatesState(&mut engine)
   unsafe immediates.close(&mut engine, rt, immediateQueue)
   unsafe Composition.inspectorDispose(&mut engine, context)
@@ -629,7 +628,7 @@ unsafe effect fn execute<'m, D: Driver, C: Composition>(engine: &mut Engine<'m, 
   engine.services.processes = run process_native.make(io, workers)
   run Composition.http2Open(&mut engine)
   run Composition.databaseOpen(&mut engine, allocator)
-  static if Composition.addonsPresent() { engine.services.napi = run napi_native.open(allocator, unsafe Intrinsic.pointerReinterpret<*mut worker_native.State, *mut u8>(workers), worker_native.silkNodeFatalReport, io) }
+  run Composition.addonsOpen(&mut engine, allocator, unsafe Intrinsic.pointerReinterpret<*mut worker_native.State, *mut u8>(workers), io)
   static if capabilities.hasWasm<C>() {
     run Composition.wasmOpen(&mut engine, allocator)
     if restored { unsafe Composition.wasmAdoptClasses(&mut engine, unsafe runtime.contextRuntime(context), (unsafe Pointer.read<ImageRoots>(unsafe rootsAt(image))).wasmClasses) }
@@ -784,12 +783,7 @@ unsafe effect fn realm<'m, D: Driver, C: Composition>(engine: &mut Engine<'m, Se
       unsafe gc.release(&mut engine, rt, exception)
     }
   }
-  static if Composition.addonsPresent() {
-  match Pointer.nonNullMut<napi_native.State>(engine.services.napi) {
-    Option<*mut napi_native.State>.Some { value: napi } => { unsafe napi_native.close(&mut engine, context, napi) }
-    _ => ()
-  }
-  }
+  unsafe Composition.addonsClose(&mut engine, context)
   unsafe Composition.inspectorDispose(&mut engine, context)
   if !Pointer.isNull<worker_native.State>(engine.services.workers) {
     let workers = unsafe Intrinsic.pointerRequalify<?*mut worker_native.State, *mut worker_native.State>(engine.services.workers)
@@ -958,24 +952,12 @@ unsafe effect fn runtimeBody<D: Driver, C: Composition>(workers: *mut worker_nat
   drop allocationProfile
   // Addon finalizers are observable and run when the heap is destroyed; every other
   // native resource was closed with its service above.
-  let mut addons = false
-  static if Composition.addonsPresent() {
-    addons = match Pointer.nonNullMut<napi_native.State>(engine.services.napi) {
-      Option<*mut napi_native.State>.Some { value: napi } => unsafe napi_native.loaded(napi)
-      _ => false
-    }
-  }
+  let addons = unsafe Composition.addonsLoaded(&engine)
   if !exiting || addons {
     unsafe events.freeHandlers(&mut engine, rt)
     run unsafe gc.destroyRuntime(&mut engine, rt) |> Effect.provideMut<Allocator>(&mut allocator)
   }
-  static if Composition.addonsPresent() {
-  match Pointer.nonNullMut<napi_native.State>(engine.services.napi) {
-    Option<*mut napi_native.State>.Some { value: napi } => { unsafe napi_native.dispose(napi) }
-    _ => ()
-  }
-  }
-  engine.services.napi = Pointer.null<napi_native.State>()
+  unsafe Composition.addonsDispose(&mut engine)
   match Pointer.nonNullMut<trace_native.State>(engine.services.tracing) {
     Option<*mut trace_native.State>.Some { value: tracing } => { unsafe trace_native.close(tracing) }
     _ => ()

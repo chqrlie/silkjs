@@ -5,10 +5,6 @@ import ext.dns_native
 import ext.fs_async
 import ext.heap_image
 import ext.inspector_evaluate
-import ext.napi_async
-import ext.napi_core
-import ext.napi_native
-import ext.napi_values
 import ext.process_native
 import ext.trace_native
 import ext.vm_interrupt
@@ -21,10 +17,6 @@ pub fn all() -> () {
   fs_async.keepExports()
   heap_image.keepExports()
   inspector_evaluate.keepExports()
-  napi_async.keepExports()
-  napi_core.keepExports()
-  napi_native.keepExports()
-  napi_values.keepExports()
   process_native.keepExports()
   trace_native.keepExports()
   vm_interrupt.keepExports()

@@ -1,6 +1,6 @@
 //! Node-API engine boundary. C owns handle arenas; each payload owns one ValueBits.
 import silk.mem.allocator { Allocator, OutOfMemoryError }
-import ext.diagnostics_fatal { RuntimeHeap }
+import silkjsruntime.ext.diagnostics_fatal { RuntimeHeap }
 import silkjs.js_owned_value { Value, lendFor }
 import silkjs.js_realm { lendRealm }
 import silk.mem.pointer { Pointer }
@@ -26,9 +26,9 @@ import silkjs.js_coercion_host { CoercionHooks }
 import silkjs.js_exceptions { JsException }
 import silkjs.js_string_types { StringLengthError }
 import silkjs.js_strings { Strings, StringBuilder }
-import libs.core.owners { Scope }
-import libs.core.owners as owners
-import libs.core.common as common
+import silkjsruntime.libs.core.owners { Scope }
+import silkjsruntime.libs.core.owners as owners
+import silkjsruntime.libs.core.common as common
 import silkjs.js_std_support as text
 import silkjs.js_buffer_storage as buffers
 import silkjs.js_proxy_core as core
@@ -37,9 +37,9 @@ import silkjs.js_exceptions as exceptions
 import silkjs.js_promise as promise
 import silkjs.js_gc as gc
 import silkjs.js_errors as errors
-import libs.core.capabilities { Composition }
-import libs.core.host as host
-import ext.fs_async as loops
+import silkjsruntime.libs.core.capabilities { Composition }
+import silkjsruntime.libs.core.host as host
+import silkjsruntime.ext.fs_async as loops
 import ext.napi_async as asyncs
 import ext.napi_core as napi
 import ext.napi_core { Packet, FatalReport }

@@ -388,19 +388,50 @@ impl Database for EmptyDatabase {
 }
 
 /// Native addons: Node-API and `process.dlopen`. Native ids 14000 and 14001 are this capability's.
-/// The Node-API C functions stay exported either way until the package split (step 7).
+///
+/// The real implementation is `DlopenAddons` of ./napi (silkjsruntime-napi), which brings
+/// Node-API's C functions.
 pub interface NativeAddons {
   /// A constant of the implementation type: whether addons load.
   static fn present() -> bool
+  /// The instance a new worker thread starts with, made from its parent's: nothing opened yet.
+  fn forWorker(self: &Self) -> Self
+  /// Opens this runtime's state: `workers` is its worker state, which reports a fatal error.
+  effect fn open(self: &mut Self, allocator: *mut RuntimeHeap, workers: *mut u8, io: *mut fs_async.State) -> () ! OutOfMemoryError
+  /// Native function 14000 (`napiNative`).
+  unsafe effect fn call<'m, C: Composition>(self: &Self, engine: &mut Engine<'m, Services<C>>, context: *mut HeapHeader, argc: i32, argv: &FrameSlots) -> ValueBits
+    ! OutOfMemoryError | JsException ? &mut Allocator
+  /// Frees an external buffer an addon made (external free 14001).
+  unsafe fn freeBuffer<'m, C: Composition>(self: &Self, engine: &mut Engine<'m, Services<C>>, opaque: ?*mut u8) -> ()
+  /// Whether an addon keeps the loop alive (a referenced thread-safe function).
+  unsafe fn alive(self: &Self) -> bool
+  /// Runs the addons' completed work. True when something ran.
+  unsafe fn poll<'m, C: Composition>(self: &Self, engine: &mut Engine<'m, Services<C>>, context: *mut HeapHeader) -> bool
+  /// Runs the environments' cleanup hooks.
+  unsafe fn close<'m, C: Composition>(self: &Self, engine: &mut Engine<'m, Services<C>>, context: *mut HeapHeader) -> ()
+  /// Whether an addon was loaded, whose finalizers run when the heap is destroyed.
+  unsafe fn loaded(self: &Self) -> bool
+  /// Frees the state, after the heap.
+  unsafe fn dispose(self: &mut Self) -> ()
 }
-/// Addons loaded with dlopen.
-pub struct DlopenAddons {}
-impl Copy for DlopenAddons {}
-impl NativeAddons for DlopenAddons { static fn present() -> bool { return true } }
 /// No addons: `process.dlopen` fails with `ERR_DLOPEN_DISABLED`, as with `--no-addons`.
 pub struct EmptyAddons {}
 impl Copy for EmptyAddons {}
-impl NativeAddons for EmptyAddons { static fn present() -> bool { return false } }
+impl NativeAddons for EmptyAddons {
+  static fn present() -> bool { return false }
+  fn forWorker(self: &Self) -> Self { return EmptyAddons {} }
+  effect fn open(self: &mut Self, allocator: *mut RuntimeHeap, workers: *mut u8, io: *mut fs_async.State) -> () ! OutOfMemoryError {}
+  unsafe effect fn call<'m, C: Composition>(self: &Self, engine: &mut Engine<'m, Services<C>>, context: *mut HeapHeader, argc: i32, argv: &FrameSlots) -> ValueBits
+    ! OutOfMemoryError | JsException ? &mut Allocator {
+    Intrinsic.trap("addons are not there")
+  }
+  unsafe fn freeBuffer<'m, C: Composition>(self: &Self, engine: &mut Engine<'m, Services<C>>, opaque: ?*mut u8) -> () {}
+  unsafe fn alive(self: &Self) -> bool { return false }
+  unsafe fn poll<'m, C: Composition>(self: &Self, engine: &mut Engine<'m, Services<C>>, context: *mut HeapHeader) -> bool { return false }
+  unsafe fn close<'m, C: Composition>(self: &Self, engine: &mut Engine<'m, Services<C>>, context: *mut HeapHeader) -> () {}
+  unsafe fn loaded(self: &Self) -> bool { return false }
+  unsafe fn dispose(self: &mut Self) -> () {}
+}
 
 /// Child processes: `node:child_process`, `node:cluster` and a child's IPC channel. The process
 /// executor (native id 2700) serves signals too, which every runtime has, so it stays; without
@@ -604,7 +635,7 @@ pub interface ModuleResolver {
 /// a capability the program does not want is given its empty implementation.
 ///
 /// ```silk
-/// let capabilities = Capabilities { platform: OsPlatform {}, modules: NodeResolution {}, files: OsFiles {}, compression: NativeCompression.make(), http2: Nghttp2.make(), crypto: OpenSslCrypto.make(), tls: OpenSslTls.make(), database: SqliteDatabase.make(), addons: DlopenAddons {}, processes: OsProcesses {}, network: OsNetwork {}, http: Llhttp.make(), systemInfo: OsSystemInfo {}, typeStripping: Amaro {}, workers: ThreadWorkers {}, inspector: NodeInspector.make(), wasm: EmptyWasm {}, hostApi: EmptyHostApi {} }
+/// let capabilities = Capabilities { platform: OsPlatform {}, modules: NodeResolution {}, files: OsFiles {}, compression: NativeCompression.make(), http2: Nghttp2.make(), crypto: OpenSslCrypto.make(), tls: OpenSslTls.make(), database: SqliteDatabase.make(), addons: DlopenAddons.make(), processes: OsProcesses {}, network: OsNetwork {}, http: Llhttp.make(), systemInfo: OsSystemInfo {}, typeStripping: Amaro {}, workers: ThreadWorkers {}, inspector: NodeInspector.make(), wasm: EmptyWasm {}, hostApi: EmptyHostApi {} }
 /// ```
 pub struct Capabilities<P, M, F, Z, H, K, T, D, N, R, E, L, S, Y, X, I, W, A> {
   pub platform: P,
@@ -694,6 +725,15 @@ pub interface Composition {
   unsafe fn wasmFinalize<'m>(engine: &mut Engine<'m, Services<Self>>, rt: *mut HeapHeader, object: *mut HeapHeader) -> ()
   unsafe fn wasmOpenHandles<'m>(engine: &Engine<'m, Services<Self>>) -> usize
   effect fn compressionOpen<'m>(engine: &mut Engine<'m, Services<Self>>) -> () ! OutOfMemoryError
+  effect fn addonsOpen<'m>(engine: &mut Engine<'m, Services<Self>>, allocator: *mut RuntimeHeap, workers: *mut u8, io: *mut fs_async.State) -> () ! OutOfMemoryError
+  unsafe effect fn addonsCall<'m>(engine: &mut Engine<'m, Services<Self>>, context: *mut HeapHeader, argc: i32, argv: &FrameSlots) -> ValueBits
+    ! OutOfMemoryError | JsException ? &mut Allocator
+  unsafe fn addonsFreeBuffer<'m>(engine: &mut Engine<'m, Services<Self>>, opaque: ?*mut u8) -> ()
+  unsafe fn addonsAlive<'m>(engine: &Engine<'m, Services<Self>>) -> bool
+  unsafe fn addonsPoll<'m>(engine: &mut Engine<'m, Services<Self>>, context: *mut HeapHeader) -> bool
+  unsafe fn addonsClose<'m>(engine: &mut Engine<'m, Services<Self>>, context: *mut HeapHeader) -> ()
+  unsafe fn addonsLoaded<'m>(engine: &Engine<'m, Services<Self>>) -> bool
+  unsafe fn addonsDispose<'m>(engine: &mut Engine<'m, Services<Self>>) -> ()
   fn typeStrippingLink<'m>(engine: &Engine<'m, Services<Self>>) -> ()
   effect fn inspectorOpen<'m>(engine: &mut Engine<'m, Services<Self>>, wake: ?*mut u8, mailbox: Mailbox) -> () ! OutOfMemoryError
   unsafe effect fn inspectorCall<'m>(engine: &mut Engine<'m, Services<Self>>, context: *mut HeapHeader, operation: u32, argc: i32, argv: &FrameSlots) -> ValueBits
@@ -785,7 +825,7 @@ impl<P: Platform + Copy, M: ModuleResolver + Copy, F: Files + Copy, Z: Compressi
   static fn filesDirect() -> bool { return directFiles<F>() }
   unsafe fn filesExecute(self: &Self, call: &Call, out: &mut Outcome) -> () { unsafe self.files.execute(&call, &mut out) }
   fn forWorker(self: &Self) -> Self {
-    return Capabilities<P, M, F, Z, H, K, T, D, N, R, E, L, S, Y, X, I, W, A> { platform: self.platform.forWorker(), modules: self.modules.forWorker(), files: self.files.forWorker(), compression: self.compression.forWorker(), http2: self.http2.forWorker(), crypto: self.crypto.forWorker(), tls: self.tls.forWorker(), database: self.database.forWorker(), addons: self.addons, processes: self.processes, network: self.network, http: self.http.forWorker(), systemInfo: self.systemInfo, typeStripping: self.typeStripping, workers: self.workers, inspector: self.inspector.forWorker(), wasm: self.wasm.forWorker(), hostApi: self.hostApi.forWorker() }
+    return Capabilities<P, M, F, Z, H, K, T, D, N, R, E, L, S, Y, X, I, W, A> { platform: self.platform.forWorker(), modules: self.modules.forWorker(), files: self.files.forWorker(), compression: self.compression.forWorker(), http2: self.http2.forWorker(), crypto: self.crypto.forWorker(), tls: self.tls.forWorker(), database: self.database.forWorker(), addons: self.addons.forWorker(), processes: self.processes, network: self.network, http: self.http.forWorker(), systemInfo: self.systemInfo, typeStripping: self.typeStripping, workers: self.workers, inspector: self.inspector.forWorker(), wasm: self.wasm.forWorker(), hostApi: self.hostApi.forWorker() }
   }
   effect fn platformGetenv<'m>(engine: &Engine<'m, Services<Self>>, name: &[u8], into: &mut List<u8>) -> bool ! OutOfMemoryError ? &mut Allocator {
     let platform = engine.services.capabilities.platform return run platform.getenv(name, &mut into.*)
@@ -936,6 +976,21 @@ impl<P: Platform + Copy, M: ModuleResolver + Copy, F: Files + Copy, Z: Compressi
     let mut inspector = engine.services.capabilities.inspector unsafe inspector.dispose(&mut engine, context) engine.services.capabilities.inspector = inspector
   }
   fn typeStrippingLink<'m>(engine: &Engine<'m, Services<Self>>) -> () { let typeStripping = engine.services.capabilities.typeStripping typeStripping.link() }
+  effect fn addonsOpen<'m>(engine: &mut Engine<'m, Services<Self>>, allocator: *mut RuntimeHeap, workers: *mut u8, io: *mut fs_async.State) -> () ! OutOfMemoryError {
+    run engine.services.capabilities.addons.open(allocator, workers, io)
+  }
+  unsafe effect fn addonsCall<'m>(engine: &mut Engine<'m, Services<Self>>, context: *mut HeapHeader, argc: i32, argv: &FrameSlots) -> ValueBits
+    ! OutOfMemoryError | JsException ? &mut Allocator {
+    let addons = engine.services.capabilities.addons return run unsafe addons.call(&mut engine, context, argc, argv)
+  }
+  unsafe fn addonsFreeBuffer<'m>(engine: &mut Engine<'m, Services<Self>>, opaque: ?*mut u8) -> () { let addons = engine.services.capabilities.addons unsafe addons.freeBuffer(&mut engine, opaque) }
+  unsafe fn addonsAlive<'m>(engine: &Engine<'m, Services<Self>>) -> bool { let addons = engine.services.capabilities.addons return unsafe addons.alive() }
+  unsafe fn addonsPoll<'m>(engine: &mut Engine<'m, Services<Self>>, context: *mut HeapHeader) -> bool { let addons = engine.services.capabilities.addons return unsafe addons.poll(&mut engine, context) }
+  unsafe fn addonsClose<'m>(engine: &mut Engine<'m, Services<Self>>, context: *mut HeapHeader) -> () { let addons = engine.services.capabilities.addons unsafe addons.close(&mut engine, context) }
+  unsafe fn addonsLoaded<'m>(engine: &Engine<'m, Services<Self>>) -> bool { let addons = engine.services.capabilities.addons return unsafe addons.loaded() }
+  unsafe fn addonsDispose<'m>(engine: &mut Engine<'m, Services<Self>>) -> () {
+    let mut addons = engine.services.capabilities.addons unsafe addons.dispose() engine.services.capabilities.addons = addons
+  }
   effect fn compressionOpen<'m>(engine: &mut Engine<'m, Services<Self>>) -> () ! OutOfMemoryError {
     run engine.services.capabilities.compression.open()
   }

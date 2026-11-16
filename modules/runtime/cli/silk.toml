@@ -17,5 +17,6 @@ database = { path = "../sqlite", package = "silkjsruntime-sqlite" }
 openssl = { path = "../openssl", package = "silkjsruntime-openssl" }
 inspector = { path = "../inspector", package = "silkjsruntime-inspector" }
 amaro = { path = "../amaro", package = "silkjsruntime-amaro" }
+addons = { path = "../napi", package = "silkjsruntime-napi" }
 # The package manager: `silkjsruntime install` and the other commands.
 pm = { path = "../../pm" }

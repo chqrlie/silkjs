@@ -24,7 +24,8 @@ LIBRARIES = {'WAMR': 'wasm_runtime_full_init', 'zlib': 'deflate', 'brotli': 'Bro
              'llhttp': 'llhttp_init', 'SQLite': 'sqlite3_open_v2',
              'OpenSSL': 'SSL_CTX_new',
              'inspector server': 'silk_inspector_create',
-             'amaro': 'silk_type_stripping_sources_linked'}
+             'amaro': 'silk_type_stripping_sources_linked',
+             'Node-API': 'napi_create_object'}
 PROGRAMS = [
     ('embed-smoke', ROOT / 'smoke', 'src/main.silk', 'undefined', False),
     ('embed-smoke-wamr', ROOT / 'cli', 'src/embed_smoke_wamr.silk', 'object', True),

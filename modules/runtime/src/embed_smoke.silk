@@ -35,7 +35,7 @@ import runtime.session { Runtime, Turn }
 import libs.core.host { Services }
 import libs.core.capabilities { Capabilities, Composition, Compression, Crypto, Files, HostApi, Http2, HOST_API_FIRST, Tls, Wasm }
 import libs.core.capabilities { EmptyCompression, EmptyCrypto, EmptyHttp2, EmptyTls }
-import libs.core.capabilities { Database, DlopenAddons, EmptyAddons, EmptyDatabase, NativeAddons }
+import libs.core.capabilities { Database, EmptyAddons, EmptyDatabase, NativeAddons }
 import libs.core.capabilities { EmptyProcesses, OsProcesses, Processes }
 import libs.core.capabilities { EmptyHttp, EmptyNetwork, Http, Network, OsNetwork }
 import libs.core.capabilities { EmptySystemInfo, EmptyTypeStripping, OsSystemInfo, SystemInfo, TypeStripping }
@@ -155,10 +155,10 @@ effect fn smoke<W: Wasm + Copy, F: Files + Copy, Z: Compression + Copy, H: Http2
 }
 
 /// The smoke test on a file system in memory (`MemoryFiles`), with every library: the caller
-/// gives those of packages of their own (WebAssembly, compression, HTTP/2, HTTP/1, SQLite, OpenSSL, the inspector, amaro).
-pub effect fn program<W: Wasm + Copy, Z: Compression + Copy, H: Http2 + Copy, L: Http + Copy, D: Database + Copy, K: Crypto + Copy, T: Tls + Copy, I: Inspector + Copy, Y: TypeStripping + Copy>(image: &[u8], wasm: W, compression: Z, http2: H, http: L, database: D, crypto: K, tls: T, inspector: I, typeStripping: Y) -> i32 ! OutOfMemoryError | SynchronizationError ? &mut Allocator {
+/// gives those of packages of their own (WebAssembly, compression, HTTP/2, HTTP/1, SQLite, OpenSSL, the inspector, amaro, Node-API).
+pub effect fn program<W: Wasm + Copy, Z: Compression + Copy, H: Http2 + Copy, L: Http + Copy, D: Database + Copy, K: Crypto + Copy, T: Tls + Copy, I: Inspector + Copy, Y: TypeStripping + Copy, N: NativeAddons + Copy>(image: &[u8], wasm: W, compression: Z, http2: H, http: L, database: D, crypto: K, tls: T, inspector: I, typeStripping: Y, addons: N) -> i32 ! OutOfMemoryError | SynchronizationError ? &mut Allocator {
   let files = run seededFiles()
-  return run smoke(image, wasm, files, compression, http2, crypto, tls, database, DlopenAddons {}, OsProcesses {}, OsNetwork {}, http, OsSystemInfo {}, typeStripping, ThreadWorkers {}, inspector)
+  return run smoke(image, wasm, files, compression, http2, crypto, tls, database, addons, OsProcesses {}, OsNetwork {}, http, OsSystemInfo {}, typeStripping, ThreadWorkers {}, inspector)
 }
 
 /// The smoke test with no file system, compression, HTTP/2, crypto or TLS: `node:fs`, `node:zlib`,
@@ -195,10 +195,10 @@ fn same(a: &[u8], b: &[u8]) -> bool {
 }
 
 /// Runs `program` and turns its failure into status 1.
-pub effect fn report<W: Wasm + Copy, Z: Compression + Copy, H: Http2 + Copy, L: Http + Copy, D: Database + Copy, K: Crypto + Copy, T: Tls + Copy, I: Inspector + Copy, Y: TypeStripping + Copy>(wasm: W, compression: Z, http2: H, http: L, database: D, crypto: K, tls: T, inspector: I, typeStripping: Y) -> i32 ? &mut HostInput {
+pub effect fn report<W: Wasm + Copy, Z: Compression + Copy, H: Http2 + Copy, L: Http + Copy, D: Database + Copy, K: Crypto + Copy, T: Tls + Copy, I: Inspector + Copy, Y: TypeStripping + Copy, N: NativeAddons + Copy>(wasm: W, compression: Z, http2: H, http: L, database: D, crypto: K, tls: T, inspector: I, typeStripping: Y, addons: N) -> i32 ? &mut HostInput {
   let mut allocator = Allocator.systemAllocatorProvider()
   let image = imageRequest(run Effect.result(imageArgument()) |> Effect.provideMut<Allocator>(&mut allocator))
-  return status(run Effect.result(program(image.asSlice(), wasm, compression, http2, http, database, crypto, tls, inspector, typeStripping)) |> Effect.provideMut<Allocator>(&mut allocator))
+  return status(run Effect.result(program(image.asSlice(), wasm, compression, http2, http, database, crypto, tls, inspector, typeStripping, addons)) |> Effect.provideMut<Allocator>(&mut allocator))
 }
 
 /// Runs `programWithoutFiles` and turns its failure into status 1.

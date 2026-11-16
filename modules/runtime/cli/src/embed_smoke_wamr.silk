@@ -10,5 +10,6 @@ import database.sqlite_database { SqliteDatabase }
 import openssl.openssl_capabilities { OpenSslCrypto, OpenSslTls }
 import inspector.node_inspector { NodeInspector }
 import amaro.amaro_stripping { Amaro }
+import addons.dlopen_addons { DlopenAddons }
 
-pub effect fn main() -> i32 ? &mut HostInput { return run embed_smoke.report(WamrWasm.make(), NativeCompression.make(), Nghttp2.make(), Llhttp.make(), SqliteDatabase.make(), OpenSslCrypto.make(), OpenSslTls.make(), NodeInspector.make(), Amaro {}) }
+pub effect fn main() -> i32 ? &mut HostInput { return run embed_smoke.report(WamrWasm.make(), NativeCompression.make(), Nghttp2.make(), Llhttp.make(), SqliteDatabase.make(), OpenSslCrypto.make(), OpenSslTls.make(), NodeInspector.make(), Amaro {}, DlopenAddons.make()) }
