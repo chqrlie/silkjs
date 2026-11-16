@@ -3,7 +3,7 @@
 Branch `feature/replace-libuv`, from `main` f3d5ea8. Scope, what moved, compiler walls, test
 status and benchmark numbers.
 
-## Status (2026-11-15)
+## Status (2026-11-16)
 
 No libuv C is compiled or linked. `modules/native/uvwasi/silk.toml` (formerly `modules/native/libuv`) has no `[native.archive]`
 and compiles only uvwasi, against a header of its own; no Silk file declares an `extern "C" fn uv_*`.
@@ -151,6 +151,27 @@ default loop and closes it), which passes on macOS with both libraries.
 
 Linux arm64 runs in `.github/workflows/linux-arm64-runtime.yml` (an arm64 Ubuntu runner, the same
 steps as the macOS workflow, this branch against `main` f3d5ea8).
+
+### Benchmarks on the macOS and Linux arm64 runners
+
+`tools/ci_bench.py` runs `main` and the branch on the same runner, rounds alternating which goes
+first, and prints per metric the median change, the rounds in which the branch did worse than
+`main` in the same round, and both ranges (the `bench` job of each workflow, 12 rounds). Run of
+7b9f54b:
+
+- **Linux arm64, against f3d5ea8:** every metric level or better; serve() +3.4% requests per
+  second (2 rounds of 12 worse), cat -9.1% time (0 of 12), cold start -6.8% (0 of 12), peak
+  memory 3 to 8% lower in every benchmark (0 of 12).
+- **macOS, against f3d5ea8 and against df9c30b** (main just before this work merged, its later
+  commits on C libuv): no metric more than 5% worse against df9c30b. The runner is noisy: a
+  benchmark's median moves by about 15% from one run of the same code to the next (serve() read
+  -12.7% in one run and +7.4% in the next), so a change is read from the rounds lost as well as
+  from the median. setImmediate is the closest: -5.0% against f3d5ea8 (8 of 12 rounds worse) and
+  -4.2% against df9c30b (6 of 12) in this run, between -10.7% and +1.8% in the others, and +10.6%
+  in twelve four-second rounds sampled with macOS's `sample`, where both spend their time in the
+  same `kevent` calls (`.github/workflows/macos-profile.yml`).
+- One macOS difference was real and is fixed: `uv_hrtime` read the Mach timebase on every call
+  (libuv reads it once), and spawnSync read +20%; with the timebase kept it is level.
 
 ## Compiler walls and tooling issues
 
