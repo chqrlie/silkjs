@@ -354,6 +354,12 @@ unsafe effect fn prepare(request: &Request, sources: &mut Descriptors, parents: 
         }
       }
     } else {
+      // libuv's child makes an inherited standard descriptor blocking, which, the file
+      // description being shared, the parent's is too (a stream it passed on is the child's now).
+      if slot < 3 {
+        let flags = unsafe fcntl(kind, 3)
+        if flags >= 0 && (flags & abi.nonblockFlag()) != 0 { let _cleared = unsafe fcntl(kind, 4, flags - abi.nonblockFlag()) }
+      }
       let moved = unsafe moveAbove(kind, lowest)
       if moved < 0 { return -moved }
       sources.set(slot, moved)
@@ -479,6 +485,23 @@ unsafe effect fn start(request: &Request, parents: &mut Descriptors) -> i32 ! Ou
     unsafe launchSpawned(textPointer(&program), arguments, environment, &directory, request.detached, &sources, &mut pid)
   }
   if code != 0 { return -code }
+  return pid
+}
+
+/// Starts `request`'s child for child_process.spawn, which then watches its exit on the runtime's
+/// reactor (ext/process_native): its pid, or a negative errno when it could not start. `parents`
+/// gets the parent's end of each piped slot, and -1 for the others; the caller owns them.
+pub unsafe effect fn launch(request: &Request, parents: &mut List<i32>) -> i32 ! OutOfMemoryError ? &mut Allocator {
+  let count = request.slots.length()
+  let mut owned = run Descriptors.make(count)
+  let pid = run unsafe start(request, &mut owned)
+  let mut i: usize = 0
+  while i < count {
+    let fd = if pid >= 0 { owned.get(i) } else { -1 }
+    run parents.append(fd)
+    if pid >= 0 { owned.set(i, -1) }
+    i = i + 1
+  }
   return pid
 }
 
