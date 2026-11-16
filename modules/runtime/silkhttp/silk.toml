@@ -1,0 +1,12 @@
+[package]
+name = "silkjsruntime-silkhttp"
+description = "The HTTP/1 parser of the SilkJS runtime in Silk, with no C library: an implementation of its Http capability"
+version = "0.1.0"
+silk-version = "0.1.0-dev.78+e02346fdb3aa"
+kind = "library"
+# `silk_http` is SilkHttp.
+exports = ["silk_http"]
+
+[dependencies]
+silkjs = { path = "../../engine" }
+silkjsruntime = { path = ".." }

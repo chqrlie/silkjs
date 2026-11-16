@@ -7,7 +7,7 @@ import silkjs.js_libc_platform as platform
 import silkjsruntime.runtime.worker
 import silkjsruntime.ext.keep_exports
 import napi_exports
-import silkjsruntime.libs.core.capabilities { Compression, Capabilities, EmptyHostApi, OsProcesses, OsNetwork, OsSystemInfo, ThreadWorkers }
+import silkjsruntime.libs.core.capabilities { Compression, Http, Capabilities, EmptyHostApi, OsProcesses, OsNetwork, OsSystemInfo, ThreadWorkers }
 import silkjsruntime.libs.core.module_sources { NodeResolution }
 import silkjsruntime.libs.core.platforms { OsPlatform }
 import silkjsruntime.libs.core.files { OsFiles }
@@ -44,9 +44,9 @@ fn calledNode(path: &[u8]) -> bool {
   return start == 0 || path[start - 1] == 47
 }
 
-/// The executable with `compression` as its Compression capability (the executable has
-/// NativeCompression; src/main_silkcompress.silk is the same with SilkCompression).
-effect fn program<Z: Compression + Copy>(compression: Z) -> i32 ! HostInputError | OutOfMemoryError | SynchronizationError ? &mut HostInput | &mut Allocator {
+/// The executable with `compression` and `http` as its Compression and Http capabilities (the
+/// executable has NativeCompression and Llhttp; src/main_silk.silk the Silk ones).
+effect fn program<Z: Compression + Copy, L: Http + Copy>(compression: Z, http: L) -> i32 ! HostInputError | OutOfMemoryError | SynchronizationError ? &mut HostInput | &mut Allocator {
   // As Node does: a write to a closed pipe fails with EPIPE, which the stream reports, and a
   // write past RLIMIT_FSIZE fails with EFBIG (SIGXFSZ is 25 on Linux and macOS), instead of
   // ending the process. Children start with every signal at its default. The process is the
@@ -75,14 +75,14 @@ effect fn program<Z: Compression + Copy>(compression: Z) -> i32 ! HostInputError
   napi_exports.keep()
   let arguments = run HostInput.arguments()
   // The executable has every capability: the real implementation of each, and no host functions.
-  let capabilities = Capabilities { platform: OsPlatform {}, modules: NodeResolution {}, files: OsFiles {}, compression: compression, http2: Nghttp2.make(), crypto: OpenSslCrypto.make(), tls: OpenSslTls.make(), database: SqliteDatabase.make(), addons: DlopenAddons.make(), processes: OsProcesses {}, network: OsNetwork {}, http: Llhttp.make(), systemInfo: OsSystemInfo {}, typeStripping: Amaro {}, workers: ThreadWorkers {}, inspector: NodeInspector.make(), wasm: WamrWasm.make(), hostApi: EmptyHostApi {} }
+  let capabilities = Capabilities { platform: OsPlatform {}, modules: NodeResolution {}, files: OsFiles {}, compression: compression, http2: Nghttp2.make(), crypto: OpenSslCrypto.make(), tls: OpenSslTls.make(), database: SqliteDatabase.make(), addons: DlopenAddons.make(), processes: OsProcesses {}, network: OsNetwork {}, http: http, systemInfo: OsSystemInfo {}, typeStripping: Amaro {}, workers: ThreadWorkers {}, inspector: NodeInspector.make(), wasm: WamrWasm.make(), hostApi: EmptyHostApi {} }
   return run worker.executeProgram(&arguments, move capabilities)
 }
-pub effect fn main() -> i32 ? &mut HostInput { return run mainWith(NativeCompression.make()) }
-/// `main`, with `compression`.
-pub effect fn mainWith<Z: Compression + Copy>(compression: Z) -> i32 ? &mut HostInput {
+pub effect fn main() -> i32 ? &mut HostInput { return run mainWith(NativeCompression.make(), Llhttp.make()) }
+/// `main`, with `compression` and `http`.
+pub effect fn mainWith<Z: Compression + Copy, L: Http + Copy>(compression: Z, http: L) -> i32 ? &mut HostInput {
   let mut allocator = Allocator.systemAllocatorProvider()
-  let result = run Effect.result(program(compression)) |> Effect.provideMut<Allocator>(&mut allocator)
+  let result = run Effect.result(program(compression, http)) |> Effect.provideMut<Allocator>(&mut allocator)
   return match move result {
     Result<i32, HostInputError | OutOfMemoryError | SynchronizationError>.Success { value } => value
     Result<i32, HostInputError | OutOfMemoryError | SynchronizationError>.Failure { .. } => {

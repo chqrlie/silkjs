@@ -486,6 +486,8 @@ unsafe effect fn execute<'m, C: Composition>(engine: &mut Engine<'m, host.Servic
 unsafe effect fn dispatchBody<'m, C: Composition>(engine: &mut Engine<'m, host.Services<C>>, context: *mut HeapHeader, state: *mut State, argv: &FrameSlots, scope: &mut Scope) -> ValueBits ! OutOfMemoryError | JsException ? &mut Allocator {
   let op = number(unsafe common.argument(argv, 0))
   if op == 0 { return run unsafe create(&mut engine, context, state, unsafe common.argument(argv, 1)) }
+  // The parser's version, for process.versions.llhttp.
+  if op == 11 { return (run text.string(&mut engine, unsafe lendRealm(&context, context), b"9.4.3")).intoBits() }
   if op == 8 {
     let memory = engine.memory scope.values[0] = run unsafe common.array(&mut engine, memory, context)
     let mut i: i32 = 0

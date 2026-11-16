@@ -1,0 +1,11 @@
+//! The executable with the Silk implementations of its library capabilities in place of the C
+//! libraries: SilkCompression (./silkcompress, over silk.compress) for zlib, brotli and zstd, and
+//! SilkHttp (./silkhttp) for llhttp. Step 8 of docs/composable-runtime.md; the differentials
+//! (tests/compression-differential.mjs, tests/http-parser-differential.mjs) test it. Build:
+//! silk build src/main_silk.silk.
+import silk.system.host_input { HostInput }
+import silkcompress.silk_compression { SilkCompression }
+import silkhttp.silk_http { SilkHttp }
+import main as executable
+
+pub effect fn main() -> i32 ? &mut HostInput { return run executable.mainWith(SilkCompression.make(), SilkHttp.make()) }

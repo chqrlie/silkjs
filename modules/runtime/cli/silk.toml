@@ -9,8 +9,10 @@ silkjs = { path = "../../engine" }
 silkjsruntime = { path = ".." }
 wasm = { path = "../wamr", package = "silkjsruntime-wamr" }
 compress = { path = "../compress", package = "silkjsruntime-compress" }
-# Compression over silk.compress, for src/main_silkcompress.silk.
+# Compression over silk.compress, for src/main_silk.silk.
 silkcompress = { path = "../silkcompress", package = "silkjsruntime-silkcompress" }
+# The HTTP/1 parser in Silk, for src/main_silk.silk.
+silkhttp = { path = "../silkhttp", package = "silkjsruntime-silkhttp" }
 http2 = { path = "../http2", package = "silkjsruntime-nghttp2" }
 http = { path = "../llhttp", package = "silkjsruntime-llhttp" }
 database = { path = "../sqlite", package = "silkjsruntime-sqlite" }

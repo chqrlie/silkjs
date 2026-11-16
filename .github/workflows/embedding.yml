@@ -46,11 +46,12 @@ jobs:
             silk task symbols --binary ../../build/embed-smoke/embed-smoke --prefix "$prefix" --absent
             silk task symbols --binary ../../build/embed-smoke-wamr/embed-smoke-wamr --prefix "$prefix"
           done
-  silk-compression:
-    # Step 8's first swap: the executable with SilkCompression (over silk.compress, no C library)
-    # in place of NativeCompression must decode, flush and fail as Node does.
+  silk-libraries:
+    # Step 8's swaps: the executable with SilkCompression (over silk.compress, no C library) and
+    # SilkHttp (an HTTP/1 parser in Silk) in place of NativeCompression and Llhttp
+    # (cli/src/main_silk.silk) must decode, flush, parse and fail as Node and llhttp do.
     runs-on: ubuntu-26.04
-    timeout-minutes: 90
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -68,11 +69,24 @@ jobs:
           curl --fail --location https://raw.githubusercontent.com/silk-lang/silk/8214c402307b/install.sh --output "$RUNNER_TEMP/install-silk.sh"
           sh "$RUNNER_TEMP/install-silk.sh"
           echo "$HOME/.silk/bin" >> "$GITHUB_PATH"
-      - name: Build the executable with SilkCompression
+      - name: Build the executable with the Silk libraries
         working-directory: modules/runtime/cli
         run: |
-          mkdir -p ../build/silkcompress
-          SILKJS_CLANG_BUILD=../build/silkcompress silk build src/main_silkcompress.silk -o ../build/silkcompress/silkjsruntime --debug true --clang ../tools/clang.py
+          mkdir -p ../build/silk
+          SILKJS_CLANG_BUILD=../build/silk silk build src/main_silk.silk -o ../build/silk/silkjsruntime --debug true --clang ../tools/clang.py
+      - name: Build the executable with the C libraries (the parser differential's reference)
+        working-directory: modules/runtime/cli
+        run: |
+          mkdir -p ../build/native
+          SILKJS_CLANG_BUILD=../build/native silk build src/main.silk -o ../build/native/silkjsruntime --debug true --clang ../tools/clang.py
       - name: Compression differential against Node
         working-directory: modules/runtime
-        run: node tests/compression-differential.mjs build/silkcompress/silkjsruntime
+        run: node tests/compression-differential.mjs build/silk/silkjsruntime
+      - name: HTTP/1 parser differential against llhttp
+        working-directory: modules/runtime
+        run: node tests/http-parser-differential.mjs build/silk/silkjsruntime build/native/silkjsruntime
+      - name: Node compatibility with the Silk libraries
+        working-directory: modules/runtime
+        env:
+          SILKJS_RUNTIME: build/silk/silkjsruntime
+        run: node tests/compat.mjs

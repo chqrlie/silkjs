@@ -2,7 +2,7 @@
 // tests/compression-cases.cjs under Node (24 or later, for zstd) and the runtime: what each
 // decodes, its flushes and its errors must be Node's, and whatever the runtime compresses must
 // decode under Node to what Node's own output decodes to. Compressed bytes may differ (SilkCompression,
-// cli/src/main_silkcompress.silk, is not zlib), and so may the number of a brotli format error,
+// cli/src/main_silk.silk, is not zlib), and so may the number of a brotli format error,
 // which depends on where the decoder notices it: its code family and message must still match.
 import { spawnSync } from 'node:child_process';
 import zlib from 'node:zlib';
