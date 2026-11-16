@@ -15,7 +15,7 @@ concurrency:
 jobs:
   build:
     runs-on: macos-15
-    timeout-minutes: 90
+    timeout-minutes: 150
     strategy:
       matrix:
         source: [branch, df9c30baf2b211c60153eea8807e1206cbedb409]
@@ -50,7 +50,7 @@ jobs:
   profile:
     needs: build
     runs-on: macos-15
-    timeout-minutes: 90
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -100,6 +100,9 @@ jobs:
         working-directory: modules/runtime
         run: |
           python3 tools/ci_bench.py "$RUNNER_TEMP/bin/profile-silkjs-df9c30baf2b211c60153eea8807e1206cbedb409/silkjs" "$RUNNER_TEMP/bin/profile-silkjs-branch/silkjs" --rounds 24 --only setImmediate,spawnSync,cat
+          echo "== the noise floor: df9c30b against itself, the same 24 rounds"
+          cp "$RUNNER_TEMP/bin/profile-silkjs-df9c30baf2b211c60153eea8807e1206cbedb409/silkjs" "$RUNNER_TEMP/silkjs-main-copy"
+          python3 tools/ci_bench.py "$RUNNER_TEMP/bin/profile-silkjs-df9c30baf2b211c60153eea8807e1206cbedb409/silkjs" "$RUNNER_TEMP/silkjs-main-copy" --rounds 24 --only setImmediate,spawnSync,cat
       - uses: actions/upload-artifact@v4
         if: always()
         with:
