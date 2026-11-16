@@ -35,13 +35,13 @@ def main():
     if sys.platform == 'darwin':
         # Silk's Clang brings no macOS SDK: link against Xcode's (or SDKROOT), as tools/libuv_suite.py.
         sdk = os.environ.get('SDKROOT') or subprocess.run(['xcrun', '--show-sdk-path'], capture_output=True, text=True).stdout.strip()
-        extra = (f'-isysroot {sdk} ' if sdk else '') + '-lSystem'
+        extra = (f'-isysroot {sdk} ' if sdk else '') + '-lSystem -lpthread -lm'
     else:
         extra = '-lpthread -ldl -lm -lrt -Wl,--unresolved-symbols=ignore-all'
     driver = os.path.join(os.path.abspath(work), 'clang.sh')
     with open(driver, 'w') as script:
         script.write('#!/bin/sh\nfor a in "$@"; do case $a in -c|-S|-E|--version|-dumpmachine) exec %s "$@";; esac; done\n'
-                     'exec %s "$@" %s\n' % (compiler, compiler, extra))
+                     'exec %s "$@" -x none %s\n' % (compiler, compiler, extra))
     os.chmod(driver, 0o755)
     arguments = ['silk', 'build', '--ignore-warnings', '--clang', driver]
     subprocess.run(arguments, cwd=package, check=True)
