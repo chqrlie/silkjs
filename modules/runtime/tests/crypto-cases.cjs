@@ -88,7 +88,14 @@ for (const [name, pem] of Object.entries(keys)) {
   record(`key ${name} public jwk`, () => crypto.createPublicKey(pem).export({ format: 'jwk' }));
   record(`key ${name} roundtrip der`, () => sha(crypto.createPrivateKey({ key: crypto.createPrivateKey(pem).export({ type: 'pkcs8', format: 'der' }), format: 'der', type: 'pkcs8' }).export({ type: 'pkcs8', format: 'der' })));
   record(`key ${name} encrypted pkcs8`, () => { const enc = crypto.createPrivateKey(pem).export({ type: 'pkcs8', format: 'pem', cipher: 'aes-256-cbc', passphrase: 'pw' }); return sha(crypto.createPrivateKey({ key: enc, passphrase: 'pw' }).export({ type: 'pkcs8', format: 'der' })); });
-  record(`key ${name} wrong passphrase`, () => { const enc = crypto.createPrivateKey(pem).export({ type: 'pkcs8', format: 'pem', cipher: 'aes-128-cbc', passphrase: 'pw' }); return crypto.createPrivateKey({ key: enc, passphrase: 'nope' }); });
+  // A wrong passphrase decrypts to garbage that ends in valid padding about once in 256 random
+  // salts, and then fails as an undecodable key (ERR_OSSL_UNSUPPORTED) instead of a bad decrypt,
+  // in OpenSSL as in SilkCrypto: either is the refusal.
+  record(`key ${name} wrong passphrase`, () => {
+    const enc = crypto.createPrivateKey(pem).export({ type: 'pkcs8', format: 'pem', cipher: 'aes-128-cbc', passphrase: 'pw' });
+    try { return crypto.createPrivateKey({ key: enc, passphrase: 'nope' }); }
+    catch (error) { if (error.code === 'ERR_OSSL_BAD_DECRYPT' || error.code === 'ERR_OSSL_UNSUPPORTED') return 'refused'; throw error; }
+  });
   record(`key ${name} missing passphrase`, () => { const enc = crypto.createPrivateKey(pem).export({ type: 'pkcs8', format: 'der', cipher: 'aes-128-cbc', passphrase: 'pw' }); return crypto.createPrivateKey({ key: enc, format: 'der', type: 'pkcs8' }); });
 }
 record('rsa pkcs1 export', () => [sha(crypto.createPrivateKey(keys.rsa).export({ type: 'pkcs1', format: 'pem' })), crypto.createPublicKey(keys.rsa).export({ type: 'pkcs1', format: 'pem' })]);
