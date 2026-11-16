@@ -187,6 +187,12 @@ first, and prints per metric the median change, the rounds in which the branch d
   df9c30b, it starts the child through the standard library's `Subprocess`, and of the
   `ext.process_abi` functions it calls only `uv_hrtime` changed (C libuv's on df9c30b, Silk's
   here, two calls per spawnSync, the timebase cached as libuv does).
+- **The noise floor, measured** (`macos-profile.yml`, run of b7c5681): df9c30b against an
+  identical copy of itself over the same 24 alternating rounds read spawnSync +11.2% (12 of 24
+  worse), cat +5.0% (12 of 24) and setImmediate +2.8% (14 of 24). In the same job the branch
+  against df9c30b read spawnSync -4.5% (9 of 24 worse), cat -8.5% (7 of 24), setImmediate +1.5%
+  (13 of 24), peak memory -15% (0 of 24): every difference within what two identical binaries
+  show, and memory lower in every round.
 - Linux x64, sqlite, 16 alternating rounds of the build merged with main's zlib work: `db.exec`
   -1.6, -0.9, +1.1 and -0.2% against f3d5ea8 and -1.5 to -7.0% against current main; the earlier
   +6.8 and +10.1% readings of single builds were code placement, which moves between builds.
