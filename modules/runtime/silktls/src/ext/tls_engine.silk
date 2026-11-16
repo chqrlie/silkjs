@@ -40,6 +40,7 @@ import silk.tls.trust_anchor { TrustAnchor }
 import silk.tls.trust_snapshot { SnapshotLimits, TrustSnapshot, TrustSourceError }
 import silk.tls.https_identity { HttpsIdentity, ReferenceIdentity }
 import silk.tls.record { CipherSuite, TlsVersion, VersionPolicy }
+import silk.crypto.sha2 { Sha256 }
 import silk.tls.signature { SigningKey, HandshakeSignature, SignatureFailure }
 import silk.tls.client { NamedGroup, Session, SessionError, AlpnConfig, AlpnProtocol, CipherOrder, Client, ClientConfig, ClientCredential, ClientLimits, Demand, Progress, Resumption, TlsError, Authentication }
 import silk.tls.server { TicketKey, ClientAuth, ClientCertificateStatus, GroupPolicy, Server, ServerConfig, ServerDemand, ServerError, ServerLimits, ServerProgress, TicketPolicy }
@@ -388,6 +389,8 @@ pub struct Connection {
   pub chunks: Queue,
   // The key exchange group a client used: 0 none, 1 X25519, 2 P-256, 3 P-384.
   pub group: i32,
+  // A server's ClientHello offered a session: OpenSSL then sends one ticket, not two.
+  pub resuming: bool,
 }
 pub fn newConnection(server: bool) -> Connection {
   return Connection {
@@ -399,7 +402,7 @@ pub fn newConnection(server: bool) -> Connection {
     failed: false, failure: b"", suite: -1, version: 0, verifyCode: 0, hasPeerCertificate: false,
     verified: emptyQueue(), fragment: 16384, noted: false,
     resumeFrom: emptyQueue(), latest: emptyQueue(), fresh: emptyQueue(), sessionCallbacks: false, resumed: false,
-    chunks: emptyQueue(), group: 0,
+    chunks: emptyQueue(), group: 0, resuming: false,
   }
 }
 effect fn dropMachine(machine: Machine) -> () ? &mut Allocator { drop machine }
@@ -465,7 +468,7 @@ fn chainOf<'a>(list: &'a [u8], out: &mut [CertificateDer<'a>; 8]) -> usize {
 
 // A ClientHello at the start of `input`: its server name and ALPN list, once it is whole. 0 when
 // more bytes are needed, 1 when parsed, -1 when it is not a ClientHello.
-fn parseHello(input: &[u8], servername: &mut [u8; 256], nameLength: &mut usize, alpn: &mut [u8; 512], alpnLength: &mut usize) -> i32 {
+fn parseHello(input: &[u8], servername: &mut [u8; 256], nameLength: &mut usize, alpn: &mut [u8; 512], alpnLength: &mut usize, resuming: &mut bool) -> i32 {
   // Records of type 22 (handshake) until the message is whole.
   let mut message: [u8; 16384] = [0; 16384]
   let mut have: usize = 0
@@ -509,6 +512,8 @@ fn parseHello(input: &[u8], servername: &mut [u8; 256], nameLength: &mut usize, 
         nameLength.* = n
       }
     }
+    // pre_shared_key, or a session_ticket with a ticket: the client offers to resume.
+    if kind == 41 || kind == 35 && length > 0 { resuming.* = true }
     if kind == 16 && length >= 2 {
       let n = u8.toUsize(message[body]) * 256 + u8.toUsize(message[body + 1])
       if body + 2 + n <= body + length && n <= 512 {
@@ -587,6 +592,7 @@ pub fn verifyMessage(code: i64) -> &'static [u8] {
   if code == 24 { return b"invalid CA certificate" }
   if code == 25 { return b"path length constraint exceeded" }
   if code == 26 { return b"unsupported certificate purpose" }
+  if code == 23 { return b"certificate revoked" }
   if code == 50 { return b"application verification failure" }
   return b"unspecified certificate verification error"
 }
@@ -824,7 +830,9 @@ unsafe fn collect(s: &mut Connection, v: &mut Client) -> () {
       let bytes = unsafe view(&anchor, &out)
       unsafe clear(&mut s.latest)
       let _a = unsafe push(&mut s.latest, bytes)
-      if s.sessionCallbacks {
+      // An OpenSSL server sends no tickets on a resumed connection, so Node's client sees no new
+      // 'session' there; silk.tls's server sends one, which is kept but not reported.
+      if s.sessionCallbacks && !s.resumed {
         // Node's 'session' entry: [id length, u32 LE][id][session length, u32 LE][session].
         let id = session.sessionId()
         let idLength: [u8; 4] = [usize.toU8(id.length % 256), usize.toU8(id.length / 256 % 256), 0, 0]
@@ -836,6 +844,19 @@ unsafe fn collect(s: &mut Connection, v: &mut Client) -> () {
     }
     unsafe release(&mut out)
   }
+}
+/// The session JavaScript sees (SSL_get1_session): the newest the server gave, else the one this
+/// connection resumed, else one with nothing to resume (the chain and result only), which a
+/// TLS 1.3 connection has until its tickets arrive.
+pub unsafe fn currentSession<'a>(anchor: &'a (), s: &mut Connection) -> &'a [u8] {
+  if s.latest.length > 0 { return unsafe view(anchor, &s.latest) }
+  if s.resumed && s.resumeFrom.length > 0 { return unsafe view(anchor, &s.resumeFrom) }
+  if !s.complete { return none() }
+  let chain = unsafe view(anchor, &s.peerChain)
+  let code = s.verifyCode
+  let header: [u8; 4] = [i64.toU8(code / 16777216 % 256), i64.toU8(code / 65536 % 256), i64.toU8(code / 256 % 256), i64.toU8(code % 256)]
+  let _a = unsafe pushU32(&mut s.latest, chain.length) let _b = unsafe push(&mut s.latest, chain) let _c = unsafe push(&mut s.latest, &header)
+  return unsafe view(anchor, &s.latest)
 }
 /// The ticket of `session` bytes (the `session` operation's), or empty.
 pub effect fn ticketOf(bytes: &[u8], out: &mut Queue) -> () ! OutOfMemoryError ? &mut Allocator {
@@ -933,6 +954,11 @@ effect fn pumpServer(s: &mut Connection, v: &mut Server, first: Result<ServerPro
       Result<ServerProgress, ServerError>.Failure { error } => {
         let pending = v.pendingOutput()
         let _alert = unsafe push(&mut s.output, pending)
+        // A TLS 1.2 client that sent no certificate a server requires gets OpenSSL's
+        // handshake_failure alert (still in plaintext then) when silk.tls sent none.
+        let tls12 = match v.version() { Option<TlsVersion>.Some { value } => value == TlsVersion.Tls12 Option<TlsVersion>.None => false }
+        let missing = match &error { ServerError.ClientCertificateRequired => true _ => false }
+        if pending.length == 0 && missing && tls12 { let alert: [u8; 7] = [21, 3, 3, 0, 2, 2, 40] let _sent = unsafe push(&mut s.output, &alert) }
         s.failed = true s.failure = serverReason(&error)
         return false
       }
@@ -1084,7 +1110,7 @@ effect fn startServer(s: &mut Connection, m: &Material) -> bool ! OutOfMemoryErr
   // context turned them off.
   let ticketKey = TicketKey.make(&m.ticketKey)
   let lifetime = if m.lifetime < 1 { 1 } else if m.lifetime > 604800 { 604800 } else { m.lifetime }
-  let tickets = if m.tickets { TicketPolicy<'_>.Issue { key: &ticketKey, now: &now, lifetime: lifetime, count: 2, maxEarlyData: 0 } } else { TicketPolicy<'_>.Off }
+  let tickets = if m.tickets { TicketPolicy<'_>.Issue { key: &ticketKey, now: &now, lifetime: lifetime, count: if s.resuming { 1 } else { 2 }, maxEarlyData: 0 } } else { TicketPolicy<'_>.Off }
   let clientAuth = if s.verifyRequest { ClientAuth<'_>.Request { trust: &trust, validationTime: &now, required: s.verifyRequire, rejectUntrusted: false } } else { ClientAuth<'_>.Off }
   let config = ServerConfig<'_> { certificates: Slice.view<CertificateDer<'_>>(&chain, 0, chainLength), alpn: alpn, groups: GroupPolicy.defaults(), clientAuth: clientAuth, tickets: tickets, versions: policy, limits: ServerLimits.defaults() }
   let made = run Server.make(&config, move key)
@@ -1095,7 +1121,7 @@ effect fn startServer(s: &mut Connection, m: &Material) -> bool ! OutOfMemoryErr
   s.machine = Machine.ServerSide { v: move server }
   return true
 }
-effect fn advanceIn(s: &mut Connection, m: &Material) -> i32 ! OutOfMemoryError ? &mut Allocator | &mut Random | &mut SystemClock {
+effect fn advanceIn(s: &mut Connection, m: &Material, blocked: &[u8]) -> i32 ! OutOfMemoryError ? &mut Allocator | &mut Random | &mut SystemClock {
   if s.failed { return -1 }
   let empty = match &s.machine { Machine.Empty => true _ => false }
   if empty {
@@ -1106,7 +1132,7 @@ effect fn advanceIn(s: &mut Connection, m: &Material) -> i32 ! OutOfMemoryError 
         let anchor = ()
         let mut name: [u8; 256] = [0; 256] let mut nameLength: usize = 0
         let mut offered: [u8; 512] = [0; 512] let mut offeredLength: usize = 0
-        let parsed = parseHello(unsafe view(&anchor, &s.input), &mut name, &mut nameLength, &mut offered, &mut offeredLength)
+        let parsed = parseHello(unsafe view(&anchor, &s.input), &mut name, &mut nameLength, &mut offered, &mut offeredLength, &mut s.resuming)
         if parsed == 0 { return 0 }
         if parsed < 0 { s.failed = true s.failure = b"error:0A00010B:SSL routines::wrong version number" return -1 }
         s.helloParsed = true
@@ -1122,7 +1148,7 @@ effect fn advanceIn(s: &mut Connection, m: &Material) -> i32 ! OutOfMemoryError 
   if s.complete && !s.noted {
     s.noted = true
     let now = run SystemClock.now()
-    run settle(&mut s.*, m, SystemClock.seconds(&now))
+    run settle(&mut s.*, m, SystemClock.seconds(&now), blocked)
   }
   return if s.complete { 1 } else { 0 }
 }
@@ -1160,20 +1186,28 @@ fn issuerAmong<'a>(der: &[u8], list: &'a [u8]) -> &'a [u8] {
 }
 // After the handshake. silk.tls's path validation follows a stricter profile than OpenSSL's (an
 // intermediate's basicConstraints must be critical, an anchor must be a CA, a leaf's keyUsage must
-// allow signatures), which certificates Node accepts, its own test fixtures among them, break. A
-// chain silk.tls rejects is checked again as OpenSSL's X509_verify_cert does (`laxCode`), which
-// also gives OpenSSL's error. The chain that verified, leaf to anchor, is kept for
+// allow signatures), which certificates Node accepts, its own test fixtures among them, break, and
+// it takes any trusted certificate as an anchor. The peer's chain is checked as OpenSSL's
+// X509_verify_cert does (`laxCode`), and that result, with OpenSSL's error, is the connection's. The chain that verified, leaf to anchor, is kept for
 // getPeerCertificate(true).
-effect fn settle(s: &mut Connection, m: &Material, now: i64) -> () ! OutOfMemoryError ? &mut Allocator {
+effect fn settle(s: &mut Connection, m: &Material, now: i64, blocked: &[u8]) -> () ! OutOfMemoryError ? &mut Allocator {
   let anchor = ()
   let peers = unsafe view(&anchor, &s.peerChain)
   let trust = unsafe view(&anchor, &m.trust)
   if item(peers, 0).length == 0 { return () }
   let mut chain = emptyQueue()
-  let code = run laxCode(peers, trust, now, m.partial, &mut chain)
-  if s.verifyCode != 0 { s.verifyCode = code }
-  // OpenSSL's SSL_get0_verified_chain is the chain it built, verified or not.
+  // A client checks the server's purpose, a server the client's.
+  let code = run laxCode(peers, trust, now, m.partial, !s.server, &mut chain)
+  // OpenSSL's verdict, whatever silk.tls found: it is laxer than silk.tls's profile, but
+  // stricter about anchors (a trusted certificate that is not self-signed ends a chain only with
+  // X509_V_FLAG_PARTIAL_CHAIN, Node's allowPartialTrustChain).
+  s.verifyCode = code
+  // Node's CertVerifyCallback: a chain through a blocked public key is CERT_REVOKED (23) even
+  // when the trust store accepts it; when it did not verify, the peer's certificates are checked
+  // too, so the blocklist wins over the original error.
   let built = unsafe view(&anchor, &chain)
+  if blockedAmong(built, blocked) || s.verifyCode != 0 && blockedAmong(peers, blocked) { s.verifyCode = 23 }
+  // OpenSSL's SSL_get0_verified_chain is the chain it built, verified or not.
   let _a = unsafe push(&mut s.verified, built)
   unsafe release(&mut chain)
 }
@@ -1211,36 +1245,88 @@ fn schemeOf(algorithm: &AlgorithmView<'_>) -> usize {
   }
   return 0
 }
-// Whether `der`'s basicConstraints says CA, or it is a version 1 certificate (which OpenSSL takes
-// as a CA when it is self-signed).
-fn actsAsCa(der: &[u8]) -> bool {
+// The value (the OCTET STRING's contents) of `der`'s extension `oid`, or empty.
+fn extensionValue<'a>(der: &'a [u8], oid: &[u8]) -> &'a [u8] {
   let tbs = field(field(der, 0), 0)
-  if childTag(tbs, 0) != 160 { return selfIssued(der) }
-  // Extensions: the [3] element of the TBSCertificate.
   let mut i: usize = 0
   while i < 12 {
     let e = element(tbs, i)
-    if e.length == 0 { return false }
+    if e.length == 0 { return none() }
+    // Extensions: the [3] element of the TBSCertificate.
     if e[0] == 163 {
       let list = field(field(e, 0), 0)
       let mut k: usize = 0
       while k < 64 {
         let extension = field(list, k)
-        if extension.length == 0 { return false }
-        if same(field(extension, 0), b"\x55\x1d\x13") {
-          // extnID, critical?, OCTET STRING { SEQUENCE { cA BOOLEAN DEFAULT FALSE, ... } }
+        if extension.length == 0 { return none() }
+        if same(field(extension, 0), oid) {
+          // extnID, critical BOOLEAN DEFAULT FALSE, OCTET STRING
           let second = element(extension, 1)
-          let value = if second.length > 0 && second[0] == 1 { field(extension, 2) } else { field(extension, 1) }
-          let flags = field(value, 0)
-          let first = element(flags, 0)
-          return first.length >= 3 && first[0] == 1 && first[2] != 0
+          return if second.length > 0 && second[0] == 1 { field(extension, 2) } else { field(extension, 1) }
         }
         k = k + 1
       }
-      return false
+      return none()
     }
     i = i + 1
   }
+  return none()
+}
+// Whether `der`'s basicConstraints says CA, or it is a version 1 certificate (which OpenSSL takes
+// as a CA when it is self-signed).
+fn actsAsCa(der: &[u8]) -> bool {
+  let tbs = field(field(der, 0), 0)
+  if childTag(tbs, 0) != 160 { return selfIssued(der) }
+  // SEQUENCE { cA BOOLEAN DEFAULT FALSE, pathLenConstraint INTEGER OPTIONAL }
+  let first = element(field(extensionValue(der, b"\x55\x1d\x13"), 0), 0)
+  return first.length >= 3 && first[0] == 1 && first[2] != 0
+}
+// OpenSSL's purpose check of a leaf (X509_check_purpose, SSL server or client): an
+// extendedKeyUsage, when there is one, has the purpose or anyExtendedKeyUsage.
+fn allowsPurpose(der: &[u8], server: bool) -> bool {
+  let usage = extensionValue(der, b"\x55\x1d\x25")
+  if usage.length == 0 { return true }
+  let purposes = field(usage, 0)
+  let wanted: &[u8] = if server { b"\x2b\x06\x01\x05\x05\x07\x03\x01" } else { b"\x2b\x06\x01\x05\x05\x07\x03\x02" }
+  let mut k: usize = 0
+  while k < 64 {
+    let e = element(purposes, k)
+    if e.length == 0 { return false }
+    let id = field(purposes, k)
+    if same(id, wanted) || same(id, b"\x55\x1d\x25\x00") { return true }
+    k = k + 1
+  }
+  return false
+}
+// Node's kBlockedSPKIs (crypto_context.cc): SHA-256 digests of SubjectPublicKeyInfos that must
+// never be in a verified chain, the eMudhra/emSign intermediates whose keys were reported
+// compromised in October 2026 (as ../openssl's bridge lists them).
+const BLOCKED_SPKIS: &[u8] = b"\x49\xdd\x35\x3d\xc2\xb9\x19\xa3\x77\x06\x45\x11\x7d\x0e\x60\xc1\x61\x15\xe7\xd1\xbc\x25\x9e\xef\xe7\x34\xb0\x0e\xa4\x34\xfe\x5f\x5c\x06\x60\xa2\xb1\x64\x91\x0d\x8f\xf5\x89\xc1\x8e\x14\x55\x2e\x9e\x0e\xc2\x37\xdc\xef\xe2\xcb\x73\x6d\x41\xa4\x81\x1f\x81\xa0\x63\xec\xef\xee\x43\x1d\x49\x52\x3b\xc1\x13\x6c\x4e\x72\xd0\x20\x6a\x47\x70\x86\xca\xf6\x06\xcd\x5c\xf0\x25\x68\x6c\x10\x9c\xf8\x92\xc0\x63\xd6\x7e\x8f\x14\xdb\x71\xd2\x88\xe1\x12\x66\xff\xda\xf6\x9c\xbf\x11\x5f\x7b\xab\x14\xf3\xbc\x2f\x68\xd2\x5e\x0e\x30\xeb\xed\x64\x75\xc2\xc2\xd8\x0f\xcb\x19\x9f\x3f\xe8\xdd\x6e\x6b\x3c\xe6\x0b\x77\xeb\x15\xd4\xe4\x2c\x3d\xec\x0c\x6f\x5b\x51\x05\xec\x4f\xfa\x1a\xd0\xac\x88\x08\x13\x14\xb7\xaa\xff\xef\x6a\x91\xf9\x7c\xd5\x72\x91\xbb\x5b\xa6\x86\xc5\x41\x5f\x5e\xb4\xf6\xb6\x43\xbf\xfa\x19\xd6\xef\x65\x14\x51\xf6\x84\x1e\x01\x99\x31\xe9\x6f\x6f\x2e\xae\xff\x28\xab\x4b\x6f\x1c\xe4\x57\x6d\xe2\x71\x7b\xe0\x25\x4c\x7f\xcd\xc2\x65\xe2\xf0\xf8\xa4\x28\xda\xbb\x75\xab\x4a\xe0\x39\xb4\x87\x2d\x62\xf5\xee\x57\xf0\x87\x7d\x5a\x8a\x41"
+fn digestIn(digest: &[u8; 32], table: &[u8]) -> bool {
+  let mut offset: usize = 0
+  while offset + 32 <= table.length {
+    let mut equalBytes = true
+    let mut j: usize = 0
+    while j < 32 { if digest[j] != table[offset + j] { equalBytes = false } j = j + 1 }
+    if equalBytes { return true }
+    offset = offset + 32
+  }
+  return false
+}
+// Node's CheckSPKI: whether `der`'s public key is blocked.
+fn blockedKey(der: &[u8], blocked: &[u8]) -> bool {
+  let tbs = field(field(der, 0), 0)
+  let base: usize = if childTag(tbs, 0) == 160 { 1 } else { 0 }
+  let spki = element(tbs, base + 5)
+  if spki.length == 0 { return false }
+  let digest = Sha256.hash(spki)
+  return digestIn(&digest, BLOCKED_SPKIS) || digestIn(&digest, blocked)
+}
+// Node's CheckSPKIs over a list of certificates.
+fn blockedAmong(list: &[u8], blocked: &[u8]) -> bool {
+  let count = itemCount(list)
+  let mut i: usize = 0
+  while i < count { if blockedKey(item(list, i), blocked) { return true } i = i + 1 }
   return false
 }
 effect fn signedBy(subject: &[u8], issuer: &[u8]) -> bool ! OutOfMemoryError ? &mut Allocator {
@@ -1266,7 +1352,7 @@ effect fn timeCode(der: &[u8], now: i64) -> i64 ! OutOfMemoryError ? &mut Alloca
 // the X509_V_ERR code, 0 when it verifies, with the chain it built in `built`. It builds the chain
 // from the trust store first, then from what the peer sent; checks that each issuer is a CA; then
 // checks signatures and validity from the top down.
-effect fn laxCode(peers: &[u8], trust: &[u8], now: i64, partial: bool, built: &mut Queue) -> i64 ! OutOfMemoryError ? &mut Allocator {
+effect fn laxCode(peers: &[u8], trust: &[u8], now: i64, partial: bool, server: bool, built: &mut Queue) -> i64 ! OutOfMemoryError ? &mut Allocator {
   let mut current = item(peers, 0)
   let mut length: usize = 1
   let _a = unsafe pushU32(&mut built.*, current.length) let _b = unsafe push(&mut built.*, current)
@@ -1289,6 +1375,7 @@ effect fn laxCode(peers: &[u8], trust: &[u8], now: i64, partial: bool, built: &m
   let chain = unsafe view(&anchor, &built.*)
   let mut i: usize = 1
   while i < length { if !actsAsCa(item(chain, i)) { return 24 } i = i + 1 }
+  if !allowsPurpose(item(chain, 0), server) { return 26 }
   let mut depth = length
   while depth > 0 {
     depth = depth - 1
@@ -1303,11 +1390,11 @@ effect fn laxCode(peers: &[u8], trust: &[u8], now: i64, partial: bool, built: &m
 pub unsafe fn verifiedAt<'a>(anchor: &'a (), s: &Connection, index: usize) -> &'a [u8] { return item(unsafe view(anchor, &s.verified), index) }
 /// Advances the handshake with the material of the session's context: 1 when it is done, 0 when
 /// it waits for input, 4 when a server waits for its context to be chosen, -1 when it failed.
-pub unsafe fn advance(s: &mut Connection, m: &Material) -> i32 {
+pub unsafe fn advance(s: &mut Connection, m: &Material, blocked: &[u8]) -> i32 {
   let mut allocator = Allocator.systemAllocatorProvider()
   let mut random = OsRandom.make()
   let mut wall = OsSystemClock.make()
-  return match run Effect.result(advanceIn(&mut s.*, m)) |> Effect.provideMut<SystemClock>(&mut wall) |> Effect.provideMut<Random>(&mut random) |> Effect.provideMut<Allocator>(&mut allocator) {
+  return match run Effect.result(advanceIn(&mut s.*, m, blocked)) |> Effect.provideMut<SystemClock>(&mut wall) |> Effect.provideMut<Random>(&mut random) |> Effect.provideMut<Allocator>(&mut allocator) {
     Result<i32, OutOfMemoryError>.Success { value } => value
     Result<i32, OutOfMemoryError>.Failure { .. } => unsafe failWith(&mut s.*, b"error:0A0C0100:SSL routines::malloc failure")
   }

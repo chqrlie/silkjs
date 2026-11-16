@@ -107,3 +107,54 @@ jobs:
         env:
           SILKJS_RUNTIME: build/silk/silkjsruntime
         run: node tests/compat.mjs
+  silk-tls:
+    # Step 8's TLS swap: the executable with SilkTls (over silk.tls) as well
+    # (cli/src/main_silk_tls.silk). It builds with the pinned toolchain's standard library and
+    # silktls/silk-tls-deferred.patch, which `silk task tls-stdlib` writes to build/stdlib-tls,
+    # until a toolchain release has silk.tls's deferred client verification.
+    runs-on: ubuntu-26.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install Clang 22
+        run: |
+          test -x /usr/bin/clang-22 || (sudo apt-get update && sudo apt-get install -y clang-22 lld-22)
+          echo "SILK_CLANG=/usr/bin/clang-22" >> "$GITHUB_ENV"
+      - name: Install the pinned Silk
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          export SILK_RELEASE="v$(sed -n 's/^silk-version = "\(.*\)"/\1/p' silk.toml)"
+          curl --fail --location https://raw.githubusercontent.com/silk-lang/silk/8214c402307b/install.sh --output "$RUNNER_TEMP/install-silk.sh"
+          sh "$RUNNER_TEMP/install-silk.sh"
+          echo "$HOME/.silk/bin" >> "$GITHUB_PATH"
+      - name: Write the standard library with silk.tls's deferred verification
+        working-directory: modules/runtime/tools/capabilities
+        run: silk task tls-stdlib
+      - name: Build the executable with SilkTls
+        working-directory: modules/runtime/cli
+        run: |
+          mkdir -p ../build/silktls
+          SILKJS_CLANG_BUILD=../build/silktls silk build src/main_silk_tls.silk -o ../build/silktls/silkjsruntime --debug true --clang ../tools/clang.py --stdlib ../build/stdlib-tls
+      - name: Node compatibility with SilkTls
+        working-directory: modules/runtime
+        env:
+          SILKJS_RUNTIME: build/silktls/silkjsruntime
+        run: node tests/compat.mjs
+      - name: Node's TLS and HTTPS tests with SilkTls
+        working-directory: modules/runtime/tests/node-suite
+        run: |
+          mkdir -p "$HOME/setup/node-src" && cd "$HOME/setup/node-src" && git init -q
+          git remote add origin https://github.com/nodejs/node
+          git config core.sparseCheckout true && printf 'test/\n' > .git/info/sparse-checkout
+          git fetch -q --depth 1 origin tag v24.22.1 && git checkout -q FETCH_HEAD
+          cd "$GITHUB_WORKSPACE/modules/runtime/tests/node-suite"
+          python3 run.py "$(command -v node)" node.json parallel 4 '^test-(tls|https)-'
+          python3 run.py "$GITHUB_WORKSPACE/modules/runtime/build/silktls/silkjsruntime" silk.json parallel 4 '^test-(tls|https)-'
+          python3 report.py node.json silk.json fails.json | tee report.txt
+          # No fewer than docs/composable-runtime.md reports (229 of 283), less a margin for the
+          # machine's environment.
+          awk '/^eligible/ { exit !($4 >= 225) }' report.txt

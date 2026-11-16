@@ -43,7 +43,8 @@ import ext.tls_engine { Material, Connection, Queue }
 unsafe extern "C" fn calloc(count: usize, size: usize) -> ?*mut u8
 unsafe extern "C" fn free(pointer: ?*mut u8) -> ()
 
-pub struct State { first: ?*mut Handle, next: i32, allocator: *mut RuntimeHeap, failure: &'static [u8] }
+// `blocked`: the SPKI digests addBlockedSPKIForTesting added, 32 bytes each.
+pub struct State { first: ?*mut Handle, next: i32, allocator: *mut RuntimeHeap, failure: &'static [u8], blocked: Queue }
 // A context (kind 1) holds material; a session (kind 2) its session and its context's id.
 struct Handle {
   next: ?*mut Handle, id: i32, kind: i32, material: ?*mut Material, session: ?*mut Connection, context: i32,
@@ -75,7 +76,7 @@ unsafe effect fn throwError<'m, S: EngineServices>(engine: &mut Engine<'m, S>, c
 pub effect fn open(allocator: *mut RuntimeHeap) -> *mut State ! OutOfMemoryError {
   let p = unsafe calloc(1, Layout.of<State>().bytes) if Pointer.isNull<u8>(p) { fail OutOfMemoryError {} }
   let state = unsafe Intrinsic.pointerReinterpret<*mut u8, *mut State>(unsafe nonnull(p))
-  unsafe Pointer.put<State>(state, State { first: Pointer.null<Handle>(), next: 1, allocator: allocator, failure: b"" })
+  unsafe Pointer.put<State>(state, State { first: Pointer.null<Handle>(), next: 1, allocator: allocator, failure: b"", blocked: engine.emptyQueue() })
   return state
 }
 unsafe fn locate(state: *mut State, id: i32) -> ?*mut Handle {
@@ -142,6 +143,7 @@ pub unsafe fn close<'m, C: Composition>(e: &mut Engine<'m, host.Services<C>>, co
     if h.attached { h.releasePending = true continue }
     unsafe dispose(&mut h) drop h unsafe free(unsafe raw(p))
   }
+  let mut held = () let owned = unsafe Pointer.borrowMut<(), State>(&mut held, state) unsafe engine.release(&mut owned.blocked) drop owned
   unsafe free(unsafe raw(state))
 }
 pub unsafe fn openHandles(state: *mut State) -> usize {
@@ -273,11 +275,13 @@ unsafe fn contextOp(state: *mut State, name: &[u8], c: &mut Call, m: &mut Materi
 unsafe fn handshake(state: *mut State, h: &Handle, s: &mut Connection) -> i32 {
   let context = unsafe locate(state, h.context)
   let anchor = ()
-  if Pointer.isNull<Handle>(context) { return unsafe engine.advance(&mut s.*, &engine.emptyMaterial()) }
+  let st = unsafe Pointer.borrow<(), State>(&anchor, state)
+  let blocked = unsafe engine.view(&anchor, &st.blocked)
+  if Pointer.isNull<Handle>(context) { return unsafe engine.advance(&mut s.*, &engine.emptyMaterial(), blocked) }
   let other = unsafe Pointer.borrow<(), Handle>(&anchor, unsafe nonnull(context))
-  if Pointer.isNull<Material>(other.material) { return unsafe engine.advance(&mut s.*, &engine.emptyMaterial()) }
+  if Pointer.isNull<Material>(other.material) { return unsafe engine.advance(&mut s.*, &engine.emptyMaterial(), blocked) }
   let m = unsafe Pointer.borrow<(), Material>(&anchor, unsafe nonnull(other.material))
-  return unsafe engine.advance(&mut s.*, &m)
+  return unsafe engine.advance(&mut s.*, &m, blocked)
 }
 unsafe fn contextMaterial<'a>(anchor: &'a (), state: *mut State, id: i32) -> ?*mut Material {
   let context = unsafe locate(state, id)
@@ -329,12 +333,12 @@ unsafe fn sessionOp(state: *mut State, name: &[u8], c: &mut Call, h: &mut Handle
   if equal(name, b"trace") || equal(name, b"enableALPNCallback") || equal(name, b"enablePsk") || equal(name, b"pskHint") || equal(name, b"requestOCSP") || equal(name, b"setOCSPResponse") || equal(name, b"enableKeylog") || equal(name, b"clientHelloDone") || equal(name, b"loadSession") || equal(name, b"newSessionDone") { return true }
   if equal(name, b"enableSessionCallbacks") { s.sessionCallbacks = true return true }
   if equal(name, b"setSession") { unsafe engine.clear(&mut s.resumeFrom) return unsafe engine.push(&mut s.resumeFrom, unsafe arg(&anchor, &c, 1)) }
-  if equal(name, b"session") { c.kind = 0 return unsafe bytes(&mut c, unsafe engine.view(&anchor, &s.latest)) }
+  if equal(name, b"session") { c.kind = 0 return unsafe bytes(&mut c, unsafe engine.currentSession(&anchor, &mut s.*)) }
   if equal(name, b"newSessions") { c.kind = 0 return unsafe queued(&mut c, &mut s.fresh) }
   if equal(name, b"ticket") || equal(name, b"sessionTicket") {
     c.kind = 0
     let mut ticket = engine.emptyQueue()
-    let source = if equal(name, b"ticket") { unsafe engine.view(&anchor, &s.latest) } else { unsafe arg(&anchor, &c, 1) }
+    let source = if equal(name, b"ticket") { unsafe engine.currentSession(&anchor, &mut s.*) } else { unsafe arg(&anchor, &c, 1) }
     unsafe engine.ticketBytes(source, &mut ticket)
     let ok = unsafe bytes(&mut c, unsafe engine.view(&anchor, &ticket))
     unsafe engine.release(&mut ticket) return ok
@@ -409,8 +413,14 @@ unsafe fn execute(state: *mut State, name: &[u8], c: &mut Call) -> bool {
     unsafe engine.randomTicketKey(&mut m) return true
   }
   // Node's blocked public keys only matter to OpenSSL's chain building; silk.tls has its own.
-  if equal(name, b"blockSPKI") { return c.lengths[1] == 32 }
-  if equal(name, b"clearBlockedSPKIs") { return true }
+  // Node's SecureContext::AddBlockedSPKIForTesting / ClearBlockedSPKIsForTesting.
+  if equal(name, b"blockSPKI") {
+    if c.lengths[1] != 32 { return false }
+    let digest = unsafe arg(&anchor, &c, 1)
+    let mut held = () let st = unsafe Pointer.borrowMut<(), State>(&mut held, state)
+    return unsafe engine.push(&mut st.blocked, digest)
+  }
+  if equal(name, b"clearBlockedSPKIs") { let mut held = () let st = unsafe Pointer.borrowMut<(), State>(&mut held, state) unsafe engine.clear(&mut st.blocked) return true }
   if equal(name, b"verifyMessage") { let code = c.numbers[0] return unsafe text(&mut c, engine.verifyMessage(code)) }
   if equal(name, b"defaultCertPaths") { return unsafe text(&mut c, b"SSL_CERT_FILE\n/usr/local/ssl/cert.pem\nSSL_CERT_DIR\n/usr/local/ssl/certs") }
   let optional = unsafe locate(state, i64.toI32(c.numbers[0])) if Pointer.isNull<Handle>(optional) { return false }

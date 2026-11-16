@@ -848,17 +848,62 @@ certificates in `tests/fixtures/crypto`) under Node and a runtime: SilkCrypto ag
 them. The compatibility suite passes with it; of Node's 207 crypto and Web Crypto tests that pass
 under Node, 182 pass with it (all 55 Web Crypto ones), against all 207 with OpenSSL.
 
-TLS stays OpenSSL's (`OpenSslTls` beside `SilkCrypto`) until `silk.tls` takes its place: its
-client always rejects a server whose chain or name does not verify, while Node finishes the
-handshake and decides afterwards (`rejectUnauthorized`, `checkServerIdentity`), so `silk.tls` needs
-that mode first.
+**Step 8, fifth swap: TLS.** `SilkTls` (./silktls) is `Tls` over `silk.tls`'s sans-IO client and
+server. It keeps ../openssl's bridge (`ext/tls_silk`: the operations `host.tls` takes by name,
+their arguments and OpenSSL's error strings, the contexts and sessions by id, and the `SecureOps`
+the network's native TLS sockets run a session's records with) and replaces OpenSSL's memory-BIO
+sessions with `ext/tls_engine`, which feeds and drains ciphertext, reads and writes plaintext and
+answers each handshake step as `SSL_do_handshake` does:
 
-`cli/src/main_silk.silk` is the executable with the four Silk libraries. The CI job `silk-libraries`
-(`.github/workflows/embedding.yml`) builds it and the executable with the C libraries, runs the
-compression and crypto differentials against Node, the parser differential against llhttp,
-Node's HTTP/2 tests and the compatibility suite.
+- A context holds key and certificate pairs (Node's arrays of them; a server signs with the first
+  that matches), its CA list, ALPN, versions and a ticket key. A server stops after the
+  ClientHello for JavaScript to pick a context (SNI, `SNICallback`, the ALPN callback, which can
+  reject), then completes a chain that is only a leaf from its CA list, as OpenSSL does.
+- Node finishes a handshake whatever the server's certificate, and judges it afterwards
+  (`rejectUnauthorized`, `checkServerIdentity`), which `silk.tls`'s client did not allow: it gains
+  `Client.deferVerification` (with `verificationFailure` and `peerCertificateDer`). The verdict
+  is OpenSSL's: the engine checks the peer's chain as `X509_verify_cert` does (chain building from
+  the CA list and the peer's certificates, CA flags, the purpose, signatures through
+  `silk.tls.signature`, validity, `allowPartialTrustChain`, and Node's blocklist of public keys),
+  with OpenSSL's error codes. `silk.tls`'s own validation follows a stricter profile (critical
+  basicConstraints on intermediates, CA anchors only) that certificates Node accepts, its test
+  fixtures among them, do not meet.
+- Session resumption: a client offers the session JavaScript gives it and reports the ones the
+  server's tickets give (`session`, `getSession`, `getTLSTicket`, `isSessionReused`; a session
+  carries the peer's chain and result, as `SSL_SESSION` does); a server issues tickets (a random
+  key, or `ticketKeys`; `sessionTimeout`; not with `SSL_OP_NO_TICKET`).
+- Client certificates (requested, required), `setMaxSendFragment`, one record per read, the
+  negotiated suite, version, group and ALPN, and cipher lists checked against OpenSSL's names.
 
-What is left of step 8 is `Tls` over `silk.tls` (above), and the gaps of `SilkCrypto` listed with it.
+`silk.tls`'s deferred verification is not in the pinned toolchain yet:
+`silktls/silk-tls-deferred.patch` adds it to `silk/tls/client.silk`, and `silk task tls-stdlib`
+(tools/capabilities) writes `build/stdlib-tls`, the toolchain's standard library with the patch.
+`cli/src/main_silk_tls.silk` is the executable with all five Silk libraries, built with
+`--stdlib ../build/stdlib-tls`; `cli/src/main_silk.silk` keeps `OpenSslTls` so that CI builds with
+the released toolchain. Once a toolchain release has the change, the patch, the task and the flag
+go, and `main_silk.silk` takes `SilkTls`.
+
+Of Node's TLS and HTTPS tests (`test-tls-*`, `test-https-*`, through `tests/node-suite`), 231 of the
+283 that pass under Node pass with it, against 279 with OpenSSL, and the compatibility suite
+and the crypto differential pass with it. The CI job `silk-tls` builds it and runs the
+compatibility suite and those tests (no fewer than 225 must pass). What `silk.tls` does not have
+fails, with OpenSSL's errors where Node checks them: TLS 1.0 and 1.1, CBC and static-RSA suites
+and finite-field DHE (`test-tls-min-max-version` and the `test-tls-cli-*-version` tests that run
+it, `getprotocol`, `honorcipherorder`); choosing the suites (`ciphers` and suite lists are checked
+but do not restrict, so the suite is the one `silk.tls` prefers: AES-128-GCM where OpenSSL's
+client picks AES-256-GCM); the hybrid ML-KEM group; PSK, keylog, `getFinished`,
+`exportKeyingMaterial`, renegotiation, tracing, OCSP stapling and a server-side session cache
+(`newSession`, `resumeSession`) or resuming a session with a client certificate; SNI names
+outside the HTTPS profile, such as `sni.0`; PKCS #12 (`pfx`, as in `SilkCrypto`) and CRLs.
+
+`cli/src/main_silk.silk` is the executable with the four Silk libraries the released toolchain
+builds. The CI job `silk-libraries` (`.github/workflows/embedding.yml`) builds it and the
+executable with the C libraries, runs the compression and crypto differentials against Node, the
+parser differential against llhttp, Node's HTTP/2 tests and the compatibility suite.
+
+What is left of step 8 is moving `SilkTls` into `main_silk.silk` when the toolchain has
+`silk.tls`'s deferred verification, the gaps of `SilkCrypto` and `SilkTls` listed with them, and
+libuv, which stays in the core until the loop plan replaces it.
 
 ## Risks and decisions taken
 
