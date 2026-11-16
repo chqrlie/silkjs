@@ -106,7 +106,7 @@ fn operation(name: &[u8]) -> i32 {
   if equal(name, b"keyQBits") { return 65 }
   if equal(name, b"checkPrime") { return 66 } if equal(name, b"generatePrime") { return 67 } if equal(name, b"cipherInfo") { return 68 }
   if equal(name, b"privateEncrypt") { return 69 } if equal(name, b"publicDecrypt") { return 70 }
-  if equal(name, b"secureHeapUsed") { return 71 } if equal(name, b"setEngine") { return 72 } if equal(name, b"keyParam") { return 73 } if equal(name, b"keyPublic") { return 74 } if equal(name, b"keyCheck") { return 75 } if equal(name, b"turboshake") { return 76 } if equal(name, b"secureHeapInit") { return 77 } if equal(name, b"secLevel") { return 78 } if equal(name, b"fipsAvailable") { return 79 } if equal(name, b"rsaPubkey") { return 80 } if equal(name, b"storeLoad") { return 81 } if equal(name, b"opensslInit") { return 82 } if equal(name, b"csprngCheck") { return 83 } if equal(name, b"fipsGeneration") { return 84 }
+  if equal(name, b"secureHeapUsed") { return 71 } if equal(name, b"setEngine") { return 72 } if equal(name, b"keyParam") { return 73 } if equal(name, b"keyPublic") { return 74 } if equal(name, b"keyCheck") { return 75 } if equal(name, b"turboshake") { return 76 } if equal(name, b"secureHeapInit") { return 77 } if equal(name, b"secLevel") { return 78 } if equal(name, b"fipsAvailable") { return 79 } if equal(name, b"rsaPubkey") { return 80 } if equal(name, b"storeLoad") { return 81 } if equal(name, b"opensslInit") { return 82 } if equal(name, b"csprngCheck") { return 83 } if equal(name, b"fipsGeneration") { return 84 } if equal(name, b"opensslInitText") { return 85 }
   if equal(name, b"x509Create") { return 100 } if equal(name, b"x509Raw") { return 101 } if equal(name, b"x509PEM") { return 102 }
   if equal(name, b"x509Name") { return 103 } if equal(name, b"x509Time") { return 104 } if equal(name, b"x509Fingerprint") { return 105 }
   if equal(name, b"x509Serial") { return 106 } if equal(name, b"x509PublicKey") { return 107 } if equal(name, b"x509CA") { return 108 }
@@ -170,7 +170,11 @@ pub effect fn open(main: bool) -> *mut State ! OutOfMemoryError {
 }
 // Every operation but the startup configuration (opensslInit, which must run
 // before any other OpenSSL call) configures the providers first.
-unsafe fn configureFor(state: *mut State, op: i32) -> () { if op != 82 { unsafe configure(state) } }
+unsafe extern "C" fn NCONF_new(method: ?*mut u8) -> ?*mut u8
+unsafe extern "C" fn NCONF_load_bio(conf: ?*mut u8, bio: ?*mut u8, line: ?*mut i64) -> i32
+unsafe extern "C" fn CONF_modules_load(conf: ?*mut u8, appname: ?*const u8, flags: u64) -> i32
+unsafe extern "C" fn NCONF_free(conf: ?*mut u8) -> ()
+unsafe fn configureFor(state: *mut State, op: i32) -> () { if op != 82 && op != 85 { unsafe configure(state) } }
 /// Configures the providers on the main thread, the first time it is called there.
 /// Worker threads start only after the main thread called this, so it is done for them.
 pub unsafe fn configure(state: *mut State) -> () {
@@ -246,7 +250,7 @@ unsafe fn bnOutput(j: &mut Job, bn: ?*mut u8) -> bool {
 unsafe fn execute(j: &mut Job) -> bool {
   // Startup configuration runs before any OpenSSL call, which would load the
   // default configuration first.
-  if j.op == 82 { return unsafe executeUtilities(&mut j) }
+  if j.op == 82 || j.op == 85 { return unsafe executeUtilities(&mut j) }
   unsafe ssl.ERR_clear_error()
   let op = j.op let h = j.handle
   if op == 6 || op == 7 || op == 8 { return unsafe executeOneShot(&mut j) }
@@ -1368,6 +1372,24 @@ unsafe fn executeUtilities(j: &mut Job) -> bool {
     // OPENSSL_INIT_LOAD_CONFIG
     let _loaded = unsafe ssl.OPENSSL_init_crypto(64, settings)
     unsafe ssl.OPENSSL_INIT_free(settings)
+    j.resultKind = 1 j.result = 1
+    return unsafe ssl.ERR_peek_error() == 0
+  }
+  if j.op == 85 {
+    // opensslInit for a program whose files are not the host's: the configuration's text (data[0],
+    // read through fs; empty for none) is parsed from memory and its section data[1] loaded, and
+    // OpenSSL opens no file of its own.
+    let _initialized = unsafe ssl.OPENSSL_init_crypto(128, nil())
+    if j.lengths[0] != 0 {
+      let bio = unsafe ssl.BIO_new_mem_buf(j.data[0], usize.toI32(j.lengths[0]))
+      if Pointer.isNull<u8>(bio) { return false }
+      let conf = unsafe NCONF_new(nil())
+      if Pointer.isNull<u8>(conf) { let _freed = unsafe ssl.BIO_free(bio) return false }
+      let mut ok = unsafe NCONF_load_bio(conf, bio, Pointer.null<i64>()) > 0
+      if ok { ok = unsafe CONF_modules_load(conf, unsafe Intrinsic.pointerRequalify<?*mut u8, ?*const u8>(j.data[1]), 0) > 0 }
+      unsafe NCONF_free(conf) let _freed = unsafe ssl.BIO_free(bio)
+      if !ok { return false }
+    }
     j.resultKind = 1 j.result = 1
     return unsafe ssl.ERR_peek_error() == 0
   }

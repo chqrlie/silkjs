@@ -49,6 +49,11 @@ pub struct Options {
   /// finishes only with process.exit or `Runtime.finish`. Without it the runtime finishes as
   /// Node's does when its loop has nothing left ('beforeExit', then 'exit').
   pub keepAlive: bool,
+  /// The process ends when the runtime does, as the executable's: the runtime leaves its heap to
+  /// the operating system, starts from the heap image appended to the program when it has one
+  /// (`silk task image` in tools/capabilities appends it), and `--silk-write-heap-image PATH` as
+  /// its second argument writes that image and ends the process.
+  pub ownsProcess: bool,
 }
 
 impl Options {
@@ -57,7 +62,7 @@ impl Options {
   pub effect fn make(executable: &[u8]) -> Options ! OutOfMemoryError ? &mut Allocator {
     let mut arguments = List<Bytes>.make()
     run arguments.append(run Bytes.copy(executable))
-    return Options { arguments: move arguments, keepAlive: true }
+    return Options { arguments: move arguments, keepAlive: true, ownsProcess: false }
   }
 }
 
@@ -89,5 +94,5 @@ impl<'h, H: Host> Driver for Hosted<'h, H> {
 pub effect fn start<H: Host, C: Composition>(options: Options, host: &mut H, capabilities: C) -> i32 ! OutOfMemoryError | SynchronizationError ? &mut Allocator {
   keep_exports.all()
   let mut driver = Hosted { host: &mut host.* }
-  return run worker.executeMain(&options.arguments, Mode { main: true, exiting: false, embedded: true, keepAlive: options.keepAlive }, &mut driver, move capabilities)
+  return run worker.executeMain(&options.arguments, Mode { main: true, exiting: options.ownsProcess, embedded: true, keepAlive: options.keepAlive }, &mut driver, move capabilities)
 }

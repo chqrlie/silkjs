@@ -50,6 +50,7 @@ import silkjs.js_weakref_intrinsics_storage as weak
 import silkjsruntime.libs.core.capabilities { Composition }
 import silkjsruntime.libs.core.host as host
 import sqlite.sys as c
+import ext.sqlite_files as files
 
 @foreign(noCapture: .("dest", "source"))
 unsafe extern "C" fn memcpy(dest: *mut u8, source: *const u8, length: usize) -> *mut u8
@@ -58,7 +59,8 @@ unsafe extern "C" fn free(pointer: ?*mut u8) -> ()
 unsafe extern "C" fn strlen(text: *const u8) -> usize
 const TRACE_PROFILE: u32 = c.SQLITE_TRACE_PROFILE
 
-pub struct State { first: ?*mut Handle, callbacks: ?*mut Callback, next: i32, engine: ?*mut u8, context: ?*mut HeapHeader, depth: i32, allocator: *mut RuntimeHeap }
+// vfs: the VFS over the program's Files (ext/sqlite_files), when it has one.
+pub struct State { first: ?*mut Handle, callbacks: ?*mut Callback, next: i32, engine: ?*mut u8, context: ?*mut HeapHeader, depth: i32, allocator: *mut RuntimeHeap, vfs: ?*mut u8 }
 // extra: a database's authorizer callback (or a backup's destination); trace: its
 // SQLITE_TRACE_PROFILE callback while sqlite.db.query has subscribers.
 struct Handle { next: ?*mut Handle, id: i32, kind: i32, owner: i32, ptr: ?*mut u8, extra: ?*mut u8, trace: ?*mut u8, texts: ?*mut Text, busy: bool, rowsHint: usize, templateEpoch: i32 }
@@ -78,7 +80,7 @@ fn num(v: ValueBits) -> i32 { if v.isNumber() { return f64.toI32(v.numericValue(
 effect fn alloc<T>() -> *mut T ! OutOfMemoryError { let p = unsafe calloc(1, Layout.of<T>().bytes) if Pointer.isNull<u8>(p) { fail OutOfMemoryError {} } return unsafe cast<T>(p) }
 // The allocator must remain at this address until close; callbacks borrow it only
 // while the outer dispatch is suspended inside SQLite, never from another thread.
-pub effect fn open(allocator: *mut RuntimeHeap) -> *mut State ! OutOfMemoryError { let p = run alloc<State>() unsafe Pointer.put<State>(p, State { first: Pointer.null<Handle>(), callbacks: Pointer.null<Callback>(), next: 1, engine: nil(), context: Pointer.null<HeapHeader>(), depth: 0, allocator: allocator }) return p }
+pub effect fn open(allocator: *mut RuntimeHeap) -> *mut State ! OutOfMemoryError { let p = run alloc<State>() unsafe Pointer.put<State>(p, State { first: Pointer.null<Handle>(), callbacks: Pointer.null<Callback>(), next: 1, engine: nil(), context: Pointer.null<HeapHeader>(), depth: 0, allocator: allocator, vfs: nil() }) return p }
 unsafe fn lookup(state: *mut State, id: i32) -> ?*mut Handle { let a = () let s = unsafe Pointer.borrow<(), State>(&a, state) let mut p = s.first drop s while !Pointer.isNull<Handle>(p) { let h = unsafe Pointer.borrow<(), Handle>(&a, unsafe nn(p)) if h.id == id { return p } p = h.next } return Pointer.null<Handle>() }
 unsafe effect fn add(state: *mut State, kind: i32, owner: i32, ptr: ?*mut u8, extra: ?*mut u8) -> i32 ! OutOfMemoryError { let h = run alloc<Handle>() let mut a = () let s = unsafe Pointer.borrowMut<(), State>(&mut a, state) let id = s.next s.next = s.next + 1 unsafe Pointer.put<Handle>(h, Handle { next: s.first, id: id, kind: kind, owner: owner, ptr: ptr, extra: extra, trace: nil(), texts: Pointer.null<Text>(), busy: false, rowsHint: 0, templateEpoch: -1 }) s.first = h return id }
 unsafe fn clearTexts(h: &mut Handle) -> () { let mut p = h.texts h.texts = Pointer.null<Text>() while !Pointer.isNull<Text>(p) { let address = unsafe nn(p) let entry = unsafe Pointer.take<Text>(address) p = entry.next drop entry unsafe free(unsafe raw(address)) } }
@@ -107,7 +109,11 @@ unsafe fn sweep<'m, C: Composition>(engine: &mut Engine<'m, host.Services<C>>, c
 }
 pub unsafe fn close<'m, C: Composition>(engine: &mut Engine<'m, host.Services<C>>, context: *mut HeapHeader, state: *mut State) -> () {
   let a = () while true { let s = unsafe Pointer.borrow<(), State>(&a, state) let p = s.first drop s if Pointer.isNull<Handle>(p) { break } let h = unsafe Pointer.borrow<(), Handle>(&a, unsafe nn(p)) let id = h.id let kind = h.kind drop h if kind == 1 { unsafe disposeDatabase(state, id) } else { unsafe dispose(state, id) } }
-  let mut b = () let s = unsafe Pointer.borrowMut<(), State>(&mut b, state) let mut p = s.callbacks s.callbacks = Pointer.null<Callback>() drop s while !Pointer.isNull<Callback>(p) { let cb = unsafe Pointer.take<Callback>(unsafe nn(p)) let next = cb.next unsafe owners.release(&mut engine, context, cb.function) unsafe free(unsafe raw(unsafe nn(p))) p = next } let owned = unsafe Pointer.take<State>(state) drop owned unsafe free(unsafe raw(state))
+  let mut b = () let s = unsafe Pointer.borrowMut<(), State>(&mut b, state) let mut p = s.callbacks s.callbacks = Pointer.null<Callback>() drop s while !Pointer.isNull<Callback>(p) { let cb = unsafe Pointer.take<Callback>(unsafe nn(p)) let next = cb.next unsafe owners.release(&mut engine, context, cb.function) unsafe free(unsafe raw(unsafe nn(p))) p = next } let vfs = unsafe Pointer.read<?*mut u8>(unsafe vfsSlot(state)) unsafe files.release<C>(vfs) let owned = unsafe Pointer.take<State>(state) drop owned unsafe free(unsafe raw(state))
+}
+// The state's VFS slot, which files.vfsName fills.
+unsafe fn vfsSlot(state: *mut State) -> *mut ?*mut u8 {
+  let mut a = () let s = unsafe Pointer.borrowMut<(), State>(&mut a, state) return Pointer.fromMutRef<?*mut u8>(&mut s.vfs)
 }
 unsafe effect fn string<'m, C: Composition>(engine: &mut Engine<'m, host.Services<C>>, context: *mut HeapHeader, p: ?*const u8) -> ValueBits ! JsException ? &mut Allocator { if Pointer.isNull<u8>(p) { return ValueBits.Null } return (run text.cstring(&mut engine, unsafe lendRealm(&context, context), unsafe Intrinsic.pointerRequalify<?*const u8, *const u8>(p))).intoBits() }
 unsafe effect fn checked<'m, C: Composition>(engine: &mut Engine<'m, host.Services<C>>, context: *mut HeapHeader, db: ?*mut u8, code: i32) -> () ! OutOfMemoryError | JsException ? &mut Allocator {
@@ -553,7 +559,8 @@ unsafe effect fn executeSQL<'m, C: Composition>(engine: &mut Engine<'m, host.Ser
 unsafe effect fn operation<'m, C: Composition>(engine: &mut Engine<'m, host.Services<C>>, context: *mut HeapHeader, state: *mut State, op: &[u8], args: &mut Scope) -> ValueBits ! OutOfMemoryError | JsException ? &mut Allocator {
   if eq(op, b"open") {
     let filename = run text.ctext(&mut engine, unsafe lendRealm(&context, context), unsafe lendFor(args.values[0])) let mut db = nil()
-    let status = unsafe c.sqlite3_open_v2(cs(&filename), Pointer.fromMutRef<?*mut u8>(&mut db), i32.bitOr(num(args.values[1]), OPEN_NOMUTEX), none())
+    let vfs = unsafe files.vfsName<'m, C>(&engine.*, unsafe vfsSlot(state))
+    let status = unsafe c.sqlite3_open_v2(cs(&filename), Pointer.fromMutRef<?*mut u8>(&mut db), i32.bitOr(num(args.values[1]), OPEN_NOMUTEX), vfs)
     if status != 0 { let result = run Effect.result(unsafe checked(&mut engine, context, db, status)) let _ignored = unsafe c.sqlite3_close_v2(db) match move result { Result<(), OutOfMemoryError | JsException>.Success { .. } => () Result<(), OutOfMemoryError | JsException>.Failure { error } => { fail move error } } }
     let added = run Effect.result(unsafe add(state, 1, 0, db, nil()))
     return match move added { Result<i32, OutOfMemoryError>.Success { value } => ValueBits.Int { value: value } Result<i32, OutOfMemoryError>.Failure { error } => { let _ignored = unsafe c.sqlite3_close_v2(db) fail move error } }
@@ -709,7 +716,8 @@ unsafe effect fn attachSession<'m, C: Composition>(engine: &mut Engine<'m, host.
 }
 unsafe effect fn backupStart<'m, C: Composition>(engine: &mut Engine<'m, host.Services<C>>, context: *mut HeapHeader, state: *mut State, source: ?*mut u8, id: i32, args: &Scope) -> ValueBits ! OutOfMemoryError | JsException ? &mut Allocator {
   let path = run text.ctext(&mut engine, unsafe lendRealm(&context, context), unsafe lendFor(args.values[1])) let sourceName = run text.ctext(&mut engine, unsafe lendRealm(&context, context), unsafe lendFor(args.values[2])) let destName = run text.ctext(&mut engine, unsafe lendRealm(&context, context), unsafe lendFor(args.values[3])) let mut dest = nil()
-  let status = unsafe c.sqlite3_open_v2(cs(&path), Pointer.fromMutRef<?*mut u8>(&mut dest), i32.bitOr(0x46, OPEN_NOMUTEX), none())
+  let vfs = unsafe files.vfsName<'m, C>(&engine.*, unsafe vfsSlot(state))
+  let status = unsafe c.sqlite3_open_v2(cs(&path), Pointer.fromMutRef<?*mut u8>(&mut dest), i32.bitOr(0x46, OPEN_NOMUTEX), vfs)
   let mut backup = nil() if status == 0 { backup = unsafe c.sqlite3_backup_init(dest, cs(&destName), source, cs(&sourceName)) }
   if status != 0 || Pointer.isNull<u8>(backup) { let mut code = status if code == 0 { code = unsafe c.sqlite3_extended_errcode(dest) } let outcome = run Effect.result(unsafe checked(&mut engine, context, dest, code)) let _ignored = unsafe c.sqlite3_close_v2(dest) match move outcome { Result<(), OutOfMemoryError | JsException>.Success { .. } => () Result<(), OutOfMemoryError | JsException>.Failure { error } => { fail move error } } }
   let added = run Effect.result(unsafe add(state, 4, id, backup, dest))

@@ -2423,23 +2423,27 @@ globalThis.__silkRuntime = {
   seal() {
     // Built-ins most programs load run here, so that a start from the image finds
     // them loaded. None of them keeps anything of the process when it loads.
-    for (const name of imageModules) internalRequire(name);
-    // And they find the way to a main script warm (loader.warmMain).
-    const fs = internalRequire('fs'), directory = fs.mkdtempSync('/tmp/silkjs-image-');
-    try {
-      fs.writeFileSync(directory + '/main.js', "require('./dependency.js');\n");
-      fs.writeFileSync(directory + '/dependency.js', 'module.exports = 1;\n');
-      loader.warmMain(directory + '/main.js');
-    } finally { fs.rmSync(directory, { recursive: true, force: true }); }
-    // And a first console.log of text, here written to /dev/null.
-    const saved = rawOS.dup(1), sink = rawOS.open('/dev/null', rawOS.O_WRONLY);
-    try {
-      if (saved < 0 || sink < 0) throw new Error('No /dev/null to warm console.log against');
-      rawOS.dup2(sink, 1);
-      globalThis.console.log('silkjs heap image');
-    } finally {
-      if (saved >= 0) { rawOS.dup2(saved, 1); rawOS.close(saved); }
-      if (sink >= 0) rawOS.close(sink);
+    // Only those of the program's capabilities are there (an embedder's image).
+    for (const name of imageModules) if (factoryGet(name) !== undefined) internalRequire(name);
+    // On the host's files (the executable, an embedder with OsFiles), they find the way to a
+    // main script warm (loader.warmMain), and console.log has written once, to /dev/null. A
+    // program whose files are its own has neither /tmp nor /dev/null there.
+    if (native.filesDirect) {
+      const fs = internalRequire('fs'), directory = fs.mkdtempSync('/tmp/silkjs-image-');
+      try {
+        fs.writeFileSync(directory + '/main.js', "require('./dependency.js');\n");
+        fs.writeFileSync(directory + '/dependency.js', 'module.exports = 1;\n');
+        loader.warmMain(directory + '/main.js');
+      } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+      const saved = rawOS.dup(1), sink = rawOS.open('/dev/null', rawOS.O_WRONLY);
+      try {
+        if (saved < 0 || sink < 0) throw new Error('No /dev/null to warm console.log against');
+        rawOS.dup2(sink, 1);
+        globalThis.console.log('silkjs heap image');
+      } finally {
+        if (saved >= 0) { rawOS.dup2(saved, 1); rawOS.close(saved); }
+        if (sink >= 0) rawOS.close(sink);
+      }
     }
     // Read again by hydrate, or (NODE_V8_COVERAGE) read again on every use.
     const hydrated = new Set(['HOME', 'NODE_PATH', 'NODE_CHANNEL_FD', 'NODE_UNIQUE_ID', 'WATCH_REPORT_DEPENDENCIES', 'NODE_V8_COVERAGE']);

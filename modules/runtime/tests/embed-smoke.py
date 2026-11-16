@@ -43,9 +43,9 @@ def expected(wasm, files):
         'lib 42',
         'libraries ' + ('object object function object object object object object function object strip true' if files else 'undefined undefined undefined undefined undefined undefined undefined undefined undefined undefined false false'),
         'dlopen ' + ('ERR_DLOPEN_FAILED' if files else 'ERR_DLOPEN_DISABLED'),
-        'env EMBED_SMOKE fixed /embed-smoke',
+        'env EMBED_SMOKE,OPENSSL_CONF fixed /embed-smoke',
         'setenv EPERM',
-        *(['fs function', 'read hello from memory', 'dir greeting.txt,out.txt 6 false'] if files else
+        *(['fs function', 'read hello from memory', 'dir greeting.txt,out.txt 6 false', 'sqlite 5 true true', 'wasi UVWASI_ENOTCAPABLE'] if files else
           ['fs ERR_UNKNOWN_BUILTIN_MODULE undefined false']),
         'crypto ' + ('there' if files else 'ERR_NO_CRYPTO'),
         'worker ' + ('started' if files else 'ERR_WORKER_INIT_FAILED'),
@@ -93,6 +93,22 @@ def main():
             failed = True
         else:
             print(f'{name} passed')
+            if files and not failed:
+                # The host owns its process (Options.ownsProcess): it starts as well from the heap
+                # image that silk task image appends to it.
+                subprocess.run(['silk', 'task', 'image', '--program', str(executable)], cwd=ROOT / 'tools/capabilities', check=True)
+                # A start from the image lists the image pages it wrote there: none is written otherwise.
+                pages = ROOT / 'build' / name / 'image-pages'
+                pages.unlink(missing_ok=True)
+                imaged = subprocess.run([str(executable)], capture_output=True, text=True, timeout=60, stdin=subprocess.DEVNULL,
+                                        env={**os.environ, 'SILKJS_HEAP_IMAGE_PAGES': str(pages)})
+                if not pages.exists() or imaged.returncode != 3 or imaged.stdout.splitlines() != expected(wasm, files):
+                    print(f'{name} from its heap image failed: status {imaged.returncode}, restored {pages.exists()}')
+                    print('stdout:\n' + imaged.stdout)
+                    print('stderr:\n' + imaged.stderr)
+                    failed = True
+                else:
+                    print(f'{name} passed from its heap image')
     if failed:
         sys.exit(1)
 

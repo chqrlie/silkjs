@@ -603,8 +603,14 @@ it as to the system (`Files.direct` is false), so the bootstrap sends the engine
 through the capability, as for `MemoryFiles`. `src/files_tests.silk`
 (`silk test --root src/files_tests.silk`) tests both.
 
-Still to come in step 4: the readers that do not go through `fs` and open files in C: WASI's
-preopens (WAMR's own file layer), SQLite's VFS, and OpenSSL's root certificates. A
+The readers that do not go through `fs` and open files in C follow the program's files too.
+OpenSSL's root certificates were already read by `fs`. SQLite opens a database through a VFS over
+`Files` (`sqlite/src/ext/sqlite_files.silk`) whenever the program's file system is not the host's
+(`Files.direct` false), so a database in `MemoryFiles` or under a `RootedFiles` root stays there;
+with `OsFiles` SQLite keeps its own unix VFS. OpenSSL's configuration file (`OPENSSL_CONF`,
+`--openssl-config`) is then read by `fs` and parsed from memory. WASI's preopens are uvwasi's,
+which opens host directories through libuv: a program whose files are its own gives a guest no
+preopen (`ENOTCAPABLE`, uvwasi's own refusal). The embedding smoke test checks all three. A
 `ModuleResolver` over a `Files` (so a rooted or in-memory file system also serves modules) is a
 small addition when an embedder needs it.
 
@@ -736,9 +742,18 @@ expected output and its symbol checks (`silk task symbols`). The executable is t
 - libuv stays in the core until the loop plan replaces it; `OsFiles`, `OsNetwork`,
   `OsProcesses`, `OsSystemInfo` and `ThreadWorkers` stay with it for now (a `silkjsruntime-os`
   package once libuv is gone, so that the core touches no libc).
-- The heap image and the built-ins' bytecode are still written by `tools/build.py` for the
-  executable only. Moving that into a build step any embedding program can run, with the
-  implementation types in the image identity, is the remaining half of the step.
+- The heap image is now an embedder's too. An embedder whose process ends with the runtime says
+  so (`Options.ownsProcess`), and gets the executable's image modes: it starts from an image
+  appended to its program, and `--silk-write-heap-image PATH` as its second argument writes one.
+  `silk task image --program PROGRAM` (tools/capabilities) has the program write its image and
+  appends it with the loader's trailer; the image holds the code addresses of that binary, so it
+  is tied to its implementation types without more identity. The image build loads only the
+  built-ins of the program's capabilities, and warms the main-script path and console only on the
+  host's files. The embedding smoke test runs its full program a second time from the image and
+  checks that the start was one (it lists the image pages it wrote): about 195 ms against 307 ms
+  cold, in debug builds. What stays with `tools/build.py` is the executable's
+  profile-guided extras: the page layout from its startup profiles and the built-ins' bytecode
+  cache, which needs a second link.
 
 **Step 8, first swap: compression.** `SilkCompression` (./silkcompress) is `Compression` over
 `silk.compress`, with no C library: the same handle and job protocol as `NativeCompression`, and

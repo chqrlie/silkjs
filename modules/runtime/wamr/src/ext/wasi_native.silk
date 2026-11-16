@@ -275,6 +275,12 @@ unsafe effect fn initError<'m, C: Composition>(engine: &mut Engine<'m, host.Serv
   return run unsafe exceptions.throwValue<ValueBits, Engine<'m, host.Services<C>>>(&mut engine, unsafe runtime.contextRuntime(context), scope.take(10))
 }
 unsafe effect fn create<'m, C: Composition>(engine: &mut Engine<'m, host.Services<C>>, context: *mut HeapHeader, state: *mut State, arena: &mut Arena, scope: &mut Scope) -> ValueBits ! OutOfMemoryError | JsException ? &mut Allocator {
+  // uvwasi opens preopened directories on the host's file system, through libuv. A program whose
+  // files are its own (Files.direct is false: MemoryFiles, RootedFiles) has no host directory to
+  // give a guest, so a preopen fails as uvwasi's own capability check does (UVWASI_ENOTCAPABLE).
+  static if !Composition.filesDirect() {
+    if number(scope.values[4]) > 0 { return run unsafe initError(&mut engine, context, 76, &mut scope) }
+  }
   let argv = run unsafe strings(&mut engine, context, &mut arena, scope.values[1], number(scope.values[0]))
   let envp = run unsafe strings(&mut engine, context, &mut arena, scope.values[3], number(scope.values[2]))
   let preopens = run unsafe strings(&mut engine, context, &mut arena, scope.values[5], number(scope.values[4]) * 2)

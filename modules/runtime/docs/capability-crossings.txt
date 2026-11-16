@@ -145,6 +145,7 @@ internal/streams/fast-utf8-stream	Core	fs	Files	lazy
 internal/streams/fast-utf8-stream	Core	internal/fs/utils	Files	lazy
 internal/streams/iter/compression	Core	internal/compression/binding	Compression	lazy
 internal/tls/context	Tls	fs	Files	lazy
+internal/tls/options	Tls	fs	Files	lazy
 internal/trace_events	Core	worker_threads	Workers	lazy
 internal/tty/colors	Core	os	SystemInfo	lazy
 internal/tty/write	Core	internal/fs/utils	Files	load

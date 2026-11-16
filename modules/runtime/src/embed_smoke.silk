@@ -16,7 +16,9 @@ import silk.mem.pointer { Pointer }
 import silk.core.effect { Effect }
 import silk.core.ownership { Copy }
 import silk.core.result { Result }
-import silk.system.host_input { HostInput }
+import silk.system.host_input { HostInput, HostInputError }
+import silk.collections.bytes { Bytes }
+import silk.core.option { Option }
 import silkjs.js_atomics_native { SynchronizationError }
 import silkjs.js_exceptions { JsException }
 import silkjs.js_engine { Engine }
@@ -43,10 +45,11 @@ import libs.core.module_sources { MemoryModule, MemoryModules }
 import libs.core.platforms { FixedPlatform, Variable }
 import libs.core.files { EmptyFiles, MemoryFiles }
 
-const SOURCE: &[u8] = b"import { twice } from './lib.mjs';\nconsole.log('add', hostAdd(2, 3));\nconsole.log('wasm', typeof WebAssembly);\nconsole.log('lib', twice(21));\nconsole.log('libraries', typeof process.getBuiltinModule('zlib'), typeof process.getBuiltinModule('http2'), typeof CompressionStream, typeof process.getBuiltinModule('tls'), typeof globalThis.crypto, typeof process.getBuiltinModule('node:sqlite'), typeof process.getBuiltinModule('child_process'), typeof process.getBuiltinModule('net'), typeof fetch, typeof process.getBuiltinModule('os'), process.features.typescript, process.features.inspector);\ntry { process.dlopen({ exports: {} }, '/none.node'); } catch (error) { console.log('dlopen', error.code); }\nconsole.log('env', Object.keys(process.env).join(), process.env.EMBED_SMOKE, process.cwd());\ntry { process.env.EMBED_SMOKE = 'changed'; } catch (error) { console.log('setenv', error.code); }\nglobalThis.onHost = x => { queueMicrotask(() => hostAdd(x, 100)); return x * 2; };\nlet ticks = 0;\nlet fs;\nconst timer = setInterval(() => {\n  ticks++;\n  console.log('tick', ticks);\n  if (ticks === 3) {\n    clearInterval(timer);\n    // Nothing referenced is left: a kept-alive runtime keeps turning until the host or\n    // process.exit ends it.\n    // The file system is MemoryFiles on the blocking threads too.\n    (fs.promises ? fs.promises.readFile('/data/out.txt', 'utf8') : Promise.resolve('none')).then(text => {\n      console.log('async', text);\n      setTimeout(() => { process.exitCode = 3; process.exit(); }, 5).unref();\n    });\n  }\n}, 5);\nprocess.on('exit', code => console.log('exit', code));\nfs = await import('node:fs').catch(error => error);\nif (typeof fs.readFileSync === 'function') {\n  console.log('fs', typeof fs.readFileSync);\n  console.log('read', fs.readFileSync('/data/greeting.txt', 'utf8'));\n  fs.writeFileSync('/data/out.txt', 'abc');\n  fs.appendFileSync('/data/out.txt', 'def');\n  console.log('dir', fs.readdirSync('/data').join(), fs.statSync('/data/out.txt').size, fs.existsSync('/etc/passwd'));\n} else {\n  console.log('fs', fs.code, process.getBuiltinModule('fs'), (await import('node:module')).builtinModules.includes('fs'));\n}\n// Every await comes after onHost is defined: the host calls it once evaluation reaches the first.\ntry { await import('node:crypto'); console.log('crypto', 'there'); } catch (error) { console.log('crypto', error.code); }\ntry { new (await import('node:worker_threads')).Worker('0', { eval: true }).terminate(); console.log('worker', 'started'); } catch (error) { console.log('worker', error.code); }\nconst { createRequire } = await import('node:module');\nconsole.log('cjs', createRequire(import.meta.url)('./helpers').name);\nconsole.log('missing', await import('./missing.mjs').then(() => 'found', error => error.code));\n"
+const SOURCE: &[u8] = b"import { twice } from './lib.mjs';\nconsole.log('add', hostAdd(2, 3));\nconsole.log('wasm', typeof WebAssembly);\nconsole.log('lib', twice(21));\nconsole.log('libraries', typeof process.getBuiltinModule('zlib'), typeof process.getBuiltinModule('http2'), typeof CompressionStream, typeof process.getBuiltinModule('tls'), typeof globalThis.crypto, typeof process.getBuiltinModule('node:sqlite'), typeof process.getBuiltinModule('child_process'), typeof process.getBuiltinModule('net'), typeof fetch, typeof process.getBuiltinModule('os'), process.features.typescript, process.features.inspector);\ntry { process.dlopen({ exports: {} }, '/none.node'); } catch (error) { console.log('dlopen', error.code); }\nconsole.log('env', Object.keys(process.env).join(), process.env.EMBED_SMOKE, process.cwd());\ntry { process.env.EMBED_SMOKE = 'changed'; } catch (error) { console.log('setenv', error.code); }\nglobalThis.onHost = x => { queueMicrotask(() => hostAdd(x, 100)); return x * 2; };\nlet ticks = 0;\nlet fs;\nconst timer = setInterval(() => {\n  ticks++;\n  console.log('tick', ticks);\n  if (ticks === 3) {\n    clearInterval(timer);\n    // Nothing referenced is left: a kept-alive runtime keeps turning until the host or\n    // process.exit ends it.\n    // The file system is MemoryFiles on the blocking threads too.\n    (fs.promises ? fs.promises.readFile('/data/out.txt', 'utf8') : Promise.resolve('none')).then(text => {\n      console.log('async', text);\n      setTimeout(() => { process.exitCode = 3; process.exit(); }, 5).unref();\n    });\n  }\n}, 5);\nprocess.on('exit', code => console.log('exit', code));\nfs = await import('node:fs').catch(error => error);\nif (typeof fs.readFileSync === 'function') {\n  console.log('fs', typeof fs.readFileSync);\n  console.log('read', fs.readFileSync('/data/greeting.txt', 'utf8'));\n  fs.writeFileSync('/data/out.txt', 'abc');\n  fs.appendFileSync('/data/out.txt', 'def');\n  console.log('dir', fs.readdirSync('/data').join(), fs.statSync('/data/out.txt').size, fs.existsSync('/etc/passwd'));\n  // SQLite keeps its files in the program's file system too (sqlite/src/ext/sqlite_files.silk).\n  const { DatabaseSync } = await import('node:sqlite');\n  const db = new DatabaseSync('/data/test.db');\n  db.exec('create table t(x)');\n  db.prepare('insert into t values (?)').run(5);\n  console.log('sqlite', db.prepare('select x from t').get().x, fs.existsSync('/data/test.db'), fs.statSync('/data/test.db').size > 0);\n  db.close();\n  // A guest gets no host directory from a program whose files are its own.\n  try { new (await import('node:wasi')).WASI({ version: 'preview1', preopens: { '/sandbox': '/' } }); console.log('wasi', 'preopened'); } catch (error) { console.log('wasi', error.code); }\n} else {\n  console.log('fs', fs.code, process.getBuiltinModule('fs'), (await import('node:module')).builtinModules.includes('fs'));\n}\n// Every await comes after onHost is defined: the host calls it once evaluation reaches the first.\ntry { await import('node:crypto'); console.log('crypto', 'there'); } catch (error) { console.log('crypto', error.code); }\ntry { new (await import('node:worker_threads')).Worker('0', { eval: true }).terminate(); console.log('worker', 'started'); } catch (error) { console.log('worker', error.code); }\nconst { createRequire } = await import('node:module');\nconsole.log('cjs', createRequire(import.meta.url)('./helpers').name);\nconsole.log('missing', await import('./missing.mjs').then(() => 'found', error => error.code));\n"
 
 /// The runtime's whole environment (`FixedPlatform`): it does not see the process's.
-const ENVIRONMENT: [Variable; 1] = [Variable { name: b"EMBED_SMOKE", value: b"fixed" }]
+// OPENSSL_CONF names a file of the program's own file system: OpenSSL reads it through fs.
+const ENVIRONMENT: [Variable; 2] = [Variable { name: b"EMBED_SMOKE", value: b"fixed" }, Variable { name: b"OPENSSL_CONF", value: b"/etc/openssl.cnf" }]
 
 /// The rest of the module graph, bundled into the program.
 const MODULES: [MemoryModule; 4] = [
@@ -130,12 +133,20 @@ impl Smoke {
 effect fn seededFiles() -> MemoryFiles ! OutOfMemoryError ? &mut Allocator {
   let files = run MemoryFiles.make()
   run files.addFile(b"/data/greeting.txt", b"hello from memory")
+  run files.addFile(b"/etc/openssl.cnf", b"nodejs_conf = nodejs_init\n[nodejs_init]\nproviders = provider_sect\n[provider_sect]\ndefault = default_sect\n[default_sect]\nactivate = 1\n")
   return files
 }
 
 /// The smoke test with the given WebAssembly capability, file system and libraries.
-effect fn smoke<W: Wasm + Copy, F: Files + Copy, Z: Compression + Copy, H: Http2 + Copy, K: Crypto + Copy, T: Tls + Copy, D: Database + Copy, N: NativeAddons + Copy, R: Processes + Copy, E: Network + Copy, L: Http + Copy, S: SystemInfo + Copy, Y: TypeStripping + Copy, X: Workers + Copy, I: Inspector + Copy>(wasm: W, files: F, compression: Z, http2: H, crypto: K, tls: T, database: D, addons: N, processes: R, network: E, http: L, systemInfo: S, typeStripping: Y, workers: X, inspector: I) -> i32 ! OutOfMemoryError | SynchronizationError ? &mut Allocator {
-  let options = run Options.make(b"embed-smoke")
+effect fn smoke<W: Wasm + Copy, F: Files + Copy, Z: Compression + Copy, H: Http2 + Copy, K: Crypto + Copy, T: Tls + Copy, D: Database + Copy, N: NativeAddons + Copy, R: Processes + Copy, E: Network + Copy, L: Http + Copy, S: SystemInfo + Copy, Y: TypeStripping + Copy, X: Workers + Copy, I: Inspector + Copy>(image: &[u8], wasm: W, files: F, compression: Z, http2: H, crypto: K, tls: T, database: D, addons: N, processes: R, network: E, http: L, systemInfo: S, typeStripping: Y, workers: X, inspector: I) -> i32 ! OutOfMemoryError | SynchronizationError ? &mut Allocator {
+  // The host's process ends with the runtime: it starts from the heap image appended to it, or
+  // writes one when its own arguments ask (`silk task image`).
+  let mut options = run Options.make(b"embed-smoke")
+  options.ownsProcess = true
+  if image.length != 0 {
+    run options.arguments.append(run Bytes.copy(b"--silk-write-heap-image"))
+    run options.arguments.append(run Bytes.copy(image))
+  }
   let mut added = Added { last: 0 }
   let addedAt = Pointer.fromMutRef<Added>(&mut added)
   let mut host = Smoke { turns: 0, added: addedAt, doubled: 0, afterMicrotask: 0 }
@@ -145,15 +156,15 @@ effect fn smoke<W: Wasm + Copy, F: Files + Copy, Z: Compression + Copy, H: Http2
 
 /// The smoke test on a file system in memory (`MemoryFiles`), with every library: the caller
 /// gives those of packages of their own (WebAssembly, compression, HTTP/2, HTTP/1, SQLite, OpenSSL, the inspector, amaro).
-pub effect fn program<W: Wasm + Copy, Z: Compression + Copy, H: Http2 + Copy, L: Http + Copy, D: Database + Copy, K: Crypto + Copy, T: Tls + Copy, I: Inspector + Copy, Y: TypeStripping + Copy>(wasm: W, compression: Z, http2: H, http: L, database: D, crypto: K, tls: T, inspector: I, typeStripping: Y) -> i32 ! OutOfMemoryError | SynchronizationError ? &mut Allocator {
+pub effect fn program<W: Wasm + Copy, Z: Compression + Copy, H: Http2 + Copy, L: Http + Copy, D: Database + Copy, K: Crypto + Copy, T: Tls + Copy, I: Inspector + Copy, Y: TypeStripping + Copy>(image: &[u8], wasm: W, compression: Z, http2: H, http: L, database: D, crypto: K, tls: T, inspector: I, typeStripping: Y) -> i32 ! OutOfMemoryError | SynchronizationError ? &mut Allocator {
   let files = run seededFiles()
-  return run smoke(wasm, files, compression, http2, crypto, tls, database, DlopenAddons {}, OsProcesses {}, OsNetwork {}, http, OsSystemInfo {}, typeStripping, ThreadWorkers {}, inspector)
+  return run smoke(image, wasm, files, compression, http2, crypto, tls, database, DlopenAddons {}, OsProcesses {}, OsNetwork {}, http, OsSystemInfo {}, typeStripping, ThreadWorkers {}, inspector)
 }
 
 /// The smoke test with no file system, compression, HTTP/2, crypto or TLS: `node:fs`, `node:zlib`,
 /// `node:http2`, `node:crypto` and `node:tls` are not there.
-pub effect fn programWithoutFiles<W: Wasm + Copy>(wasm: W) -> i32 ! OutOfMemoryError | SynchronizationError ? &mut Allocator {
-  return run smoke(wasm, EmptyFiles {}, EmptyCompression {}, EmptyHttp2 {}, EmptyCrypto {}, EmptyTls {}, EmptyDatabase {}, EmptyAddons {}, EmptyProcesses {}, EmptyNetwork {}, EmptyHttp {}, EmptySystemInfo {}, EmptyTypeStripping {}, EmptyWorkers {}, EmptyInspector {})
+pub effect fn programWithoutFiles<W: Wasm + Copy>(image: &[u8], wasm: W) -> i32 ! OutOfMemoryError | SynchronizationError ? &mut Allocator {
+  return run smoke(image, wasm, EmptyFiles {}, EmptyCompression {}, EmptyHttp2 {}, EmptyCrypto {}, EmptyTls {}, EmptyDatabase {}, EmptyAddons {}, EmptyProcesses {}, EmptyNetwork {}, EmptyHttp {}, EmptySystemInfo {}, EmptyTypeStripping {}, EmptyWorkers {}, EmptyInspector {})
 }
 
 fn status(result: Result<i32, OutOfMemoryError | SynchronizationError>) -> i32 {
@@ -163,14 +174,36 @@ fn status(result: Result<i32, OutOfMemoryError | SynchronizationError>) -> i32 {
   }
 }
 
+/// The path after `--silk-write-heap-image`, when that is the host's first argument; empty else.
+effect fn imageArgument() -> Bytes ! HostInputError | OutOfMemoryError ? &mut HostInput | &mut Allocator {
+  match move run HostInput.argument(1) {
+    Option.Some { value: flag } => {
+      if !same(Bytes.asSlice(&flag), b"--silk-write-heap-image") { return Bytes.make() }
+    }
+    Option.None => { return Bytes.make() }
+  }
+  return match move run HostInput.argument(2) { Option.Some { value: path } => move path Option.None => Bytes.make() }
+}
+fn imageRequest(result: Result<Bytes, HostInputError | OutOfMemoryError>) -> Bytes {
+  return match move result { Result<Bytes, HostInputError | OutOfMemoryError>.Success { value } => move value Result<Bytes, HostInputError | OutOfMemoryError>.Failure { .. } => Bytes.make() }
+}
+fn same(a: &[u8], b: &[u8]) -> bool {
+  if a.length != b.length { return false }
+  let mut at: usize = 0
+  while at < a.length { if a[at] != b[at] { return false } at = at + 1 }
+  return true
+}
+
 /// Runs `program` and turns its failure into status 1.
 pub effect fn report<W: Wasm + Copy, Z: Compression + Copy, H: Http2 + Copy, L: Http + Copy, D: Database + Copy, K: Crypto + Copy, T: Tls + Copy, I: Inspector + Copy, Y: TypeStripping + Copy>(wasm: W, compression: Z, http2: H, http: L, database: D, crypto: K, tls: T, inspector: I, typeStripping: Y) -> i32 ? &mut HostInput {
   let mut allocator = Allocator.systemAllocatorProvider()
-  return status(run Effect.result(program(wasm, compression, http2, http, database, crypto, tls, inspector, typeStripping)) |> Effect.provideMut<Allocator>(&mut allocator))
+  let image = imageRequest(run Effect.result(imageArgument()) |> Effect.provideMut<Allocator>(&mut allocator))
+  return status(run Effect.result(program(image.asSlice(), wasm, compression, http2, http, database, crypto, tls, inspector, typeStripping)) |> Effect.provideMut<Allocator>(&mut allocator))
 }
 
 /// Runs `programWithoutFiles` and turns its failure into status 1.
 pub effect fn reportWithoutFiles<W: Wasm + Copy>(wasm: W) -> i32 ? &mut HostInput {
   let mut allocator = Allocator.systemAllocatorProvider()
-  return status(run Effect.result(programWithoutFiles(wasm)) |> Effect.provideMut<Allocator>(&mut allocator))
+  let image = imageRequest(run Effect.result(imageArgument()) |> Effect.provideMut<Allocator>(&mut allocator))
+  return status(run Effect.result(programWithoutFiles(image.asSlice(), wasm)) |> Effect.provideMut<Allocator>(&mut allocator))
 }

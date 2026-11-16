@@ -58,7 +58,16 @@ function processOpenSSLOptions() {
   const host = require('internal/host');
   const file = state.get('--openssl-config') || process.env.OPENSSL_CONF || '';
   const section = state.get('--openssl-shared-config') ? 'openssl_conf' : 'nodejs_conf';
-  try { host.crypto('opensslInit', [file, section]); } catch (error) { return 'OpenSSL configuration error:\n' + error.message.replace(/^ERR_[A-Z0-9_]+: /, ''); }
+  try {
+    if (host.filesDirect) host.crypto('opensslInit', [file, section]);
+    else {
+      // The program's files are not the host's: the configuration is read through fs, and a
+      // missing file is ignored, as OpenSSL ignores one.
+      let text = '';
+      if (file) { try { text = require('fs').readFileSync(file, 'latin1'); } catch {} }
+      host.crypto('opensslInitText', [text, section]);
+    }
+  } catch (error) { return 'OpenSSL configuration error:\n' + error.message.replace(/^ERR_[A-Z0-9_]+: /, ''); }
   const fipsError = processFipsOptions(host);
   if (fipsError !== undefined) return fipsError;
   if (host.crypto('csprngCheck', []) !== 1) process.abort();
