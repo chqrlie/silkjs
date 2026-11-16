@@ -5,7 +5,7 @@ version = "0.1.0"
 # native functions (src/libs/core/embedder.silk). src/main.silk is the
 # executable, the first embedder; src/embed_smoke.silk is the embedding API's smoke test.
 exports = ["runtime.embed", "runtime.session", "libs.core.embedder", "libs.core.host", "embed_smoke"]
-silk-version = "0.1.0-dev.74+205aea3f5b2e"
+silk-version = "0.1.0-pipeline.1"
 
 [dependencies]
 benchkit = { path = "../benchkit" }
@@ -14,7 +14,7 @@ silkjs = { path = "../engine", package = "silkjs-engine" }
 # The package manager, from this repository's modules/pm: `silkjs install` and the other commands.
 pm = { path = "../pm" }
 # SQLite 3 compiled from the amalgamation that silk-lang/lib-sqlite pins, with the features Node builds.
-sqlite = { git = "https://github.com/silk-lang/lib-sqlite", rev = "e62014436959aed16849ee204544f4f9ef5c9a85", package = "db-sqlite" }
+sqlite = { git = "https://github.com/silk-lang/lib-sqlite", rev = "8f6b73488be824d97ce1a1c02a9484a2209521e3", package = "db-sqlite" }
 # The C libraries Node builds with, each compiled by Silk from its pinned release (../native).
 # uvwasi only: it is compiled against a uv.h whose functions src/ext/uvwasi_host.silk defines. No libuv.
 libuv = { path = "../native/libuv", package = "silkjs-libuv" }
