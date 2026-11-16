@@ -1,7 +1,7 @@
 //! `silk task tls-stdlib`: writes build/stdlib-tls, the pinned toolchain's standard library with
 //! silktls/silk-tls-deferred.patch applied: silk.tls's deferred client verification
 //! (`Client.deferVerification`, `Client.verificationFailure`, `Client.peerCertificateDer`), which
-//! SilkTls needs and the pinned toolchain does not have yet. cli/src/main_silk_tls.silk builds with
+//! SilkTls needs and the pinned toolchain does not have yet. cli/src/main_silk.silk builds with
 //! it (`--stdlib ../build/stdlib-tls`). Once a toolchain release has the change, the patch, this
 //! task and the `--stdlib` go.
 import silk.cli.task { Task, TaskError }

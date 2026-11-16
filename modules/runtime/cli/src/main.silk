@@ -46,7 +46,7 @@ fn calledNode(path: &[u8]) -> bool {
 
 /// The executable with `compression`, `sessions`, `crypto`, `http` and `tls` as its Compression,
 /// Http2, Crypto, Http and Tls capabilities (the executable has NativeCompression, Nghttp2,
-/// OpenSslCrypto, Llhttp and OpenSslTls; src/main_silk.silk and src/main_silk_tls.silk the Silk ones).
+/// OpenSslCrypto, Llhttp and OpenSslTls; src/main_silk.silk the Silk ones).
 effect fn program<Z: Compression + Copy, H: Http2 + Copy, Y: Crypto + Copy, L: Http + Copy, T: Tls + Copy>(compression: Z, sessions: H, crypto: Y, http: L, tls: T) -> i32 ! HostInputError | OutOfMemoryError | SynchronizationError ? &mut HostInput | &mut Allocator {
   // As Node does: a write to a closed pipe fails with EPIPE, which the stream reports, and a
   // write past RLIMIT_FSIZE fails with EFBIG (SIGXFSZ is 25 on Linux and macOS), instead of

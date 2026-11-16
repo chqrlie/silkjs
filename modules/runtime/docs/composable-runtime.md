@@ -878,15 +878,14 @@ answers each handshake step as `SSL_do_handshake` does:
 `silk.tls`'s deferred verification is not in the pinned toolchain yet:
 `silktls/silk-tls-deferred.patch` adds it to `silk/tls/client.silk`, and `silk task tls-stdlib`
 (tools/capabilities) writes `build/stdlib-tls`, the toolchain's standard library with the patch.
-`cli/src/main_silk_tls.silk` is the executable with all five Silk libraries, built with
-`--stdlib ../build/stdlib-tls`; `cli/src/main_silk.silk` keeps `OpenSslTls` so that CI builds with
-the released toolchain. Once a toolchain release has the change, the patch, the task and the flag
-go, and `main_silk.silk` takes `SilkTls`.
+`cli/src/main_silk.silk` is the executable with all five Silk libraries, `SilkTls` among them,
+built with `--stdlib ../build/stdlib-tls`. Once a toolchain release has the change (it waits on
+silk-lang/silk), the patch, the task and the flag go.
 
 Of Node's TLS and HTTPS tests (`test-tls-*`, `test-https-*`, through `tests/node-suite`), 231 of the
 283 that pass under Node pass with it, against 279 with OpenSSL, and the compatibility suite
-and the crypto differential pass with it. The CI job `silk-tls` builds it and runs the
-compatibility suite and those tests (no fewer than 225 must pass). What `silk.tls` does not have
+and the crypto differential pass with it. The CI job `silk-libraries` runs those tests too (no
+fewer than 225 must pass). What `silk.tls` does not have
 fails, with OpenSSL's errors where Node checks them: TLS 1.0 and 1.1, CBC and static-RSA suites
 and finite-field DHE (`test-tls-min-max-version` and the `test-tls-cli-*-version` tests that run
 it, `getprotocol`, `honorcipherorder`); choosing the suites (`ciphers` and suite lists are checked
@@ -896,13 +895,13 @@ client picks AES-256-GCM); the hybrid ML-KEM group; PSK, keylog, `getFinished`,
 (`newSession`, `resumeSession`) or resuming a session with a client certificate; SNI names
 outside the HTTPS profile, such as `sni.0`; PKCS #12 (`pfx`, as in `SilkCrypto`) and CRLs.
 
-`cli/src/main_silk.silk` is the executable with the four Silk libraries the released toolchain
-builds. The CI job `silk-libraries` (`.github/workflows/embedding.yml`) builds it and the
-executable with the C libraries, runs the compression and crypto differentials against Node, the
-parser differential against llhttp, Node's HTTP/2 tests and the compatibility suite.
+The CI job `silk-libraries` (`.github/workflows/embedding.yml`) builds `cli/src/main_silk.silk`
+and the executable with the C libraries, runs the compression and crypto differentials against
+Node, the parser differential against llhttp, Node's HTTP/2, TLS and HTTPS tests and the
+compatibility suite.
 
-What is left of step 8 is moving `SilkTls` into `main_silk.silk` when the toolchain has
-`silk.tls`'s deferred verification, and the gaps of `SilkCrypto` and `SilkTls` listed with them.
+What is left of step 8 is the gaps of `SilkCrypto` and `SilkTls` listed with them, and dropping the
+patched standard library once a toolchain release has `silk.tls`'s deferred verification.
 libuv left the core with the loop plan, below.
 
 ### The loop plan: libuv out of the runtime
