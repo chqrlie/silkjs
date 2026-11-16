@@ -183,6 +183,10 @@ first, and prints per metric the median change, the rounds in which the branch d
   setImmediate and cat -15.8 and -14.6% (0 of 24). spawnSync read +9.8% (14 of 24) after -0.9%
   (12 of 24) without it: 26 of 48 paired rounds worse over the two runs, with the same range
   (1.3 to 3.2 ms per call) on both builds.
+  The path spawnSync runs is the same code on both: `src/ext/spawn_sync.silk` is unchanged from
+  df9c30b, it starts the child through the standard library's `Subprocess`, and of the
+  `ext.process_abi` functions it calls only `uv_hrtime` changed (C libuv's on df9c30b, Silk's
+  here, two calls per spawnSync, the timebase cached as libuv does).
 - Linux x64, sqlite, 16 alternating rounds of the build merged with main's zlib work: `db.exec`
   -1.6, -0.9, +1.1 and -0.2% against f3d5ea8 and -1.5 to -7.0% against current main; the earlier
   +6.8 and +10.1% readings of single builds were code placement, which moves between builds.
