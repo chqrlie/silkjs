@@ -4,10 +4,7 @@
 //! (./silktls, over silk.tls) for OpenSSL, and SilkHttp (./silkhttp) for llhttp. Step 8 of
 //! docs/composable-runtime.md; the differentials (tests/compression-differential.mjs,
 //! tests/crypto-differential.mjs, tests/http-parser-differential.mjs) and Node's HTTP/2, TLS and
-//! HTTPS tests measure it. SilkTls needs silk.tls's deferred client verification
-//! (`Client.deferVerification`), which the pinned toolchain does not have yet, so this executable
-//! builds with a standard library that has it: `silk task tls-stdlib` in tools/capabilities writes
-//! it, then silk build src/main_silk.silk --stdlib ../build/stdlib-tls.
+//! HTTPS tests measure it. Build: silk build src/main_silk.silk.
 import silk.system.host_input { HostInput }
 import silkcompress.silk_compression { SilkCompression }
 import silkhttp.silk_http { SilkHttp }

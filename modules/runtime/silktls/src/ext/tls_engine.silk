@@ -42,7 +42,8 @@ import silk.tls.https_identity { HttpsIdentity, ReferenceIdentity }
 import silk.tls.record { CipherSuite, TlsVersion, VersionPolicy }
 import silk.crypto.sha2 { Sha256 }
 import silk.tls.signature { SigningKey, HandshakeSignature, SignatureFailure }
-import silk.tls.client { NamedGroup, Session, SessionError, AlpnConfig, AlpnProtocol, CipherOrder, Client, ClientConfig, ClientCredential, ClientLimits, Demand, Progress, Resumption, TlsError, Authentication }
+import silk.tls.client { AlpnConfig, AlpnProtocol }
+import ext.tls_client { NamedGroup, Session, SessionError, CipherOrder, Client, ClientConfig, ClientCredential, ClientLimits, Demand, Progress, Resumption, TlsError, Authentication }
 import silk.tls.server { TicketKey, ClientAuth, ClientCertificateStatus, GroupPolicy, Server, ServerConfig, ServerDemand, ServerError, ServerLimits, ServerProgress, TicketPolicy }
 
 unsafe extern "C" fn calloc(count: usize, size: usize) -> ?*mut u8

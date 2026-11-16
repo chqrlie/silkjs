@@ -52,10 +52,7 @@ jobs:
     # Step 8's swaps: the executable with SilkCompression (over silk.compress), SilkHttp,
     # SilkHttp2, SilkCrypto and SilkTls (HTTP/1, HTTP/2, crypto and TLS in Silk, no C library) in
     # place of NativeCompression, Llhttp, Nghttp2, OpenSslCrypto and OpenSslTls
-    # (cli/src/main_silk.silk) must behave as Node, llhttp and nghttp2 do. It builds with the
-    # pinned toolchain's standard library and silktls/silk-tls-deferred.patch, which
-    # `silk task tls-stdlib` writes to build/stdlib-tls, until a toolchain release has silk.tls's
-    # deferred client verification.
+    # (cli/src/main_silk.silk) must behave as Node, llhttp and nghttp2 do.
     runs-on: ubuntu-26.04
     timeout-minutes: 180
     steps:
@@ -75,14 +72,11 @@ jobs:
           curl --fail --location https://raw.githubusercontent.com/silk-lang/silk/8214c402307b/install.sh --output "$RUNNER_TEMP/install-silk.sh"
           sh "$RUNNER_TEMP/install-silk.sh"
           echo "$HOME/.silk/bin" >> "$GITHUB_PATH"
-      - name: Write the standard library with silk.tls's deferred verification
-        working-directory: modules/runtime/tools/capabilities
-        run: silk task tls-stdlib
       - name: Build the executable with the Silk libraries
         working-directory: modules/runtime/cli
         run: |
           mkdir -p ../build/silk
-          SILKJS_CLANG_BUILD=../build/silk silk build src/main_silk.silk -o ../build/silk/silkjsruntime --debug true --clang ../tools/clang.py --stdlib ../build/stdlib-tls
+          SILKJS_CLANG_BUILD=../build/silk silk build src/main_silk.silk -o ../build/silk/silkjsruntime --debug true --clang ../tools/clang.py
       - name: Build the executable with the C libraries (the parser differential's reference)
         working-directory: modules/runtime/cli
         run: |

@@ -875,12 +875,12 @@ answers each handshake step as `SSL_do_handshake` does:
 - Client certificates (requested, required), `setMaxSendFragment`, one record per read, the
   negotiated suite, version, group and ALPN, and cipher lists checked against OpenSSL's names.
 
-`silk.tls`'s deferred verification is not in the pinned toolchain yet:
-`silktls/silk-tls-deferred.patch` adds it to `silk/tls/client.silk`, and `silk task tls-stdlib`
-(tools/capabilities) writes `build/stdlib-tls`, the toolchain's standard library with the patch.
-`cli/src/main_silk.silk` is the executable with all five Silk libraries, `SilkTls` among them,
-built with `--stdlib ../build/stdlib-tls`. Once a toolchain release has the change (it waits on
-silk-lang/silk), the patch, the task and the flag go.
+`silk.tls`'s deferred verification is not in the pinned toolchain yet, so `SilkTls` carries
+`silk.tls.client` with it (`silktls/src/ext/tls_client.silk`: the pinned toolchain's module with the
+change on silk-lang/silk's `tls-client-deferred-verification` branch); everything else is the
+toolchain's `silk.tls`, and the executable builds with the released toolchain alone. Once a
+release has the change, `SilkTls` imports `silk.tls.client` again and the copy goes.
+`cli/src/main_silk.silk` is the executable with all five Silk libraries, `SilkTls` among them.
 
 Of Node's TLS and HTTPS tests (`test-tls-*`, `test-https-*`, through `tests/node-suite`), 231 of the
 283 that pass under Node pass with it, against 279 with OpenSSL, and the compatibility suite
@@ -900,8 +900,8 @@ and the executable with the C libraries, runs the compression and crypto differe
 Node, the parser differential against llhttp, Node's HTTP/2, TLS and HTTPS tests and the
 compatibility suite.
 
-What is left of step 8 is the gaps of `SilkCrypto` and `SilkTls` listed with them, and dropping the
-patched standard library once a toolchain release has `silk.tls`'s deferred verification.
+What is left of step 8 is the gaps of `SilkCrypto` and `SilkTls` listed with them, and dropping
+`SilkTls`'s copy of `silk.tls.client` once a toolchain release has its deferred verification.
 libuv left the core with the loop plan, below.
 
 ### The loop plan: libuv out of the runtime

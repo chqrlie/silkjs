@@ -12,7 +12,7 @@ declarations, the libc and library surface each service reaches today. Requires 
 
 | Service | Built-ins | JavaScript KiB | Load-time requires | Lazy requires | Silk files | Silk KiB | `extern "C"` |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Core | 336 | 3,560.8 | 954 | 377 | 99 | 1,603.9 | 149 |
+| Core | 336 | 3,560.8 | 954 | 377 | 99 | 1,603.6 | 149 |
 | Platform | 0 | 0.0 | 0 | 0 | 2 | 10.8 | 0 |
 | ModuleResolver | 15 | 181.7 | 22 | 20 | 2 | 6.9 | 0 |
 | Files | 18 | 238.9 | 76 | 40 | 5 | 75.0 | 1 |
@@ -21,7 +21,7 @@ declarations, the libc and library surface each service reaches today. Requires 
 | SystemInfo | 2 | 8.5 | 5 | 2 | 2 | 42.6 | 30 |
 | Workers | 6 | 47.8 | 15 | 21 | 4 | 118.1 | 26 |
 | Crypto | 28 | 454.0 | 159 | 55 | 3 | 164.5 | 285 |
-| Tls | 12 | 316.2 | 44 | 10 | 5 | 223.8 | 218 |
+| Tls | 12 | 316.2 | 44 | 10 | 6 | 485.5 | 218 |
 | Compression | 7 | 61.0 | 25 | 1 | 3 | 89.9 | 54 |
 | Http | 2 | 33.6 | 8 | 3 | 4 | 68.9 | 28 |
 | Http2 | 7 | 242.8 | 51 | 2 | 3 | 103.7 | 120 |
@@ -31,7 +31,7 @@ declarations, the libc and library surface each service reaches today. Requires 
 | Inspector | 15 | 83.7 | 30 | 24 | 6 | 78.8 | 18 |
 | NativeAddons | 1 | 10.6 | 0 | 7 | 5 | 228.1 | 228 |
 | Executable | 47 | 577.1 | 323 | 35 | 6 | 40.2 | 21 |
-| **Total** | 562 | 11,135.8 | 2050 | 687 | 163 | 3,508.7 | 1385 |
+| **Total** | 562 | 11,135.8 | 2050 | 687 | 164 | 3,770.1 | 1385 |
 
 ## Linked size
 
@@ -387,7 +387,7 @@ Load-time edges block an empty service outright; lazy ones fail only on the path
 | SystemInfo | `ext/os_abi.silk`, `ext/os_native.silk` |
 | Workers | `ext/worker_locks.silk`, `ext/worker_native.silk`, `ext/worker_resource_controls.silk`, `ext/worker_transport.silk` |
 | Crypto | `openssl/src/ext/crypto_native.silk`, `openssl/src/ext/openssl.silk`, `openssl/src/ext/openssl_provider.silk` |
-| Tls | `openssl/src/ext/openssl_x509.silk`, `openssl/src/ext/tls_abi.silk`, `openssl/src/ext/tls_native.silk`, `silktls/src/ext/tls_engine.silk`, `silktls/src/ext/tls_silk.silk` |
+| Tls | `openssl/src/ext/openssl_x509.silk`, `openssl/src/ext/tls_abi.silk`, `openssl/src/ext/tls_native.silk`, `silktls/src/ext/tls_client.silk`, `silktls/src/ext/tls_engine.silk`, `silktls/src/ext/tls_silk.silk` |
 | Compression | `compress/src/ext/compression_abi.silk`, `compress/src/ext/compression_native.silk`, `silkcompress/src/ext/compression_silk.silk` |
 | Http | `llhttp/src/ext/http_parser_abi.silk`, `llhttp/src/ext/http_parser_native.silk`, `silkhttp/src/ext/http_parser_native.silk` |
 | Http2 | `http2/src/ext/http2_abi.silk`, `http2/src/ext/http2_native.silk`, `silkhttp2/src/ext/http2_native.silk` |
