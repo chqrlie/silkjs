@@ -977,10 +977,10 @@ effect fn build(root: &Path, rules: &Rules) -> Graph
     at = at + 1
   }
 
-  // Silk and C of the core's src/ and of the packages beside it (WebAssembly, compression (both), HTTP/2 (both), HTTP/1 (both), SQLite, OpenSSL, the inspector, amaro, Node-API, the executable, the
+  // Silk and C of the core's src/ and of the packages beside it (WebAssembly, compression (both), HTTP/2 (both), HTTP/1 (both), SQLite, OpenSSL, crypto in Silk, the inspector, amaro, Node-API, the executable, the
   // smoke test); a path is shown with its package directory when it is not the core's.
   let mut modules = List<Module>.make()
-  let packages = [b"src", b"wamr/src", b"compress/src", b"silkcompress/src", b"http2/src", b"silkhttp2/src", b"llhttp/src", b"silkhttp/src", b"sqlite/src", b"openssl/src", b"inspector/src", b"amaro/src", b"napi/src", b"cli/src", b"smoke/src"]
+  let packages = [b"src", b"wamr/src", b"compress/src", b"silkcompress/src", b"http2/src", b"silkhttp2/src", b"llhttp/src", b"silkhttp/src", b"sqlite/src", b"openssl/src", b"silkcrypto/src", b"inspector/src", b"amaro/src", b"napi/src", b"cli/src", b"smoke/src"]
   let patterns = [b"**/*.silk", b"**/*.c", b"**/*.h"]
   let mut k: usize = 0
   while k < packages.length {

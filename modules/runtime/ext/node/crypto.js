@@ -199,12 +199,15 @@ function getCipherInfo(nameOrNid, options) {
   }
   const info = cipherDetails(nameOrNid, keyLength, ivLength);
   if (info === undefined) return undefined;
-  const result = { name: info.name.toLowerCase(), keyLength: info.keyLength };
+  // Node's GetCipherInfo sets mode, name, nid, blockSize, ivLength and keyLength in that order.
+  const result = {};
   const modeName = cipherModes[info.mode];
   if (modeName !== undefined) result.mode = modeName;
+  result.name = info.name.toLowerCase();
   if (info.nid !== 0) result.nid = info.nid;
   if (info.mode !== 0) result.blockSize = info.blockSize;
   if (info.ivLength !== 0) result.ivLength = info.ivLength;
+  result.keyLength = info.keyLength;
   return result;
 }
 const cipherModes = { 0: 'stream', 1: 'ecb', 2: 'cbc', 3: 'cfb', 4: 'ofb', 5: 'ctr', 6: 'gcm', 7: 'ccm', 65537: 'xts', 65538: 'wrap', 65539: 'ocb', 65540: 'siv', 65541: 'gcm-siv' };
@@ -258,7 +261,7 @@ function isXof(algorithm) {
 }
 function hashState(algorithm, xofLen, existing) {
   const size = digestSize(algorithm), xof = isXof(algorithm);
-  if (xofLen !== undefined && !xof && xofLen !== size) throw error('ERR_OSSL_EVP_NOT_XOF_OR_INVALID_LENGTH', 'Invalid XOF digest length');
+  if (xofLen !== undefined && !xof && xofLen !== size) throw error('ERR_OSSL_EVP_NOT_XOF_OR_INVALID_LENGTH', 'error:030000B2:digital envelope routines::not XOF or invalid length');
   return { algorithm, length: xof ? xofLen ?? (/128$/.test(algorithm) ? 16 : 32) : -1, [kFinalized]: false, existing };
 }
 // The native half of Node's Hash (crypto::Hash): update() reports an OpenSSL

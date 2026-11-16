@@ -1,0 +1,12 @@
+[package]
+name = "silkjsruntime-silkcrypto"
+description = "Crypto for the SilkJS runtime in Silk, over silk.crypto, with no C library: an implementation of its Crypto capability"
+version = "0.1.0"
+silk-version = "0.1.0-dev.78+e02346fdb3aa"
+kind = "library"
+# `silk_crypto` is SilkCrypto.
+exports = ["silk_crypto"]
+
+[dependencies]
+silkjs = { path = "../../engine" }
+silkjsruntime = { path = ".." }

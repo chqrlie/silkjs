@@ -15,6 +15,7 @@ silkcompress = { path = "../silkcompress", package = "silkjsruntime-silkcompress
 silkhttp = { path = "../silkhttp", package = "silkjsruntime-silkhttp" }
 http2 = { path = "../http2", package = "silkjsruntime-nghttp2" }
 silkhttp2 = { path = "../silkhttp2", package = "silkjsruntime-silkhttp2" }
+silkcrypto = { path = "../silkcrypto", package = "silkjsruntime-silkcrypto" }
 http = { path = "../llhttp", package = "silkjsruntime-llhttp" }
 database = { path = "../sqlite", package = "silkjsruntime-sqlite" }
 openssl = { path = "../openssl", package = "silkjsruntime-openssl" }
