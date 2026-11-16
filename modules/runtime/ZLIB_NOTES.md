@@ -10,9 +10,10 @@ symbol. Zstandard and Brotli are as they were.
 | Adapter | `src/ext/zlib_stream.silk` | zlib's calling convention over the codecs: window bits that choose a format, gzip or zlib by the first two bytes, zlib's status codes and message texts, the gzip operating system byte. |
 | Binding | `src/ext/compression_native.silk`, `ext/node/internal/compression/handle.js` | The zlib kinds call the adapter where they called C, and write in place (see "The binding"). |
 
-**The local copies are temporary.** The changes are upstream in
-[silk-lang/silk#3122](https://github.com/silk-lang/silk/pull/3122). Once a Silk release contains
-them: move `silk-version` to that release, delete `src/stdlib_copy`, point the imports in
+**The local copies are temporary, and this is the one open follow-up.** The changes are merged
+upstream in [silk-lang/silk#3122](https://github.com/silk-lang/silk/pull/3122) (commit `252b301`
+on Silk's `main`, 2026-11-16); the newest Silk release when this branch merged, 0.1.0-dev.81,
+predates it. Once a Silk release contains it: move `silk-version` to that release, delete `src/stdlib_copy`, point the imports in
 `src/ext/zlib_stream.silk` (and `tests/zlib-differential/build.sh`) back at
 `silk.compress.deflate` and `silk.compress.inflate`, and run `tests/zlib-differential` and
 the zlib cases of `silk task compat` again.
@@ -156,6 +157,12 @@ Last run on the final code, branch `feature/zlib-silk`, Linux x86_64:
   cases equal to Node's bytes) and the small async write case.
 - `tests/ws-native-smoke.cjs` and `tests/web-boundaries-smoke.cjs`: pass.
 - `nm build/silkjs`: no zlib symbol. The executable is 70 KB larger than with the C zlib.
+- After merging `main` at `14973b6` (the libuv replacement included): `silk task compat` 81
+  passed, 0 failed, and both smoke tests pass. `tools/zlib_bench.py`, `main` against this branch,
+  three rounds: every one of the 100 zlib cases is faster on this branch (2.4 to 224 times; the
+  smallest gains are 1 KiB streams, the largest one-call inflate, where `main` copies byte by
+  byte), `gzip-http` serves 1.43 times the requests per second, and peak RSS is lower in every
+  measured case (0.67 to 0.96) or equal (`gzip-http`, 1.02).
 
 ## Performance
 
@@ -213,8 +220,8 @@ decoder already had SIMD copies and a BMI2 build. Two gaps, worked around:
 
 ## Upstreaming
 
-[silk-lang/silk#3122](https://github.com/silk-lang/silk/pull/3122), a draft, not to be merged from
-here. It holds:
+[silk-lang/silk#3122](https://github.com/silk-lang/silk/pull/3122), merged into Silk's `main` as
+`252b301` (squash), with all of Silk's CI green. It holds:
 
 - the two files as in `src/stdlib_copy`, without their header note, including `Options.hash`
   (D12);
