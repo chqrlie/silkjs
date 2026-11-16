@@ -175,6 +175,14 @@ first, and prints per metric the median change, the rounds in which the branch d
   read -5.1% while the branch was faster in 14 of the 24 paired rounds, and -4.3% in twelve
   four-second rounds with 6 of 12 worse: the pairs show no consistent loss, the medians a few
   percent either way.
+- **The link-order hints on macOS** (83b3709): until then only lld's ELF link took them, so a
+  macOS build placed its code wherever the compiler did, and its medians moved with that from
+  build to build. `tools/build.py` now hands the same names to the Mach-O linker as an order
+  file. 24 alternating rounds against df9c30b with it: setImmediate +0.4% (13 of 24 worse; +3.9%
+  in twelve four-second rounds, 8 of 12 at least as fast), cat -3.7% (7 of 24), peak memory of
+  setImmediate and cat -15.8 and -14.6% (0 of 24). spawnSync read +9.8% (14 of 24) after -0.9%
+  (12 of 24) without it: 26 of 48 paired rounds worse over the two runs, with the same range
+  (1.3 to 3.2 ms per call) on both builds.
 - Linux x64, sqlite, 16 alternating rounds of the build merged with main's zlib work: `db.exec`
   -1.6, -0.9, +1.1 and -0.2% against f3d5ea8 and -1.5 to -7.0% against current main; the earlier
   +6.8 and +10.1% readings of single builds were code placement, which moves between builds.
