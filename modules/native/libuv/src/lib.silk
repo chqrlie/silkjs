@@ -1,3 +1,3 @@
-//! libuv 1.51 and uvwasi, compiled into every executable that depends on this package. The
-//! runtime declares the functions it calls itself; this module only gives the package a module to
-//! export.
+//! libuv 1.51, compiled into every executable that depends on this package: silkjsruntime-napi,
+//! for Node-API addons. The package's users declare the functions they call themselves; this
+//! module only gives the package a module to export.

@@ -12,5 +12,3 @@ silkjs = { path = "../../engine" }
 silkjsruntime = { path = ".." }
 # WAMR and SIMDe, compiled into a program only when it depends on this package.
 wamrnative = { path = "../../native/wamr", package = "silkjs-wamr" }
-# uvwasi and the libuv it builds on, for WASI.
-libuv = { path = "../../native/libuv", package = "silkjs-libuv" }

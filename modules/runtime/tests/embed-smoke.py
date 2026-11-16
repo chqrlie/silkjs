@@ -26,7 +26,7 @@ LIBRARIES = {'WAMR': 'wasm_runtime_full_init', 'zlib': 'deflate', 'brotli': 'Bro
              'inspector server': 'silk_inspector_create',
              'amaro': 'silk_type_stripping_sources_linked',
              'Node-API': 'napi_create_object',
-             # libuv is WASI's (uvwasi) and addons' (Node-API), never the core's.
+             # libuv is Node-API addons' (./napi), never the core's.
              'libuv': 'uv_loop_init'}
 PROGRAMS = [
     ('embed-smoke', ROOT / 'smoke', 'src/main.silk', 'undefined', False),

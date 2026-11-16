@@ -12,12 +12,12 @@ declarations, the libc and library surface each service reaches today. Requires 
 
 | Service | Built-ins | JavaScript KiB | Load-time requires | Lazy requires | Silk files | Silk KiB | `extern "C"` |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Core | 336 | 3,560.8 | 954 | 377 | 100 | 1,602.6 | 149 |
+| Core | 336 | 3,560.8 | 954 | 377 | 100 | 1,604.5 | 149 |
 | Platform | 0 | 0.0 | 0 | 0 | 2 | 10.8 | 0 |
 | ModuleResolver | 15 | 181.7 | 22 | 20 | 2 | 6.9 | 0 |
 | Files | 18 | 238.9 | 76 | 40 | 5 | 75.0 | 1 |
 | Network | 45 | 1,423.8 | 275 | 64 | 3 | 248.5 | 39 |
-| Processes | 10 | 88.4 | 50 | 14 | 3 | 72.3 | 40 |
+| Processes | 10 | 88.4 | 50 | 14 | 3 | 73.7 | 40 |
 | SystemInfo | 2 | 8.5 | 5 | 2 | 2 | 42.6 | 30 |
 | Workers | 6 | 47.8 | 15 | 21 | 4 | 118.1 | 26 |
 | Crypto | 28 | 454.0 | 159 | 55 | 3 | 164.5 | 285 |
@@ -25,13 +25,13 @@ declarations, the libc and library surface each service reaches today. Requires 
 | Compression | 7 | 61.0 | 25 | 1 | 3 | 89.9 | 54 |
 | Http | 2 | 33.6 | 8 | 3 | 4 | 68.9 | 28 |
 | Http2 | 7 | 242.8 | 51 | 2 | 3 | 103.7 | 120 |
-| Wasm | 3 | 35.9 | 3 | 1 | 5 | 179.8 | 156 |
+| Wasm | 3 | 35.9 | 3 | 1 | 6 | 244.4 | 121 |
 | Database | 6 | 54.8 | 8 | 7 | 2 | 86.7 | 7 |
 | TypeStripping | 2 | 3,716.1 | 2 | 4 | 0 | 0.0 | 0 |
 | Inspector | 15 | 83.7 | 30 | 24 | 6 | 78.8 | 18 |
 | NativeAddons | 1 | 10.6 | 0 | 7 | 5 | 228.1 | 228 |
 | Executable | 47 | 577.1 | 323 | 35 | 6 | 40.2 | 21 |
-| **Total** | 562 | 11,135.8 | 2050 | 687 | 163 | 3,441.3 | 1420 |
+| **Total** | 562 | 11,135.8 | 2050 | 687 | 164 | 3,509.4 | 1385 |
 
 ## Linked size
 
@@ -391,7 +391,7 @@ Load-time edges block an empty service outright; lazy ones fail only on the path
 | Compression | `compress/src/ext/compression_abi.silk`, `compress/src/ext/compression_native.silk`, `silkcompress/src/ext/compression_silk.silk` |
 | Http | `llhttp/src/ext/http_parser_abi.silk`, `llhttp/src/ext/http_parser_native.silk`, `silkhttp/src/ext/http_parser_native.silk` |
 | Http2 | `http2/src/ext/http2_abi.silk`, `http2/src/ext/http2_native.silk`, `silkhttp2/src/ext/http2_native.silk` |
-| Wasm | `wamr/src/ext/wamr_abi.silk`, `wamr/src/ext/wasi_abi.silk`, `wamr/src/ext/wasi_native.silk`, `wamr/src/ext/wasm_native.silk`, `wamr/src/ext/wasm_ownership.silk` |
+| Wasm | `wamr/src/ext/wamr_abi.silk`, `wamr/src/ext/wasi_abi.silk`, `wamr/src/ext/wasi_host.silk`, `wamr/src/ext/wasi_native.silk`, `wamr/src/ext/wasm_native.silk`, `wamr/src/ext/wasm_ownership.silk` |
 | Database | `ext/webstorage_native.silk`, `sqlite/src/ext/sqlite_native.silk` |
 | Inspector | `inspector/src/ext/inspector_native.silk`, `inspector/src/ext/inspector_route.silk`, `inspector/src/ext/inspector_transport.silk`, `inspector/src/node_inspector.silk` |
 | NativeAddons | `napi/src/ext/napi_async.silk`, `napi/src/ext/napi_core.silk`, `napi/src/ext/napi_loop.silk`, `napi/src/ext/napi_native.silk`, `napi/src/ext/napi_values.silk` |

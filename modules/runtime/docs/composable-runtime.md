@@ -608,9 +608,9 @@ OpenSSL's root certificates were already read by `fs`. SQLite opens a database t
 `Files` (`sqlite/src/ext/sqlite_files.silk`) whenever the program's file system is not the host's
 (`Files.direct` false), so a database in `MemoryFiles` or under a `RootedFiles` root stays there;
 with `OsFiles` SQLite keeps its own unix VFS. OpenSSL's configuration file (`OPENSSL_CONF`,
-`--openssl-config`) is then read by `fs` and parsed from memory. WASI's preopens are uvwasi's,
-which opens host directories through libuv: a program whose files are its own gives a guest no
-preopen (`ENOTCAPABLE`, uvwasi's own refusal). The embedding smoke test checks all three. A
+`--openssl-config`) is then read by `fs` and parsed from memory. WASI's preopens are host
+directories (`wamr/src/ext/wasi_host`, with uvwasi's semantics): a program whose files are its own
+gives a guest no preopen (`ENOTCAPABLE`, uvwasi's own refusal). The embedding smoke test checks all three. A
 `ModuleResolver` over a `Files` (so a rooted or in-memory file system also serves modules) is a
 small addition when an embedder needs it.
 
@@ -952,9 +952,14 @@ All seven steps are done: the core links no libuv, and its loop is `silk.io.reac
   Liveness is each executor's own references (`fs_async.hold`), `process.getActiveResourcesInfo`
   and the report's handle list read the runtime's records, and idle time is the reactor's.
   An N-API addon that asks `napi_get_uv_event_loop` gets a libuv loop from `silkjsruntime-napi`,
-  which runs it as the reactor's guest (`fs_async.Guest`); WASI's uvwasi links libuv in
-  `silkjsruntime-wamr`. `process.versions.uv` is 1.51.0, the libuv of the Node release the
-  runtime follows.
+  which runs it as the reactor's guest (`fs_async.Guest`). `process.versions.uv` is 1.51.0, the
+  libuv of the Node release the runtime follows.
+- WASI. uvwasi is gone: `silkjsruntime-wamr`'s WASI Preview 1 is Silk (`wamr/src/ext/wasi_host`),
+  uvwasi 0.0.23's semantics call by call (its descriptor table and rights, its path resolver with
+  the sandbox check and up to 32 symbolic links, whole-second times, `poll_oneoff` waiting for
+  every descriptor), over `silk.platform.native.file` and POSIX. Each of Node's 27 WASI programs
+  (`test/wasi/wasm`, run through `test/fixtures/wasi-preview-1.js`) exits and prints as under
+  Node, as with uvwasi, and Node's `wasi`/`wasm` tests in `test/parallel` pass as before.
 
 Measured with the libuv-free build: Node's `os` and `process` tests pass as with libuv (94 of the 98
 that pass under Node), its DNS, `spawnSync` and `exec` tests all pass (59 of 59); its child
@@ -967,8 +972,11 @@ program of `tests/embed-smoke.py` defines no libuv symbol.
 Gaps. Darwin's `fs.watch` is kqueue's, without FSEvents' recursive watching of a directory tree. On
 Linux, a worker thread's `vm` `breakOnSigint` does not stop the process's SIGINT: the watch blocks
 SIGINT in the thread that registers, and a worker's is the only one, so the main thread takes
-it with its default action (Node interrupts the worker). `modules/native/libuv` stays for uvwasi
-and addons; it goes when WASI's `preopens` are the `Files` service (step 4 of the migration plan).
+it with its default action (Node interrupts the worker). `modules/native/libuv` stays for
+Node-API addons alone: their ABI includes libuv (`napi_get_uv_event_loop`, and the `uv_*`
+functions an addon calls, as the runtime's own fixture `tests/fixtures/napi/async.c` does), so only
+`silkjsruntime-napi` depends on it, and a program without addons links none of it. WASI's preopens
+are host directories still; the `Files` service in their place is step 4 of the migration plan.
 The Os* implementations move to `silkjsruntime-os` next, so that the core touches no libc.
 
 ## Risks and decisions taken
