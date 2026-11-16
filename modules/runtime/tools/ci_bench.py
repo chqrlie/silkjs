@@ -2,7 +2,7 @@
 """Benchmarks two runtime executables against each other on one machine, for the CI runners
 (macOS, Linux arm64) where `silk task bench` cannot run: no CPU pinning, no Postgres, no Bun.
 
-Usage: python3 tools/ci_bench.py BASELINE CANDIDATE [--rounds N]
+Usage: python3 tools/ci_bench.py BASELINE CANDIDATE [--rounds N] [--only name,name]
 
 Each round runs every benchmark once with each executable, the order of the two alternating from
 round to round, so drift on the runner falls on both alike. Printed per benchmark: the median of
@@ -78,32 +78,56 @@ def server(runtime, script):
     return {'req_s': rps, 'peak_mb': peak_mb(usage), 'cpu_us_per_req': cpu}
 
 
-def bench_once(runtime, work):
+def bench_once(runtime, work, only):
     results = {}
-    results['node_http'] = server(runtime, 'node-http.cjs')
-    results['serve'] = server(runtime, 'silk-serve.js')
+    wanted = lambda name: not only or name in only
+    if wanted('node_http'):
+        results['node_http'] = server(runtime, 'node-http.cjs')
+    if wanted('serve'):
+        results['serve'] = server(runtime, 'silk-serve.js')
+    if wanted('setImmediate'):
+        results.update(immediate(runtime))
+    if wanted('spawnSync'):
+        out, _, _ = run(runtime, [str(SCRIPTS / 'spawn.mjs')], env=dict(ENV, N='200'))
+        match = re.search(r'([\d.]+) us/iter', out)
+        results['spawnSync'] = {'us': float(match.group(1)) if match else 0.0}
+    if wanted('cat'):
+        results.update(cat(runtime, work))
+    if wanted('sqlite_exec'):
+        results.update(sqlite(runtime, work))
+    if wanted('cold_hello'):
+        results.update(cold(runtime, work))
+    return results
+
+
+def immediate(runtime):
     out, _, usage = run(runtime, [str(SCRIPTS / 'imm.js')])
     match = re.search(r'setImmediate (\d+)', out)
-    results['setImmediate'] = {'turns_s': float(match.group(1)) if match else 0.0, 'peak_mb': peak_mb(usage)}
-    out, _, _ = run(runtime, [str(SCRIPTS / 'spawn.mjs')], env=dict(ENV, N='200'))
-    match = re.search(r'([\d.]+) us/iter', out)
-    results['spawnSync'] = {'us': float(match.group(1)) if match else 0.0}
+    return {'setImmediate': {'turns_s': float(match.group(1)) if match else 0.0, 'peak_mb': peak_mb(usage)}}
+
+
+def cat(runtime, work):
     start = time.perf_counter()
     with open(os.devnull, 'wb') as sink:
         child = subprocess.Popen([runtime, str(SCRIPTS / 'cat.cjs'), str(work / 'big.bin')], env=ENV, stdout=sink, stderr=subprocess.DEVNULL)
         _, _, usage = os.wait4(child.pid, 0)
         child.returncode = 0
-    results['cat'] = {'ms': (time.perf_counter() - start) * 1000, 'peak_mb': peak_mb(usage)}
+    return {'cat': {'ms': (time.perf_counter() - start) * 1000, 'peak_mb': peak_mb(usage)}}
+
+
+def sqlite(runtime, work):
     out, _, usage = run(runtime, [str(work / 'exec.mjs')])
     match = re.search(r'exec ([\d.]+) ms', out)
-    results['sqlite_exec'] = {'ms': float(match.group(1)) if match else 0.0, 'peak_mb': peak_mb(usage)}
+    return {'sqlite_exec': {'ms': float(match.group(1)) if match else 0.0, 'peak_mb': peak_mb(usage)}}
+
+
+def cold(runtime, work):
     walls, peaks = [], []
     for _ in range(10):
         _, wall, usage = run(runtime, [str(work / 'hello.js')])
         walls.append(wall * 1000)
         peaks.append(peak_mb(usage))
-    results['cold_hello'] = {'ms': statistics.median(walls), 'peak_mb': statistics.median(peaks)}
-    return results
+    return {'cold_hello': {'ms': statistics.median(walls), 'peak_mb': statistics.median(peaks)}}
 
 
 # Metrics where a larger value is better; the rest are better smaller.
@@ -115,6 +139,7 @@ def main():
         sys.exit(__doc__)
     baseline, candidate = os.path.abspath(sys.argv[1]), os.path.abspath(sys.argv[2])
     rounds = int(sys.argv[sys.argv.index('--rounds') + 1]) if '--rounds' in sys.argv else 6
+    only = set(sys.argv[sys.argv.index('--only') + 1].split(',')) if '--only' in sys.argv else set()
     work = pathlib.Path(tempfile.mkdtemp(prefix='ci-bench-'))
     with open(work / 'big.bin', 'wb') as big:
         block = os.urandom(1 << 20)
@@ -133,7 +158,7 @@ def main():
         if index % 2:
             order.reverse()
         for name, runtime in order:
-            samples[name].append(bench_once(runtime, work))
+            samples[name].append(bench_once(runtime, work, only))
         print(f'round {index + 1} of {rounds} done', flush=True)
     print(f'\n{"benchmark":<14} {"metric":<16} {"baseline":>12} {"candidate":>12} {"change":>8}  better     rounds candidate worse   ranges')
     worse = []

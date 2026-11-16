@@ -1,4 +1,4 @@
-name: macOS setImmediate profile
+name: macOS setImmediate profile and focused benchmarks
 # Samples the runtime's setImmediate loop on macOS with `sample`, for this branch and for main
 # df9c30b (C libuv), and prints where each spends its time and how often each makes the kernel
 # calls of a loop turn. The macOS benchmarks read setImmediate about 10% slower against df9c30b.
@@ -50,8 +50,9 @@ jobs:
   profile:
     needs: build
     runs-on: macos-15
-    timeout-minutes: 30
+    timeout-minutes: 90
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           pattern: profile-silkjs-*
@@ -95,6 +96,10 @@ jobs:
             echo "=================== $name: kernel calls in the call graph (round 2)"
             grep -E "kevent|__read_nocancel|__write_nocancel|  read  |  write  |pthread_sigmask|mach_continuous|mach_timebase|__select|poll " "$RUNNER_TEMP/sample-$name-2.txt" | sed 's/^[ +!:|]*//' | sort | uniq -c | sort -rn | head -20
           done
+      - name: spawnSync, cat and setImmediate, 24 alternating rounds against df9c30b
+        working-directory: modules/runtime
+        run: |
+          python3 tools/ci_bench.py "$RUNNER_TEMP/bin/profile-silkjs-df9c30baf2b211c60153eea8807e1206cbedb409/silkjs" "$RUNNER_TEMP/bin/profile-silkjs-branch/silkjs" --rounds 24 --only setImmediate,spawnSync,cat
       - uses: actions/upload-artifact@v4
         if: always()
         with:
