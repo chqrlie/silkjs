@@ -916,8 +916,8 @@ measured against Node's tests for that area, and the loop goes last, when nothin
 | Step | Area | libuv today | In its place | Measured by |
 | ---: | --- | --- | --- | --- |
 | 1 | Facts about the computer and the process (`os`, `process.resourceUsage`, `cpuUsage`, `availableMemory`, `ppid`, priorities, user info) | `os_native`: `uv_cpu_info`, `uv_interface_addresses`, `uv_os_*`, `uv_get_*_memory`, `uv_getrusage*`, `uv_uptime`, `uv_loadavg`, `uv_exepath` | `silk.system.system_info`, with libuv's semantics where they differ (free memory is `MemAvailable`; available memory is the cgroup limit less its whole use; uptime is `/proc/uptime`'s) | `test-os*`, `test-process-*` |
-| 2 | Error names and texts, the clock | `system_errors` (`uv_err_name`, `uv_strerror`), `uv_hrtime` in `spawn_sync`, `process_abi` | A table of libuv's `UV_ERRNO_MAP` in Silk; `silk.system.monotonic_clock` | `test-util-*`, `test-process-hrtime*` |
-| 3 | DNS name lookups | `dns_native`: `uv_getnameinfo`, address parsing | `silk.net.resolver_native`, `silk.net.address` | `test-dns*` |
+| 2 | The clock outside the loop | `uv_hrtime` in `spawn_sync` (`system_errors` already has libuv's error names and texts in Silk) | The engine's monotonic clock, the one `uv_hrtime` reads | `test-child-process-spawnsync*` |
+| 3 | Addresses as text, in DNS and the interfaces | `dns_native`, `os_native`: `uv_ip4_addr`, `uv_ip6_addr`, `uv_ip4_name`, `uv_ip6_name` | `ext/inet`: parsing through `silk.net.address`, and libuv's `inet_ntop6` rules (embedded IPv4 dotted) | `test-dns*`, `src/inet_tests.silk` |
 | 4 | Child processes and signals | `process_native`, `process_abi`: `uv_spawn`, `uv_process_kill`, `uv_signal_*`, `uv_poll_*` | `silk.system.subprocess`, `silk.system.signal_watch` on the reactor | `test-child-process-*`, `test-process-kill*`, `test-signal-*` |
 | 5 | Files and watchers | `uv_fs`, `fs_native`, `fs_ops`, `fs_async`: `uv_fs_*` requests, `uv_fs_event_*`, `uv_fs_poll_*` | `silk.system.filesystem` on the blocking pool, and the reactor's file events | `test-fs-*` |
 | 6 | Sockets, pipes and terminals | `uv_net`, `net_native`: `uv_tcp_*`, `uv_pipe_*`, `uv_udp_*`, `uv_tty_*`, `uv_read_start`, `uv_try_write` | `silk.net.socket_native` and `silk.system.terminal` on the reactor | `test-net-*`, `test-dgram-*`, `test-tty-*`, `test-http-*` |
@@ -927,9 +927,13 @@ Then `modules/native/libuv` goes, with uvwasi, which WASI's `preopens` replace w
 service (step 4 of the migration plan). The Os* implementations move to `silkjsruntime-os`, and
 the core touches no libc. `process.versions.uv` is libuv's version while any of it is linked.
 
-Step 1 is done: `os_native` reads `silk.system.system_info` and libuv's semantics are kept where
-the two differ, and Node's `os` and `process` tests pass as before (94 of the 98 that pass under
-Node, as with libuv).
+Steps 1 to 3 are done. `os_native` reads `silk.system.system_info`, with libuv's semantics kept
+where the two differ, and every `os` and `process` fact a probe reads matches Node; `spawnSync`
+times with the engine's monotonic clock; `ext/inet` converts addresses (`silk test --root
+src/inet_tests.silk`). Node's `os` and `process` tests pass as with libuv (94 of the 98 that pass
+under Node), its DNS, `spawnSync` and `exec` tests all pass (59 of 59), and the compatibility suite
+passes. Child processes depend on step 6: their standard streams are libuv pipes, so step 4 moves
+the process and signal handles and step 6 their streams.
 
 ## Risks and decisions taken
 

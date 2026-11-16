@@ -17,12 +17,14 @@ import silk.core.result { Result }
 import silk.core.ownership { Drop }
 import silk.system.subprocess { ExitStatus, ExitWatch, Subprocess, SubprocessError }
 import silk.num.i32
+import silk.num.i64
 import silk.num.isize
 import silk.num.u8
 import silk.num.u64
 import silk.num.usize
 import silk.num.f64
 import silkjs.js_libc_platform as platform
+import silkjs.js_os_events_platform as events
 import ext.process_abi as abi
 import ext.dns_abi as posix
 
@@ -493,7 +495,9 @@ impl Slab {
   }
 }
 
-fn elapsed(started: u64) -> f64 { return u64.toF64(unsafe abi.uv_hrtime() - started) / 1000000.0 }
+// The monotonic clock, in nanoseconds, which uv_hrtime read before (the loop plan, step 2).
+fn now() -> u64 { return i64.toU64(events.nowNanoseconds()) }
+fn elapsed(started: u64) -> f64 { return u64.toF64(now() - started) / 1000000.0 }
 
 /// Runs `request` to its end. A failure to start the child is a negative errno in `pid`.
 pub unsafe effect fn execute(request: &Request) -> Outcome ! OutOfMemoryError ? &mut Allocator {
@@ -521,7 +525,7 @@ pub unsafe effect fn execute(request: &Request) -> Outcome ! OutOfMemoryError ? 
   }
   let watchFd = match &watch { Option<ExitWatch>.Some { value } => value.descriptor() Option<ExitWatch>.None => -1 }
   let input = request.input.asSlice()
-  let started = unsafe abi.uv_hrtime()
+  let started = now()
   let mut offset: usize = 0
   let mut error: i32 = 0
   let mut total: usize = 0

@@ -37,7 +37,8 @@ import ext.os_abi as abi
 import silkjs.js_std_native as stdnative
 import silkjs.js_os_platform as osplatform
 import silk.num.isize
-import silk.net.address { IpAddress, AddressError }
+import silk.net.address { IpAddress }
+import ext.inet as inet
 import silk.system.system_info { SystemInfo, SystemInfoError, MemoryInfo, MemoryLimit, UserInfo, UsageScope }
 import silk.system.system_info_native { OsSystemInfo }
 import ext.dns_abi as readiness
@@ -281,10 +282,13 @@ unsafe effect fn memoryInfo<'m,S:EngineServices>(engine:&mut Engine<'m,S>,contex
     Result.Failure { error }=>{ run unsafe failed(&mut engine,context,error,op) MemoryInfo { total:0,free:0,available:0,limit:Option<MemoryLimit>.none() } }
   }
 }
-// An address as inet_ntop writes it.
+// An address as libuv's uv_ip4_name and uv_ip6_name write it (ext/inet).
 effect fn addressText(address:&IpAddress)->List<u8> !OutOfMemoryError ?&mut Allocator {
   let mut buffer:[u8;64]=[0;64]
-  let n=match address.formatInto(&mut buffer) { Result<usize,AddressError>.Success { value }=>value Result<usize,AddressError>.Failure { .. }=>0 }
+  let n=match address.* {
+    IpAddress.V4 { value }=>{ let octets=value.octets() inet.ip4Text(&octets,&mut buffer) }
+    IpAddress.V6 { value }=>{ let octets=value.octets() inet.ip6Text(&octets,&mut buffer) }
+  }
   let mut out=List<u8>.make() let mut i:usize=0
   while i<n { run out.append(buffer[i]) i=i+1 }
   return move out

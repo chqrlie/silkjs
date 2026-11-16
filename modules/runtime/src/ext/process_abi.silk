@@ -20,7 +20,6 @@ pub unsafe extern "C" fn uv_loop_size()->usize
 pub unsafe extern "C" fn uv_loop_init(loop:*mut u8)->i32
 @foreign(noCapture: .("loop"))
 pub unsafe extern "C" fn uv_loop_close(loop:*mut u8)->i32
-pub unsafe extern "C" fn uv_hrtime()->u64
 pub unsafe extern "C" fn socketpair(domain:i32,kind:i32,protocol:i32,fds:*mut i32)->i32
 pub unsafe extern "C" fn close(fd:i32)->i32
 @foreign(noCapture: .("buffer"))
