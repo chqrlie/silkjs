@@ -810,13 +810,36 @@ the two `misbehaving-flow-control` tests). The compatibility suite passes with i
 runs Node's HTTP/2 tests with both and requires every test that passes with nghttp2 to pass with
 it.
 
-`cli/src/main_silk.silk` is the executable with the three Silk libraries. The CI job `silk-libraries`
-(`.github/workflows/embedding.yml`) builds it and the executable with the C libraries, runs the
-compression differential against Node, the parser differential against llhttp, Node's HTTP/2
-tests and the compatibility suite.
+**Step 8, fourth swap (in progress): crypto.** `SilkCrypto` (./silkcrypto) is `Crypto` over
+`silk.crypto`. It keeps ../openssl's bridge (the operations by name, their arguments, handles,
+worker jobs and results: `ext/crypto_silk`) and replaces its OpenSSL calls: `ext/crypto_algorithms`
+has random bytes, constant-time comparison, PBKDF2, scrypt, HKDF, streaming and one-shot hashes
+(MD5, SHA-1, SHA-2, SHA-3, SHAKE, BLAKE2, RIPEMD-160, SM3, MD5-SHA1), HMAC, AES in ECB, CBC, CFB,
+CFB8, CFB1, OFB, CTR, GCM, CCM and key wrap, 3DES and ChaCha20 with and without Poly1305;
+`ext/crypto_keys` has RSA, EC (P-256, P-384, P-521, secp256k1, P-224, P-192), Ed25519, X25519,
+Ed448 and X448 keys, read and written as PEM and DER (SubjectPublicKeyInfo, PKCS #8 plain and
+PBES2-encrypted, PKCS #1, SEC1, legacy encrypted PEM) and through JWK, generated, and used to sign
+and verify (RSA PKCS #1 v1.5 and PSS, ECDSA, EdDSA), to agree (ECDH, X25519, X448, and the
+`createECDH` and `createDiffieHellman` objects over the RFC 2409, 3526 and 7919 groups or a given
+prime) and to encrypt (RSA OAEP, PKCS #1 v1.5, raw). Failures carry OpenSSL's error strings, so
+Node's error codes come out the same, and `process.versions.openssl` is `3.5.4+silk`: the OpenSSL
+release whose behaviour it follows, marked as not OpenSSL. Not there yet, and failing with
+`ERR_CRYPTO_UNSUPPORTED_OPERATION`: DSA and RSA-PSS keys, DH parameter generation, X.509
+certificates and SPKAC, the provider algorithms (ML-KEM, ML-DSA, SLH-DSA, Argon2, KMAC,
+TurboSHAKE), Ed25519 context strings and the rarer ciphers (OCB, SIV, CTS, XTS, Camellia, ARIA,
+SM4, DES). `tests/crypto-differential.mjs` runs `tests/crypto-cases.cjs` (502 cases over fixed keys
+in `tests/fixtures/crypto`) under Node and a runtime: SilkCrypto agrees on 501, OpenSSL's build
+on the same 501 (the other is the JavaScript's HMAC-with-SHAKE message). The compatibility suite
+passes with it; of Node's 207 crypto and Web Crypto tests that pass under Node, 112 pass with it,
+against all 207 with OpenSSL. TLS stays OpenSSL's (`OpenSslTls` beside `SilkCrypto`) until
+`silk.tls` takes its place.
 
-OpenSSL is next on the same path: `silk.crypto` and `silk.tls` as another implementation of
-`Crypto` and `Tls`, chosen by the embedder.
+`cli/src/main_silk.silk` is the executable with the four Silk libraries. The CI job `silk-libraries`
+(`.github/workflows/embedding.yml`) builds it and the executable with the C libraries, runs the
+compression and crypto differentials against Node, the parser differential against llhttp,
+Node's HTTP/2 tests and the compatibility suite.
+
+What is left of step 8 is the rest of `Crypto` (above) and `Tls` over `silk.tls`.
 
 ## Risks and decisions taken
 

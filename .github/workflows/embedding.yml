@@ -48,8 +48,9 @@ jobs:
           done
   silk-libraries:
     # Step 8's swaps: the executable with SilkCompression (over silk.compress, no C library) and
-    # SilkHttp and SilkHttp2 (HTTP/1 and HTTP/2 in Silk) in place of NativeCompression, Llhttp and
-    # Nghttp2 (cli/src/main_silk.silk) must behave as Node, llhttp and nghttp2 do.
+    # SilkHttp, SilkHttp2 and SilkCrypto (HTTP/1, HTTP/2 and crypto in Silk) in place of
+    # NativeCompression, Llhttp, Nghttp2 and OpenSslCrypto (cli/src/main_silk.silk) must behave as
+    # Node, llhttp and nghttp2 do.
     runs-on: ubuntu-26.04
     timeout-minutes: 150
     steps:
@@ -82,6 +83,9 @@ jobs:
       - name: Compression differential against Node
         working-directory: modules/runtime
         run: node tests/compression-differential.mjs build/silk/silkjsruntime
+      - name: Crypto differential against Node
+        working-directory: modules/runtime
+        run: node tests/crypto-differential.mjs build/silk/silkjsruntime
       - name: HTTP/1 parser differential against llhttp
         working-directory: modules/runtime
         run: node tests/http-parser-differential.mjs build/silk/silkjsruntime build/native/silkjsruntime

@@ -1,0 +1,1218 @@
+//! Asymmetric keys for the crypto bridge over silk.crypto: RSA, EC (P-256, P-384, P-521,
+//! secp256k1, P-224, P-192), Ed25519 and X25519. A key is kept as compact data (RSA as its PKCS #1
+//! DER; EC as its curve, scalar and uncompressed point; Ed25519 and X25519 as seed and public
+//! bytes). Import and export take PEM and DER: SubjectPublicKeyInfo, PKCS #8 (plain and PBES2
+//! encrypted), PKCS #1, SEC1 and legacy encrypted PEM. Signatures are RSA PKCS #1 v1.5 and PSS,
+//! ECDSA (DER) and Ed25519; key agreement is ECDH and X25519; encryption is RSA OAEP, PKCS #1 v1.5
+//! and raw. Failures carry OpenSSL's error strings, as ../openssl's bridge reports them.
+import silk.mem.pointer { Pointer }
+import silk.mem.layout { Layout }
+import silk.core.effect { Effect }
+import silk.core.result { Result }
+import silk.core.option { Option }
+import silk.core.ownership { Copy }
+import silk.collections.slice { Slice }
+import silk.system.random { Random }
+import silk.system.random_native { OsRandom }
+import silk.num.u8
+import silk.num.u32
+import silk.num.i32
+import silk.num.i64
+import silk.num.usize
+import silk.encoding.pem { Pem, PemSection, PemError }
+import silk.crypto.digest { Digest }
+import silk.crypto.md5 { Md5 }
+import silk.crypto.sha1 { Sha1 }
+import silk.crypto.sha2 { Sha224, Sha256, Sha384, Sha512, Sha512_224, Sha512_256 }
+import silk.crypto.sha3 { Sha3_224, Sha3_256, Sha3_384, Sha3_512 }
+import silk.crypto.ripemd160 { Ripemd160 }
+import silk.crypto.rsa { RsaPublicKey, RsaPrivateKey, RsaError }
+import silk.crypto.ec { EcGroup, EcPublicKey, EcPrivateKey, EcSignature, EcError, EcPointFormat }
+import silk.crypto.ec_key { EcCurve, EcKeyDer, EcKeyError, EcPrivateKeyDer, EcPublicKeyDer }
+import silk.crypto.okp_key { OkpAlgorithm, OkpKeyDer, OkpKeyError, OkpPrivateKeyDer, OkpPublicKeyDer }
+import silk.crypto.ed25519 { Ed25519PrivateKey, Ed25519PublicKey, Ed25519Error }
+import silk.crypto.x25519 { X25519, X25519Error }
+import silk.crypto.curve448 { X448, X448Error, Ed448PrivateKey, Ed448PublicKey, Ed448Error }
+import silk.crypto.pkcs8 { EncryptedPkcs8, Pkcs8Error, Pbes2Parameters, Pbes2Cipher, Pbes2Prf }
+import silk.crypto.dh { DhGroup, DhNamedGroup, DhPrivateKey, DhError }
+import silk.crypto.modular { Natural, ModularError }
+import silk.crypto.legacy_pem { LegacyPem, LegacyPemCipher, LegacyPemError }
+import ext.crypto_algorithms as algorithms
+import ext.crypto_algorithms { Call }
+
+unsafe extern "C" fn calloc(count: usize, size: usize) -> ?*mut u8
+unsafe extern "C" fn free(pointer: ?*mut u8) -> ()
+
+const K_RSA: i32 = 1
+const K_EC: i32 = 3
+const K_ED25519: i32 = 4
+const K_X25519: i32 = 5
+const K_ED448: i32 = 6
+const K_X448: i32 = 7
+fn isOkp(kind: i32) -> bool { return kind >= K_ED25519 && kind <= K_X448 }
+fn okpAlgorithm(kind: i32) -> OkpAlgorithm { return if kind == K_ED25519 { OkpAlgorithm.Ed25519 } else if kind == K_X25519 { OkpAlgorithm.X25519 } else if kind == K_ED448 { OkpAlgorithm.Ed448 } else { OkpAlgorithm.X448 } }
+fn okpLength(kind: i32) -> usize { return if kind == K_ED448 { 57 } else if kind == K_X448 { 56 } else { 32 } }
+
+fn nil() -> ?*mut u8 { return Pointer.null<u8>() }
+unsafe fn nonnull<T>(p: ?*mut T) -> *mut T { return unsafe Intrinsic.pointerRequalify<?*mut T, *mut T>(p) }
+unsafe fn at(p: ?*mut u8, index: usize) -> *mut u8 { return unsafe Pointer.atMut<u8>(unsafe Pointer.assumeManyMut<u8>(unsafe nonnull(p)), index) }
+const EMPTY: [u8; 1] = [0]
+fn none() -> &'static [u8] { return Slice.view<u8>(&EMPTY, 0, 0) }
+
+/// Bytes the key owns.
+struct Blob { data: ?*mut u8, length: usize }
+fn noBlob() -> Blob { return Blob { data: nil(), length: 0 } }
+unsafe fn blob(bytes: &[u8]) -> Blob {
+  if bytes.length == 0 { return noBlob() }
+  let p = unsafe calloc(1, bytes.length)
+  if Pointer.isNull<u8>(p) { return noBlob() }
+  let mut i: usize = 0
+  while i < bytes.length { unsafe Pointer.put<u8>(unsafe at(p, i), bytes[i]) i = i + 1 }
+  return Blob { data: p, length: bytes.length }
+}
+unsafe fn view<'a>(anchor: &'a (), b: &Blob) -> &'a [u8] {
+  if b.length == 0 { return none() }
+  return unsafe Pointer.borrowMany<(), u8>(anchor, unsafe Pointer.assumeMany<u8>(unsafe Intrinsic.pointerRequalify<?*mut u8, *const u8>(b.data)), b.length)
+}
+unsafe fn releaseBlob(b: &Blob) -> () { unsafe algorithms.cleanse(b.data, b.length) unsafe free(b.data) }
+
+/// A key: kind, whether private, its curve (EC) and its material.
+struct Key { kind: i32, isPrivate: bool, curve: i32, secret: Blob, public: Blob, rsa: Blob }
+unsafe fn keyOf<'a>(anchor: &'a (), p: ?*mut u8) -> &'a Key { return unsafe Pointer.borrow<(), Key>(anchor, unsafe Intrinsic.pointerRequalify<*mut Key, *const Key>(unsafe Intrinsic.pointerReinterpret<*mut u8, *mut Key>(unsafe nonnull(p)))) }
+unsafe fn newKey(kind: i32, isPrivate: bool, curve: i32, secret: &[u8], public: &[u8], rsa: &[u8]) -> ?*mut u8 {
+  let p = unsafe calloc(1, Layout.of<Key>().bytes)
+  if Pointer.isNull<u8>(p) { return p }
+  unsafe Pointer.put<Key>(unsafe Intrinsic.pointerReinterpret<*mut u8, *mut Key>(unsafe nonnull(p)), Key { kind: kind, isPrivate: isPrivate, curve: curve,
+    secret: unsafe blob(secret), public: unsafe blob(public), rsa: unsafe blob(rsa) })
+  return p
+}
+/// Frees a key handle (kind 4).
+pub unsafe fn release(p: ?*mut u8) -> () {
+  if Pointer.isNull<u8>(p) { return () }
+  let owned = unsafe Pointer.take<Key>(unsafe Intrinsic.pointerReinterpret<*mut u8, *mut Key>(unsafe nonnull(p)))
+  unsafe releaseBlob(&owned.secret) unsafe releaseBlob(&owned.public) unsafe releaseBlob(&owned.rsa)
+  unsafe free(p)
+}
+
+// Curves: index, silk.crypto's curve, OpenSSL's name, the NIST alias and the bits.
+fn curveOf(index: i32) -> EcCurve {
+  if index == 0 { return EcCurve.P256 }
+  if index == 1 { return EcCurve.P384 }
+  if index == 2 { return EcCurve.P521 }
+  if index == 3 { return EcCurve.Secp256k1 }
+  if index == 4 { return EcCurve.P224 }
+  return EcCurve.P192
+}
+fn curveName(index: i32) -> &'static [u8] {
+  if index == 0 { return b"prime256v1" }
+  if index == 1 { return b"secp384r1" }
+  if index == 2 { return b"secp521r1" }
+  if index == 3 { return b"secp256k1" }
+  if index == 4 { return b"secp224r1" }
+  return b"prime192v1"
+}
+fn curveBits(index: i32) -> i64 {
+  if index == 1 { return 384 }
+  if index == 2 { return 521 }
+  if index == 4 { return 224 }
+  if index == 5 { return 192 }
+  return 256
+}
+fn same(a: &[u8], b: &[u8]) -> bool {
+  if a.length != b.length { return false }
+  let mut i: usize = 0
+  while i < a.length { if a[i] != b[i] { return false } i = i + 1 }
+  return true
+}
+fn trimNull(name: &[u8]) -> &[u8] { if name.length > 0 && name[name.length - 1] == 0 { return Slice.view<u8>(name, 0, name.length - 1) } return name }
+/// The curve index of a name (OpenSSL's or NIST's), or -1.
+fn curveByName(raw: &[u8]) -> i32 {
+  let name = trimNull(raw)
+  if same(name, b"prime256v1") || same(name, b"P-256") { return 0 }
+  if same(name, b"secp384r1") || same(name, b"P-384") { return 1 }
+  if same(name, b"secp521r1") || same(name, b"P-521") { return 2 }
+  if same(name, b"secp256k1") { return 3 }
+  if same(name, b"secp224r1") || same(name, b"P-224") { return 4 }
+  if same(name, b"prime192v1") || same(name, b"P-192") { return 5 }
+  return -1
+}
+fn curveIndex(curve: EcCurve) -> i32 {
+  let id = curve.objectIdentifier()
+  let mut i: i32 = 0
+  while i < 6 { if same(id, curveOf(i).objectIdentifier()) { return i } i = i + 1 }
+  return -1
+}
+/// The curves Node lists (crypto.getCurves).
+pub const CURVES: &[u8] = b"prime192v1\nprime256v1\nsecp224r1\nsecp256k1\nsecp384r1\nsecp521r1\n"
+
+// Output and failures, as crypto_algorithms reports them.
+unsafe fn reserve(c: &mut Call, n: usize) -> bool {
+  let capacity = if n == 0 { 1 } else { n }
+  unsafe free(c.output)
+  c.output = unsafe calloc(1, capacity) c.capacity = capacity c.length = n
+  return !Pointer.isNull<u8>(c.output)
+}
+unsafe fn emit(c: &mut Call, bytes: &[u8]) -> bool {
+  if !unsafe reserve(&mut c.*, bytes.length) { return false }
+  let mut i: usize = 0
+  while i < bytes.length { unsafe Pointer.put<u8>(unsafe at(c.output, i), bytes[i]) i = i + 1 }
+  return true
+}
+unsafe fn setError(c: &mut Call, text: &[u8], coded: bool) -> bool {
+  let n = if text.length > 255 { 255 } else { text.length }
+  let mut i: usize = 0
+  while i < n { unsafe Pointer.put<u8>(unsafe at(c.error, i), text[i]) i = i + 1 }
+  unsafe Pointer.put<u8>(unsafe at(c.error, n), 0)
+  c.codedError = coded
+  return false
+}
+unsafe fn failWith(c: &mut Call, text: &[u8]) -> bool { return unsafe setError(&mut c.*, text, false) }
+unsafe fn refuse(c: &mut Call, text: &[u8]) -> bool { return unsafe setError(&mut c.*, text, true) }
+const DECODE_FAILED: &[u8] = b"error:1E08010C:DECODER routines::unsupported"
+unsafe fn created(c: &mut Call, p: ?*mut u8) -> bool {
+  if Pointer.isNull<u8>(p) { return false }
+  c.created = p c.createdKind = 4 c.resultKind = 2
+  return true
+}
+unsafe fn arg<'a>(anchor: &'a (), c: &Call, i: usize) -> &'a [u8] {
+  if c.lengths[i] == 0 || Pointer.isNull<u8>(c.data[i]) { return none() }
+  return unsafe Pointer.borrowMany<(), u8>(anchor, unsafe Pointer.assumeMany<u8>(unsafe Intrinsic.pointerRequalify<?*mut u8, *const u8>(c.data[i])), c.lengths[i])
+}
+
+// A minimal DER reader: the element at `offset` (tag, content start and length, end), or tag 0.
+struct Tlv { tag: u8, start: usize, length: usize, end: usize }
+impl Copy for Tlv {}
+fn noTlv() -> Tlv { return Tlv { tag: 0, start: 0, length: 0, end: 0 } }
+fn readTlv(der: &[u8], offset: usize) -> Tlv {
+  if offset + 2 > der.length { return noTlv() }
+  let tag = der[offset]
+  let first = der[offset + 1]
+  let mut length: usize = 0
+  let mut start = offset + 2
+  if first < 128 { length = u8.toUsize(first) }
+  else {
+    let count = u8.toUsize(first - 128)
+    if count == 0 || count > 4 || start + count > der.length { return noTlv() }
+    let mut i: usize = 0
+    while i < count { length = length * 256 + u8.toUsize(der[start + i]) i = i + 1 }
+    start = start + count
+  }
+  if length > der.length - start { return noTlv() }
+  return Tlv { tag: tag, start: start, length: length, end: start + length }
+}
+fn contents(der: &[u8], t: Tlv) -> &[u8] { return Slice.view<u8>(der, t.start, t.length) }
+// The algorithm OID of a SubjectPublicKeyInfo (`private` false) or PKCS #8 (true) structure.
+fn algorithmOid(der: &[u8], private: bool) -> &[u8] {
+  let outer = readTlv(der, 0)
+  if outer.tag != 48 { return none() }
+  let body = contents(der, outer)
+  let mut offset: usize = 0
+  if private { let version = readTlv(body, 0) if version.tag != 2 { return none() } offset = version.end }
+  let algorithm = readTlv(body, offset)
+  if algorithm.tag != 48 { return none() }
+  let oid = readTlv(contents(body, algorithm), 0)
+  if oid.tag != 6 { return none() }
+  return contents(contents(body, algorithm), oid)
+}
+const OID_RSA: &[u8] = b"\x2a\x86\x48\x86\xf7\x0d\x01\x01\x01"
+const OID_EC: &[u8] = b"\x2a\x86\x48\xce\x3d\x02\x01"
+const OID_ED25519: &[u8] = b"\x2b\x65\x70"
+const OID_X25519: &[u8] = b"\x2b\x65\x6e"
+const OID_ED448: &[u8] = b"\x2b\x65\x71"
+const OID_X448: &[u8] = b"\x2b\x65\x6f"
+fn okpKindOf(oid: &[u8]) -> i32 { if same(oid, OID_ED25519) { return K_ED25519 } if same(oid, OID_X25519) { return K_X25519 } if same(oid, OID_ED448) { return K_ED448 } if same(oid, OID_X448) { return K_X448 } return 0 }
+const OID_PBES2: &[u8] = b"\x2a\x86\x48\x86\xf7\x0d\x01\x05\x0d"
+fn isEncryptedPkcs8(der: &[u8]) -> bool {
+  let outer = readTlv(der, 0)
+  if outer.tag != 48 { return false }
+  let body = contents(der, outer)
+  let algorithm = readTlv(body, 0)
+  if algorithm.tag != 48 { return false }
+  let oid = readTlv(contents(body, algorithm), 0)
+  return oid.tag == 6 && same(contents(contents(body, algorithm), oid), OID_PBES2)
+}
+
+// Parsing DER into a key handle.
+unsafe fn rsaPrivateFrom(key: RsaPrivateKey) -> ?*mut u8 {
+  let mut buffer: [u8; 4096] = [0; 4096]
+  let length = key.pkcs1DerLength()
+  if length > 4096 { return nil() }
+  return match move key.writePkcs1Der(Slice.viewMut<u8>(&mut buffer, 0, length)) {
+    Result<usize, RsaError>.Success { value } => unsafe newKey(K_RSA, true, -1, none(), none(), Slice.view<u8>(&buffer, 0, value))
+    Result<usize, RsaError>.Failure { .. } => nil()
+  }
+}
+unsafe fn rsaPublicFrom(key: RsaPublicKey) -> ?*mut u8 {
+  let mut buffer: [u8; 2048] = [0; 2048]
+  let length = key.pkcs1DerLength()
+  if length > 2048 { return nil() }
+  return match move key.writePkcs1Der(Slice.viewMut<u8>(&mut buffer, 0, length)) {
+    Result<usize, RsaError>.Success { value } => unsafe newKey(K_RSA, false, -1, none(), none(), Slice.view<u8>(&buffer, 0, value))
+    Result<usize, RsaError>.Failure { .. } => nil()
+  }
+}
+// An EC private key from its scalar; the public point is computed when not given.
+unsafe fn ecPrivateFrom(curve: i32, secret: &[u8]) -> ?*mut u8 {
+  if curve < 0 { return nil() }
+  let group = EcGroup.named(curveOf(curve))
+  match move EcPrivateKey.fromBytes(&group, secret) {
+    Result<EcPrivateKey, EcError>.Success { value } => {
+      let mut point: [u8; 133] = [0; 133]
+      let written = value.publicKey().write(EcPointFormat.Uncompressed, &mut point)
+      return match move written {
+        Result<usize, EcError>.Success { value: n } => unsafe newKey(K_EC, true, curve, secret, Slice.view<u8>(&point, 0, n), none())
+        Result<usize, EcError>.Failure { .. } => nil()
+      }
+    }
+    Result<EcPrivateKey, EcError>.Failure { .. } => { return nil() }
+  }
+}
+// An EC public key from a point in any encoding, kept uncompressed.
+unsafe fn ecPublicFrom(curve: i32, point: &[u8]) -> ?*mut u8 {
+  if curve < 0 { return nil() }
+  let group = EcGroup.named(curveOf(curve))
+  match move EcPublicKey.fromBytes(&group, point) {
+    Result<EcPublicKey, EcError>.Success { value } => {
+      let mut out: [u8; 133] = [0; 133]
+      return match move value.write(EcPointFormat.Uncompressed, &mut out) {
+        Result<usize, EcError>.Success { value: n } => unsafe newKey(K_EC, false, curve, none(), Slice.view<u8>(&out, 0, n), none())
+        Result<usize, EcError>.Failure { .. } => nil()
+      }
+    }
+    Result<EcPublicKey, EcError>.Failure { .. } => { return nil() }
+  }
+}
+unsafe fn okpPrivateFrom(kind: i32, secret: &[u8]) -> ?*mut u8 {
+  if secret.length != okpLength(kind) { return nil() }
+  if kind == K_ED448 {
+    return match move Ed448PrivateKey.fromSeed(secret) {
+      Result<Ed448PrivateKey, Ed448Error>.Success { value } => { let public = value.publicKey() unsafe newKey(K_ED448, true, -1, secret, &public, none()) }
+      Result<Ed448PrivateKey, Ed448Error>.Failure { .. } => nil()
+    }
+  }
+  if kind == K_X448 {
+    return match move X448.fromSecret(secret) {
+      Result<X448, X448Error>.Success { value } => { let public = value.publicKey() unsafe newKey(K_X448, true, -1, secret, &public, none()) }
+      Result<X448, X448Error>.Failure { .. } => nil()
+    }
+  }
+  if kind == K_ED25519 {
+    return match move Ed25519PrivateKey.fromSeed(secret) {
+      Result<Ed25519PrivateKey, Ed25519Error>.Success { value } => { let public = value.publicKey() unsafe newKey(K_ED25519, true, -1, secret, &public, none()) }
+      Result<Ed25519PrivateKey, Ed25519Error>.Failure { .. } => nil()
+    }
+  }
+  return match move X25519.fromSecret(secret) {
+    Result<X25519, X25519Error>.Success { value } => { let public = value.publicKey() unsafe newKey(K_X25519, true, -1, secret, &public, none()) }
+    Result<X25519, X25519Error>.Failure { .. } => nil()
+  }
+}
+unsafe fn okpPublicFrom(kind: i32, public: &[u8]) -> ?*mut u8 {
+  if public.length != okpLength(kind) { return nil() }
+  if kind == K_ED448 {
+    match move Ed448PublicKey.fromBytes(public) { Result<Ed448PublicKey, Ed448Error>.Success { .. } => () Result<Ed448PublicKey, Ed448Error>.Failure { .. } => { return nil() } }
+  }
+  if kind == K_ED25519 {
+    match move Ed25519PublicKey.fromBytes(public) { Result<Ed25519PublicKey, Ed25519Error>.Success { .. } => () Result<Ed25519PublicKey, Ed25519Error>.Failure { .. } => { return nil() } }
+  }
+  return unsafe newKey(kind, false, -1, none(), public, none())
+}
+unsafe fn fromPkcs8(der: &[u8]) -> ?*mut u8 {
+  let oid = algorithmOid(der, true)
+  if same(oid, OID_RSA) {
+    return match move RsaPrivateKey.fromPkcs8Der(der) { Result<RsaPrivateKey, RsaError>.Success { value } => unsafe rsaPrivateFrom(move value) Result<RsaPrivateKey, RsaError>.Failure { .. } => nil() }
+  }
+  if same(oid, OID_EC) {
+    return match move EcKeyDer.readPkcs8(der) { Result<EcPrivateKeyDer<'_>, EcKeyError>.Success { value } => unsafe ecPrivateFrom(curveIndex(value.curve), value.secret) Result<EcPrivateKeyDer<'_>, EcKeyError>.Failure { .. } => nil() }
+  }
+  if okpKindOf(oid) != 0 {
+    let kind = okpKindOf(oid)
+    return match move OkpKeyDer.readPkcs8(der) { Result<OkpPrivateKeyDer<'_>, OkpKeyError>.Success { value } => unsafe okpPrivateFrom(kind, value.secret) Result<OkpPrivateKeyDer<'_>, OkpKeyError>.Failure { .. } => nil() }
+  }
+  return nil()
+}
+unsafe fn fromSpki(der: &[u8]) -> ?*mut u8 {
+  let oid = algorithmOid(der, false)
+  if same(oid, OID_RSA) {
+    return match move RsaPublicKey.fromSpkiDer(der) { Result<RsaPublicKey, RsaError>.Success { value } => unsafe rsaPublicFrom(move value) Result<RsaPublicKey, RsaError>.Failure { .. } => nil() }
+  }
+  if same(oid, OID_EC) {
+    return match move EcKeyDer.readSpki(der) { Result<EcPublicKeyDer<'_>, EcKeyError>.Success { value } => unsafe ecPublicFrom(curveIndex(value.curve), value.publicKey) Result<EcPublicKeyDer<'_>, EcKeyError>.Failure { .. } => nil() }
+  }
+  if okpKindOf(oid) != 0 {
+    let kind = okpKindOf(oid)
+    return match move OkpKeyDer.readSpki(der) { Result<OkpPublicKeyDer<'_>, OkpKeyError>.Success { value } => unsafe okpPublicFrom(kind, value.publicKey) Result<OkpPublicKeyDer<'_>, OkpKeyError>.Failure { .. } => nil() }
+  }
+  return nil()
+}
+unsafe fn fromPkcs1Private(der: &[u8]) -> ?*mut u8 {
+  return match move RsaPrivateKey.fromPkcs1Der(der) { Result<RsaPrivateKey, RsaError>.Success { value } => unsafe rsaPrivateFrom(move value) Result<RsaPrivateKey, RsaError>.Failure { .. } => nil() }
+}
+unsafe fn fromPkcs1Public(der: &[u8]) -> ?*mut u8 {
+  return match move RsaPublicKey.fromPkcs1Der(der) { Result<RsaPublicKey, RsaError>.Success { value } => unsafe rsaPublicFrom(move value) Result<RsaPublicKey, RsaError>.Failure { .. } => nil() }
+}
+unsafe fn fromSec1(der: &[u8]) -> ?*mut u8 {
+  return match move EcKeyDer.readSec1(der) { Result<EcPrivateKeyDer<'_>, EcKeyError>.Success { value } => unsafe ecPrivateFrom(curveIndex(value.curve), value.secret) Result<EcPrivateKeyDer<'_>, EcKeyError>.Failure { .. } => nil() }
+}
+/// The public half of a key, as a new handle.
+unsafe fn publicOf(p: ?*mut u8) -> ?*mut u8 {
+  let anchor = ()
+  let k = unsafe keyOf(&anchor, p)
+  if k.kind == K_RSA {
+    if !k.isPrivate { return unsafe newKey(K_RSA, false, -1, none(), none(), unsafe view(&anchor, &k.rsa)) }
+    return match move RsaPrivateKey.fromPkcs1Der(unsafe view(&anchor, &k.rsa)) { Result<RsaPrivateKey, RsaError>.Success { value } => unsafe rsaPublicFrom(value.publicKey()) Result<RsaPrivateKey, RsaError>.Failure { .. } => nil() }
+  }
+  return unsafe newKey(k.kind, false, k.curve, none(), unsafe view(&anchor, &k.public), none())
+}
+
+// Encrypted private keys.
+const MAX_DER: usize = 8192
+// PKCS #8 encrypted with PBES2: the decrypted DER into `out`, its length or a failure text.
+unsafe fn decryptPkcs8(der: &[u8], password: &[u8], out: &mut [u8], length: &mut usize) -> &'static [u8] {
+  return match move EncryptedPkcs8.decrypt(der, password, move out) {
+    Result<usize, Pkcs8Error>.Success { value } => { length.* = value b"" }
+    Result<usize, Pkcs8Error>.Failure { error } => match move error { Pkcs8Error.WrongPassword => b"error:1C800064:Provider routines::bad decrypt" _ => DECODE_FAILED }
+  }
+}
+// One key from DER bytes: what `structure` and `keyType` allow, a private key when `private`,
+// else a public key (from a public or a private structure).
+unsafe fn fromDer(c: &mut Call, der: &[u8], private: bool, structure: &[u8], keyType: &[u8], rsaPublic: bool, password: &[u8], hasPassword: bool, pemInput: bool) -> ?*mut u8 {
+  if rsaPublic && !private { return unsafe fromPkcs1Public(der) }
+  let typeSpecific = same(trimNull(structure), b"type-specific")
+  let spkiOnly = same(trimNull(structure), b"SubjectPublicKeyInfo")
+  if typeSpecific {
+    if same(trimNull(keyType), b"RSA") {
+      let k = unsafe fromPkcs1Private(der)
+      if !private && !Pointer.isNull<u8>(k) { let p = unsafe publicOf(k) unsafe release(k) return p }
+      if !private && Pointer.isNull<u8>(k) { return unsafe fromPkcs1Public(der) }
+      return k
+    }
+    let k = unsafe fromSec1(der)
+    if !private && !Pointer.isNull<u8>(k) { let p = unsafe publicOf(k) unsafe release(k) return p }
+    return k
+  }
+  if !private {
+    let k = unsafe fromSpki(der)
+    if !Pointer.isNull<u8>(k) || spkiOnly { return k }
+  }
+  if isEncryptedPkcs8(der) {
+    if !hasPassword {
+      if !pemInput { let _ignored = unsafe refuse(&mut c.*, b"ERR_MISSING_PASSPHRASE: Passphrase required for encrypted key") }
+      else { let _ignored = unsafe failWith(&mut c.*, b"error:07880109:common libcrypto routines::interrupted or cancelled") }
+      return nil()
+    }
+    let mut buffer: [u8; 8192] = [0; 8192]
+    let mut length: usize = 0
+    let problem = unsafe decryptPkcs8(der, password, &mut buffer, &mut length)
+    if problem.length > 0 { let _ignored = unsafe failWith(&mut c.*, problem) return nil() }
+    let k = unsafe fromPkcs8(Slice.view<u8>(&buffer, 0, length))
+    algorithms.wipe(&mut buffer)
+    if !private && !Pointer.isNull<u8>(k) { let p = unsafe publicOf(k) unsafe release(k) return p }
+    return k
+  }
+  let mut k = unsafe fromPkcs8(der)
+  if Pointer.isNull<u8>(k) { k = unsafe fromPkcs1Private(der) }
+  if Pointer.isNull<u8>(k) { k = unsafe fromSec1(der) }
+  if !private && !Pointer.isNull<u8>(k) { let p = unsafe publicOf(k) unsafe release(k) return p }
+  return k
+}
+unsafe fn importKey(c: &mut Call) -> bool {
+  let anchor = ()
+  let input = unsafe arg(&anchor, &c.*, 0)
+  let format = trimNull(unsafe arg(&anchor, &c.*, 1))
+  let private = c.numbers[2] == 1
+  let password = unsafe arg(&anchor, &c.*, 3)
+  let hasPassword = c.numbers[4] == 1
+  let structure = unsafe arg(&anchor, &c.*, 5)
+  let keyType = unsafe arg(&anchor, &c.*, 6)
+  let rsaPublic = c.numbers[7] == 1
+  if !same(format, b"PEM") {
+    let k = unsafe fromDer(&mut c.*, input, private, structure, keyType, rsaPublic, password, hasPassword, false)
+    if Pointer.isNull<u8>(k) { if c.codedError || unsafe errorSet(&c.*) { return false } return unsafe failWith(&mut c.*, DECODE_FAILED) }
+    return unsafe created(&mut c.*, k)
+  }
+  // PEM: the first block of a kind this import takes.
+  let mut offset: usize = 0
+  while true {
+    let found = Pem.find(input, offset)
+    let section = match move found { Result<PemSection, PemError>.Success { value } => move value Result<PemSection, PemError>.Failure { .. } => { break } }
+    offset = section.end
+    let label = Pem.label(input, &section)
+    let isPublic = same(label, b"PUBLIC KEY") || same(label, b"RSA PUBLIC KEY")
+    let isPrivate = same(label, b"PRIVATE KEY") || same(label, b"ENCRYPTED PRIVATE KEY") || same(label, b"RSA PRIVATE KEY") || same(label, b"EC PRIVATE KEY")
+    if !isPublic && !isPrivate { continue }
+    if private && isPublic { continue }
+    let mut der: [u8; 8192] = [0; 8192]
+    let decoded = match move Pem.decode(input, &section, &mut der) { Result<usize, PemError>.Success { value } => move value Result<usize, PemError>.Failure { .. } => { return unsafe failWith(&mut c.*, DECODE_FAILED) } }
+    let mut bytes = Slice.view<u8>(&der, 0, decoded)
+    // Legacy encryption (Proc-Type and DEK-Info headers).
+    let mut plain: [u8; 8192] = [0; 8192]
+    let dekInfo = Pem.header(input, &section, b"DEK-Info")
+    match move dekInfo {
+      Option<&[u8]>.Some { value: info } => {
+        if !hasPassword { return unsafe failWith(&mut c.*, b"error:07880109:common libcrypto routines::interrupted or cancelled") }
+        let n = match move LegacyPem.decrypt(info, password, bytes, &mut plain) {
+          Result<usize, LegacyPemError>.Success { value } => value
+          Result<usize, LegacyPemError>.Failure { .. } => { return unsafe failWith(&mut c.*, b"error:1C800064:Provider routines::bad decrypt") }
+        }
+        bytes = Slice.view<u8>(&plain, 0, n)
+      }
+      Option<&[u8]>.None => ()
+    }
+    let k = if same(label, b"RSA PUBLIC KEY") { unsafe fromPkcs1Public(bytes) }
+      else if same(label, b"PUBLIC KEY") { unsafe fromSpki(bytes) }
+      else if same(label, b"RSA PRIVATE KEY") { unsafe fromDer(&mut c.*, bytes, private, b"type-specific", b"RSA", false, password, hasPassword, true) }
+      else if same(label, b"EC PRIVATE KEY") { unsafe fromDer(&mut c.*, bytes, private, b"type-specific", b"EC", false, password, hasPassword, true) }
+      else { unsafe fromDer(&mut c.*, bytes, private, b"", b"", false, password, hasPassword, true) }
+    algorithms.wipe(&mut plain)
+    if Pointer.isNull<u8>(k) { if unsafe errorSet(&c.*) { return false } return unsafe failWith(&mut c.*, DECODE_FAILED) }
+    return unsafe created(&mut c.*, k)
+  }
+  return unsafe failWith(&mut c.*, b"error:1E08010C:DECODER routines::unsupported")
+}
+unsafe fn errorSet(c: &Call) -> bool { return unsafe Pointer.read<u8>(unsafe at(c.error, 0)) != 0 }
+
+// Export: DER of a structure, then PEM.
+unsafe fn pkcs8Of(k: &Key, out: &mut [u8]) -> usize {
+  let anchor = ()
+  if k.kind == K_RSA {
+    return match move RsaPrivateKey.fromPkcs1Der(unsafe view(&anchor, &k.rsa)) {
+      Result<RsaPrivateKey, RsaError>.Success { value } => match move value.writePkcs8Der(Slice.viewMut<u8>(move out, 0, value.pkcs8DerLength())) { Result<usize, RsaError>.Success { value: n } => n Result<usize, RsaError>.Failure { .. } => 0 }
+      Result<RsaPrivateKey, RsaError>.Failure { .. } => 0
+    }
+  }
+  if k.kind == K_EC { return match move EcKeyDer.writePkcs8(curveOf(k.curve), unsafe view(&anchor, &k.secret), unsafe view(&anchor, &k.public), move out) { Result<usize, EcKeyError>.Success { value } => move value Result<usize, EcKeyError>.Failure { .. } => 0 } }
+  let algorithm = okpAlgorithm(k.kind)
+  return match move OkpKeyDer.writePkcs8(algorithm, unsafe view(&anchor, &k.secret), move out) { Result<usize, OkpKeyError>.Success { value } => move value Result<usize, OkpKeyError>.Failure { .. } => 0 }
+}
+unsafe fn spkiOf(k: &Key, out: &mut [u8]) -> usize {
+  let anchor = ()
+  if k.kind == K_RSA {
+    let publicKey = if k.isPrivate {
+      match move RsaPrivateKey.fromPkcs1Der(unsafe view(&anchor, &k.rsa)) { Result<RsaPrivateKey, RsaError>.Success { value } => value.publicKey() Result<RsaPrivateKey, RsaError>.Failure { .. } => { return 0 } }
+    } else {
+      match move RsaPublicKey.fromPkcs1Der(unsafe view(&anchor, &k.rsa)) { Result<RsaPublicKey, RsaError>.Success { value } => move value Result<RsaPublicKey, RsaError>.Failure { .. } => { return 0 } }
+    }
+    let length = publicKey.spkiDerLength()
+    return match move publicKey.writeSpkiDer(Slice.viewMut<u8>(move out, 0, length)) { Result<usize, RsaError>.Success { value } => move value Result<usize, RsaError>.Failure { .. } => 0 }
+  }
+  if k.kind == K_EC { return match move EcKeyDer.writeSpki(curveOf(k.curve), unsafe view(&anchor, &k.public), move out) { Result<usize, EcKeyError>.Success { value } => move value Result<usize, EcKeyError>.Failure { .. } => 0 } }
+  let algorithm = okpAlgorithm(k.kind)
+  return match move OkpKeyDer.writeSpki(algorithm, unsafe view(&anchor, &k.public), move out) { Result<usize, OkpKeyError>.Success { value } => move value Result<usize, OkpKeyError>.Failure { .. } => 0 }
+}
+unsafe fn rsaPublicPkcs1(k: &Key, out: &mut [u8]) -> usize {
+  let anchor = ()
+  if !k.isPrivate { let der = unsafe view(&anchor, &k.rsa) let mut i: usize = 0 while i < der.length { out[i] = der[i] i = i + 1 } return der.length }
+  return match move RsaPrivateKey.fromPkcs1Der(unsafe view(&anchor, &k.rsa)) {
+    Result<RsaPrivateKey, RsaError>.Success { value } => { let p = value.publicKey() let n = p.pkcs1DerLength() match move p.writePkcs1Der(Slice.viewMut<u8>(move out, 0, n)) { Result<usize, RsaError>.Success { value: m } => m Result<usize, RsaError>.Failure { .. } => 0 } }
+    Result<RsaPrivateKey, RsaError>.Failure { .. } => 0
+  }
+}
+fn cipherFor(name: &[u8]) -> i32 {
+  let n = trimNull(name)
+  let mut lower: [u8; 32] = [0; 32]
+  if n.length > 32 { return 0 }
+  let mut i: usize = 0
+  while i < n.length { let b = n[i] lower[i] = if b >= 65 && b <= 90 { b + 32 } else { b } i = i + 1 }
+  let l = Slice.view<u8>(&lower, 0, n.length)
+  if same(l, b"aes-128-cbc") || same(l, b"aes128") { return 1 }
+  if same(l, b"aes-192-cbc") || same(l, b"aes192") { return 2 }
+  if same(l, b"aes-256-cbc") || same(l, b"aes256") { return 3 }
+  if same(l, b"des-ede3-cbc") || same(l, b"des3") { return 4 }
+  return 0
+}
+unsafe fn randomFill(bytes: &mut [u8]) -> () {
+  let mut random = OsRandom.make()
+  run Random.fillBytes(move bytes) |> Effect.provideMut<Random>(&mut random)
+}
+unsafe fn exportKey(c: &mut Call) -> bool {
+  let anchor = ()
+  let k = unsafe keyOf(&anchor, c.handle)
+  let pem = same(trimNull(unsafe arg(&anchor, &c.*, 1)), b"PEM")
+  let structure = trimNull(unsafe arg(&anchor, &c.*, 2))
+  let private = c.numbers[3] == 1
+  let cipherName = unsafe arg(&anchor, &c.*, 4)
+  let password = unsafe arg(&anchor, &c.*, 5)
+  let traditional = c.numbers[6] == 1
+  let mut der: [u8; 8192] = [0; 8192]
+  let mut length: usize = 0
+  let mut label: &[u8] = b"PUBLIC KEY"
+  if !private {
+    if same(structure, b"type-specific") { length = unsafe rsaPublicPkcs1(&k.*, &mut der) label = b"RSA PUBLIC KEY" }
+    else { length = unsafe spkiOf(&k.*, &mut der) }
+  } else if same(structure, b"PrivateKeyInfo") {
+    length = unsafe pkcs8Of(&k.*, &mut der) label = b"PRIVATE KEY"
+  } else if k.kind == K_RSA {
+    let source = unsafe view(&anchor, &k.rsa) let mut i: usize = 0 while i < source.length { der[i] = source[i] i = i + 1 } length = source.length label = b"RSA PRIVATE KEY"
+  } else if k.kind == K_EC {
+    length = match move EcKeyDer.writeSec1(curveOf(k.curve), unsafe view(&anchor, &k.secret), unsafe view(&anchor, &k.public), &mut der) { Result<usize, EcKeyError>.Success { value } => move value Result<usize, EcKeyError>.Failure { .. } => 0 }
+    label = b"EC PRIVATE KEY"
+  }
+  if length == 0 { return unsafe failWith(&mut c.*, b"error:1E08010C:ENCODER routines::unsupported") }
+  let mut headers: [u8; 128] = [0; 128]
+  let mut headerLength: usize = 0
+  let mut body = Slice.view<u8>(&der, 0, length)
+  let mut encrypted: [u8; 8448] = [0; 8448]
+  if private && cipherName.length > 0 && trimNull(cipherName).length > 0 {
+    let cipher = cipherFor(cipherName)
+    if cipher == 0 { return unsafe failWith(&mut c.*, b"error:0308010C:digital envelope routines::unsupported") }
+    if traditional {
+      let legacy = if cipher == 1 { LegacyPemCipher.Aes128Cbc } else if cipher == 2 { LegacyPemCipher.Aes192Cbc } else if cipher == 3 { LegacyPemCipher.Aes256Cbc } else { LegacyPemCipher.TripleDesCbc }
+      let mut iv: [u8; 16] = [0; 16]
+      let ivLength = legacy.blockLength()
+      unsafe randomFill(Slice.viewMut<u8>(&mut iv, 0, ivLength))
+      let n = match move LegacyPem.encrypt(legacy, password, Slice.view<u8>(&iv, 0, ivLength), body, &mut encrypted) { Result<usize, LegacyPemError>.Success { value } => move value Result<usize, LegacyPemError>.Failure { .. } => { return false } }
+      headerLength = LegacyPem.writeHeaders(legacy, Slice.view<u8>(&iv, 0, ivLength), &mut headers)
+      body = Slice.view<u8>(&encrypted, 0, n)
+    } else {
+      // PBES2 with PBKDF2-HMAC-SHA256, 2048 iterations and a 16-byte salt, as OpenSSL writes.
+      let pbes = if cipher == 1 { Pbes2Cipher.Aes128Cbc } else if cipher == 2 { Pbes2Cipher.Aes192Cbc } else if cipher == 3 { Pbes2Cipher.Aes256Cbc } else { Pbes2Cipher.TripleDesCbc }
+      let mut salt: [u8; 16] = [0; 16]
+      let mut iv: [u8; 16] = [0; 16]
+      let ivLength = pbes.blockLength()
+      unsafe randomFill(&mut salt) unsafe randomFill(Slice.viewMut<u8>(&mut iv, 0, ivLength))
+      let source = if same(structure, b"PrivateKeyInfo") { body } else { none() }
+      if source.length == 0 { return unsafe failWith(&mut c.*, b"error:1E08010C:ENCODER routines::unsupported") }
+      let parameters = Pbes2Parameters { cipher: pbes, prf: Pbes2Prf.HmacSha256, iterations: 2048, salt: &salt, iv: Slice.view<u8>(&iv, 0, ivLength) }
+      let n = match move EncryptedPkcs8.encrypt(source, password, &parameters, &mut encrypted) { Result<usize, Pkcs8Error>.Success { value } => move value Result<usize, Pkcs8Error>.Failure { .. } => { return false } }
+      body = Slice.view<u8>(&encrypted, 0, n)
+      label = b"ENCRYPTED PRIVATE KEY"
+    }
+  }
+  if !pem { let ok = unsafe emit(&mut c.*, body) algorithms.wipe(&mut der) return ok }
+  let size = Pem.encodedLength(label.length, headerLength, body.length)
+  if !unsafe reserve(&mut c.*, size) { return false }
+  let mut a = ()
+  let out = unsafe Pointer.borrowManyMut<(), u8>(&mut a, unsafe Pointer.assumeManyMut<u8>(unsafe nonnull(c.output)), size)
+  let written = match move Pem.encode(label, Slice.view<u8>(&headers, 0, headerLength), body, move out) { Result<usize, PemError>.Success { value } => move value Result<usize, PemError>.Failure { .. } => { return false } }
+  c.length = written
+  algorithms.wipe(&mut der)
+  return true
+}
+
+// Generation.
+unsafe fn generate(c: &mut Call) -> bool {
+  let anchor = ()
+  let kind = trimNull(unsafe arg(&anchor, &c.*, 0))
+  let mut random = OsRandom.make()
+  if same(kind, b"RSA") {
+    let bits = i64.toUsize(c.numbers[1])
+    let e = unsafe arg(&anchor, &c.*, 3)
+    let mut exponent: u32 = 65537
+    if e.length == 4 { exponent = u32.bitOr(u32.bitOr(u32.shiftLeft(u8.toU32(e[0]), 24), u32.shiftLeft(u8.toU32(e[1]), 16)), u32.bitOr(u32.shiftLeft(u8.toU32(e[2]), 8), u8.toU32(e[3]))) }
+    let made = run Effect.result(RsaPrivateKey.generate(bits, exponent)) |> Effect.provideMut<Random>(&mut random)
+    return match move made {
+      Result<RsaPrivateKey, RsaError>.Success { value } => unsafe created(&mut c.*, unsafe rsaPrivateFrom(move value))
+      Result<RsaPrivateKey, RsaError>.Failure { .. } => unsafe failWith(&mut c.*, b"error:1C80006F:Provider routines::invalid key length")
+    }
+  }
+  if same(kind, b"EC") {
+    let curve = curveByName(unsafe arg(&anchor, &c.*, 2))
+    if curve < 0 { return unsafe failWith(&mut c.*, b"error:1C8000BF:Provider routines::invalid curve") }
+    let group = EcGroup.named(curveOf(curve))
+    let key = run EcPrivateKey.generate(&group) |> Effect.provideMut<Random>(&mut random)
+    let mut secret: [u8; 66] = [0; 66]
+    let length = group.secretLength()
+    match move key.writeSecret(Slice.viewMut<u8>(&mut secret, 0, length)) { Result<(), EcError>.Success { .. } => () Result<(), EcError>.Failure { .. } => { return false } }
+    let p = unsafe ecPrivateFrom(curve, Slice.view<u8>(&secret, 0, length))
+    algorithms.wipe(&mut secret)
+    return unsafe created(&mut c.*, p)
+  }
+  if same(kind, b"ED25519") || same(kind, b"X25519") || same(kind, b"ED448") || same(kind, b"X448") {
+    let okp = if same(kind, b"ED25519") { K_ED25519 } else if same(kind, b"X25519") { K_X25519 } else if same(kind, b"ED448") { K_ED448 } else { K_X448 }
+    let mut seed: [u8; 57] = [0; 57]
+    unsafe randomFill(Slice.viewMut<u8>(&mut seed, 0, okpLength(okp)))
+    let p = unsafe okpPrivateFrom(okp, Slice.view<u8>(&seed, 0, okpLength(okp)))
+    algorithms.wipe(&mut seed)
+    return unsafe created(&mut c.*, p)
+  }
+  return unsafe refuse(&mut c.*, b"ERR_CRYPTO_UNSUPPORTED_OPERATION: this key type is not available with SilkCrypto")
+}
+
+// Signatures: digests by code (crypto_algorithms' codes).
+fn digestOf(code: i32, message: &[u8], out: &mut [u8]) -> usize {
+  let length = algorithms.digestLength(code)
+  let mut state = algorithms.newDigest(code)
+  algorithms.digestUpdate(&mut state, message)
+  algorithms.digestFinish(move state, Slice.viewMut<u8>(move out, 0, length))
+  return length
+}
+fn rsaSignPkcs1(code: i32, key: &RsaPrivateKey, digest: &[u8], signature: &mut [u8]) -> bool {
+  let r = if code == 1 { key.signPkcs1<Md5>(digest, move signature) } else if code == 2 { key.signPkcs1<Sha1>(digest, move signature) }
+    else if code == 3 { key.signPkcs1<Sha224>(digest, move signature) } else if code == 4 { key.signPkcs1<Sha256>(digest, move signature) }
+    else if code == 5 { key.signPkcs1<Sha384>(digest, move signature) } else if code == 6 { key.signPkcs1<Sha512>(digest, move signature) }
+    else if code == 7 { key.signPkcs1<Sha512_224>(digest, move signature) } else if code == 8 { key.signPkcs1<Sha512_256>(digest, move signature) }
+    else if code == 9 { key.signPkcs1<Sha3_224>(digest, move signature) } else if code == 10 { key.signPkcs1<Sha3_256>(digest, move signature) }
+    else if code == 11 { key.signPkcs1<Sha3_384>(digest, move signature) } else if code == 12 { key.signPkcs1<Sha3_512>(digest, move signature) }
+    else { key.signPkcs1<Ripemd160>(digest, move signature) }
+  return match move r { Result<(), RsaError>.Success { .. } => true Result<(), RsaError>.Failure { .. } => false }
+}
+fn rsaVerifyPkcs1(code: i32, key: &RsaPublicKey, digest: &[u8], signature: &[u8]) -> bool {
+  let r = if code == 1 { key.verifyPkcs1<Md5>(digest, signature) } else if code == 2 { key.verifyPkcs1<Sha1>(digest, signature) }
+    else if code == 3 { key.verifyPkcs1<Sha224>(digest, signature) } else if code == 4 { key.verifyPkcs1<Sha256>(digest, signature) }
+    else if code == 5 { key.verifyPkcs1<Sha384>(digest, signature) } else if code == 6 { key.verifyPkcs1<Sha512>(digest, signature) }
+    else if code == 7 { key.verifyPkcs1<Sha512_224>(digest, signature) } else if code == 8 { key.verifyPkcs1<Sha512_256>(digest, signature) }
+    else if code == 9 { key.verifyPkcs1<Sha3_224>(digest, signature) } else if code == 10 { key.verifyPkcs1<Sha3_256>(digest, signature) }
+    else if code == 11 { key.verifyPkcs1<Sha3_384>(digest, signature) } else if code == 12 { key.verifyPkcs1<Sha3_512>(digest, signature) }
+    else { key.verifyPkcs1<Ripemd160>(digest, signature) }
+  return match move r { Result<(), RsaError>.Success { .. } => true Result<(), RsaError>.Failure { .. } => false }
+}
+unsafe fn rsaSignPss(code: i32, key: &RsaPrivateKey, digest: &[u8], salt: usize, signature: &mut [u8]) -> bool {
+  let mut random = OsRandom.make()
+  let r = if code == 2 { run Effect.result(key.signPss<Sha1>(digest, salt, move signature)) |> Effect.provideMut<Random>(&mut random) }
+    else if code == 3 { run Effect.result(key.signPss<Sha224>(digest, salt, move signature)) |> Effect.provideMut<Random>(&mut random) }
+    else if code == 4 { run Effect.result(key.signPss<Sha256>(digest, salt, move signature)) |> Effect.provideMut<Random>(&mut random) }
+    else if code == 5 { run Effect.result(key.signPss<Sha384>(digest, salt, move signature)) |> Effect.provideMut<Random>(&mut random) }
+    else if code == 6 { run Effect.result(key.signPss<Sha512>(digest, salt, move signature)) |> Effect.provideMut<Random>(&mut random) }
+    else if code == 1 { run Effect.result(key.signPss<Md5>(digest, salt, move signature)) |> Effect.provideMut<Random>(&mut random) }
+    else { run Effect.result(key.signPss<Sha3_256>(digest, salt, move signature)) |> Effect.provideMut<Random>(&mut random) }
+  return match move r { Result<(), RsaError>.Success { .. } => true Result<(), RsaError>.Failure { .. } => false }
+}
+fn rsaVerifyPss(code: i32, key: &RsaPublicKey, digest: &[u8], signature: &[u8], salt: Option<usize>) -> bool {
+  let r = if code == 2 { key.verifyPss<Sha1>(digest, signature, salt) } else if code == 3 { key.verifyPss<Sha224>(digest, signature, salt) }
+    else if code == 4 { key.verifyPss<Sha256>(digest, signature, salt) } else if code == 5 { key.verifyPss<Sha384>(digest, signature, salt) }
+    else if code == 6 { key.verifyPss<Sha512>(digest, signature, salt) } else if code == 1 { key.verifyPss<Md5>(digest, signature, salt) }
+    else { key.verifyPss<Sha3_256>(digest, signature, salt) }
+  return match move r { Result<(), RsaError>.Success { .. } => true Result<(), RsaError>.Failure { .. } => false }
+}
+fn pssMaximumSalt(code: i32, key: &RsaPublicKey) -> usize {
+  if code == 2 { return key.maximumPssSaltLength<Sha1>() } if code == 3 { return key.maximumPssSaltLength<Sha224>() }
+  if code == 5 { return key.maximumPssSaltLength<Sha384>() } if code == 6 { return key.maximumPssSaltLength<Sha512>() }
+  if code == 1 { return key.maximumPssSaltLength<Md5>() }
+  return key.maximumPssSaltLength<Sha256>()
+}
+unsafe fn signOrVerify(c: &mut Call, verify: bool) -> bool {
+  let anchor = ()
+  let k = unsafe keyOf(&anchor, c.handle)
+  let digestName = trimNull(unsafe arg(&anchor, &c.*, 1))
+  let message = unsafe arg(&anchor, &c.*, 2)
+  let signature = unsafe arg(&anchor, &c.*, 3)
+  let padding = c.numbers[4]
+  let saltOption = c.numbers[5]
+  let context = unsafe arg(&anchor, &c.*, 6)
+  if verify { c.resultKind = 1 c.result = 0 }
+  if k.kind == K_ED25519 {
+    if context.length > 0 { return unsafe failWith(&mut c.*, b"error:1C8000A5:Provider routines::invalid context string") }
+    if digestName.length > 0 { return unsafe failWith(&mut c.*, b"error:1C8000AE:Provider routines::invalid digest") }
+    if !verify {
+      if !k.isPrivate { return unsafe failWith(&mut c.*, b"error:1C8000A7:Provider routines::not a private key") }
+      let key = match move Ed25519PrivateKey.fromSeed(unsafe view(&anchor, &k.secret)) { Result<Ed25519PrivateKey, Ed25519Error>.Success { value } => move value Result<Ed25519PrivateKey, Ed25519Error>.Failure { .. } => { return false } }
+      let out = key.sign(message)
+      return unsafe emit(&mut c.*, &out)
+    }
+    let key = match move Ed25519PublicKey.fromBytes(unsafe view(&anchor, &k.public)) { Result<Ed25519PublicKey, Ed25519Error>.Success { value } => move value Result<Ed25519PublicKey, Ed25519Error>.Failure { .. } => { return false } }
+    match move key.verify(message, signature) { Result<(), Ed25519Error>.Success { .. } => { c.result = 1 } Result<(), Ed25519Error>.Failure { .. } => () }
+    return true
+  }
+  if k.kind == K_ED448 {
+    if digestName.length > 0 { return unsafe failWith(&mut c.*, b"error:1C8000AE:Provider routines::invalid digest") }
+    if !verify {
+      if !k.isPrivate { return unsafe failWith(&mut c.*, b"error:1C8000A7:Provider routines::not a private key") }
+      let key = match move Ed448PrivateKey.fromSeed(unsafe view(&anchor, &k.secret)) { Result<Ed448PrivateKey, Ed448Error>.Success { value } => move value Result<Ed448PrivateKey, Ed448Error>.Failure { .. } => { return false } }
+      return match move key.signWithContext(message, context) { Result<[u8; 114], Ed448Error>.Success { value } => unsafe emit(&mut c.*, &value) Result<[u8; 114], Ed448Error>.Failure { .. } => false }
+    }
+    let key = match move Ed448PublicKey.fromBytes(unsafe view(&anchor, &k.public)) { Result<Ed448PublicKey, Ed448Error>.Success { value } => move value Result<Ed448PublicKey, Ed448Error>.Failure { .. } => { return false } }
+    match move key.verifyWithContext(message, context, signature) { Result<(), Ed448Error>.Success { .. } => { c.result = 1 } Result<(), Ed448Error>.Failure { .. } => () }
+    return true
+  }
+  if k.kind == K_X25519 || k.kind == K_X448 { return unsafe failWith(&mut c.*, b"error:03000096:digital envelope routines::operation not supported for this keytype") }
+  let code = if digestName.length == 0 { 4 } else { algorithms.digestCode(digestName) }
+  if code == 0 || code >= 13 && code != 17 { return unsafe failWith(&mut c.*, b"error:1C8000AE:Provider routines::invalid digest") }
+  let mut digest: [u8; 64] = [0; 64]
+  let length = digestOf(code, message, &mut digest)
+  let hashed = Slice.view<u8>(&digest, 0, length)
+  if k.kind == K_EC {
+    let group = EcGroup.named(curveOf(k.curve))
+    if !verify {
+      if !k.isPrivate { return unsafe failWith(&mut c.*, b"error:1C8000A7:Provider routines::not a private key") }
+      let key = match move EcPrivateKey.fromBytes(&group, unsafe view(&anchor, &k.secret)) { Result<EcPrivateKey, EcError>.Success { value } => move value Result<EcPrivateKey, EcError>.Failure { .. } => { return false } }
+      let mut raw: [u8; 132] = [0; 132]
+      let rawLength = group.signatureLength()
+      let mut random = OsRandom.make()
+      let signed = run Effect.result(key.signDigest(hashed, Slice.viewMut<u8>(&mut raw, 0, rawLength))) |> Effect.provideMut<Random>(&mut random)
+      match move signed { Result<(), EcError>.Success { .. } => () Result<(), EcError>.Failure { .. } => { return false } }
+      let mut der: [u8; 160] = [0; 160]
+      let n = match move EcSignature.toDer(Slice.view<u8>(&raw, 0, rawLength), &mut der) { Result<usize, EcError>.Success { value } => move value Result<usize, EcError>.Failure { .. } => { return false } }
+      return unsafe emit(&mut c.*, Slice.view<u8>(&der, 0, n))
+    }
+    let key = match move EcPublicKey.fromBytes(&group, unsafe view(&anchor, &k.public)) { Result<EcPublicKey, EcError>.Success { value } => move value Result<EcPublicKey, EcError>.Failure { .. } => { return false } }
+    let mut raw: [u8; 132] = [0; 132]
+    let rawLength = group.signatureLength()
+    match move EcSignature.fromDer(signature, Slice.viewMut<u8>(&mut raw, 0, rawLength)) { Result<(), EcError>.Success { .. } => () Result<(), EcError>.Failure { .. } => { return true } }
+    match move key.verifyDigest(hashed, Slice.view<u8>(&raw, 0, rawLength)) { Result<(), EcError>.Success { .. } => { c.result = 1 } Result<(), EcError>.Failure { .. } => () }
+    return true
+  }
+  // RSA: PKCS #1 v1.5 unless PSS (padding 6) is asked for.
+  let pss = padding == 6
+  if !verify {
+    if !k.isPrivate { return unsafe failWith(&mut c.*, b"error:1C8000A7:Provider routines::not a private key") }
+    let key = match move RsaPrivateKey.fromPkcs1Der(unsafe view(&anchor, &k.rsa)) { Result<RsaPrivateKey, RsaError>.Success { value } => move value Result<RsaPrivateKey, RsaError>.Failure { .. } => { return false } }
+    let width = key.publicKey().byteLength()
+    if !unsafe reserve(&mut c.*, width) { return false }
+    let mut a = ()
+    let out = unsafe Pointer.borrowManyMut<(), u8>(&mut a, unsafe Pointer.assumeManyMut<u8>(unsafe nonnull(c.output)), width)
+    if pss {
+      let maximum = pssMaximumSalt(code, &key.publicKey())
+      let salt = if saltOption == -2147483648 || saltOption == -2 || saltOption == -3 { maximum } else if saltOption == -1 { length } else { i64.toUsize(saltOption) }
+      if salt > maximum { return unsafe failWith(&mut c.*, b"error:1C80006E:Provider routines::invalid salt length") }
+      return unsafe rsaSignPss(code, &key, hashed, salt, move out)
+    }
+    if !rsaSignPkcs1(code, &key, hashed, move out) { return unsafe failWith(&mut c.*, b"error:1C80006F:Provider routines::invalid digest length") }
+    return true
+  }
+  let key = if k.isPrivate {
+    match move RsaPrivateKey.fromPkcs1Der(unsafe view(&anchor, &k.rsa)) { Result<RsaPrivateKey, RsaError>.Success { value } => value.publicKey() Result<RsaPrivateKey, RsaError>.Failure { .. } => { return false } }
+  } else {
+    match move RsaPublicKey.fromPkcs1Der(unsafe view(&anchor, &k.rsa)) { Result<RsaPublicKey, RsaError>.Success { value } => move value Result<RsaPublicKey, RsaError>.Failure { .. } => { return false } }
+  }
+  if pss {
+    let salt = if saltOption == -2147483648 || saltOption == -2 || saltOption == -3 { Option<usize>.None } else if saltOption == -1 { Option<usize>.some(length) } else { Option<usize>.some(i64.toUsize(saltOption)) }
+    if rsaVerifyPss(code, &key, hashed, signature, salt) { c.result = 1 }
+    return true
+  }
+  if rsaVerifyPkcs1(code, &key, hashed, signature) { c.result = 1 }
+  return true
+}
+
+unsafe fn derive(c: &mut Call) -> bool {
+  let anchor = ()
+  let mine = unsafe keyOf(&anchor, c.handle)
+  let peer = unsafe keyOf(&anchor, c.other)
+  if mine.kind != peer.kind || !mine.isPrivate { return unsafe failWith(&mut c.*, b"error:1C8000A7:Provider routines::different key types") }
+  if mine.kind == K_X25519 {
+    let key = match move X25519.fromSecret(unsafe view(&anchor, &mine.secret)) { Result<X25519, X25519Error>.Success { value } => move value Result<X25519, X25519Error>.Failure { .. } => { return false } }
+    return match move key.agree(unsafe view(&anchor, &peer.public)) {
+      Result<[u8; 32], X25519Error>.Success { value } => unsafe emit(&mut c.*, &value)
+      Result<[u8; 32], X25519Error>.Failure { .. } => unsafe failWith(&mut c.*, b"error:1C80005E:Provider routines::failed during derivation")
+    }
+  }
+  if mine.kind == K_X448 {
+    let key = match move X448.fromSecret(unsafe view(&anchor, &mine.secret)) { Result<X448, X448Error>.Success { value } => move value Result<X448, X448Error>.Failure { .. } => { return false } }
+    return match move key.agree(unsafe view(&anchor, &peer.public)) {
+      Result<[u8; 56], X448Error>.Success { value } => unsafe emit(&mut c.*, &value)
+      Result<[u8; 56], X448Error>.Failure { .. } => unsafe failWith(&mut c.*, b"error:1C80005E:Provider routines::failed during derivation")
+    }
+  }
+  if mine.kind == K_EC {
+    if mine.curve != peer.curve { return unsafe failWith(&mut c.*, b"error:1C8000CB:Provider routines::mismatching domain parameters") }
+    let group = EcGroup.named(curveOf(mine.curve))
+    let key = match move EcPrivateKey.fromBytes(&group, unsafe view(&anchor, &mine.secret)) { Result<EcPrivateKey, EcError>.Success { value } => move value Result<EcPrivateKey, EcError>.Failure { .. } => { return false } }
+    let other = match move EcPublicKey.fromBytes(&group, unsafe view(&anchor, &peer.public)) { Result<EcPublicKey, EcError>.Success { value } => move value Result<EcPublicKey, EcError>.Failure { .. } => { return false } }
+    let mut secret: [u8; 66] = [0; 66]
+    let length = group.fieldLength()
+    match move key.agree(&other, Slice.viewMut<u8>(&mut secret, 0, length)) { Result<(), EcError>.Success { .. } => () Result<(), EcError>.Failure { .. } => { return false } }
+    let ok = unsafe emit(&mut c.*, Slice.view<u8>(&secret, 0, length))
+    algorithms.wipe(&mut secret)
+    return ok
+  }
+  return unsafe failWith(&mut c.*, b"error:03000096:digital envelope routines::operation not supported for this keytype")
+}
+unsafe fn rsaCrypt(c: &mut Call, op: i32) -> bool {
+  let anchor = ()
+  let k = unsafe keyOf(&anchor, c.handle)
+  if k.kind != K_RSA { return unsafe failWith(&mut c.*, b"error:03000096:digital envelope routines::operation not supported for this keytype") }
+  let input = unsafe arg(&anchor, &c.*, 1)
+  let padding = c.numbers[2]
+  let oaepName = trimNull(unsafe arg(&anchor, &c.*, 3))
+  let label = unsafe arg(&anchor, &c.*, 4)
+  let mgfName = trimNull(unsafe arg(&anchor, &c.*, 5))
+  let oaep = if oaepName.length == 0 { 2 } else { algorithms.digestCode(oaepName) }
+  let mgf = if mgfName.length == 0 { oaep } else { algorithms.digestCode(mgfName) }
+  if padding == 4 && (oaep != mgf || oaep == 0) { return unsafe failWith(&mut c.*, b"error:1C8000AE:Provider routines::invalid digest") }
+  let mut random = OsRandom.make()
+  if op == 38 || op == 70 {
+    // Public-key operations (a private key's public half).
+    let key = if k.isPrivate {
+      match move RsaPrivateKey.fromPkcs1Der(unsafe view(&anchor, &k.rsa)) { Result<RsaPrivateKey, RsaError>.Success { value } => value.publicKey() Result<RsaPrivateKey, RsaError>.Failure { .. } => { return false } }
+    } else {
+      match move RsaPublicKey.fromPkcs1Der(unsafe view(&anchor, &k.rsa)) { Result<RsaPublicKey, RsaError>.Success { value } => move value Result<RsaPublicKey, RsaError>.Failure { .. } => { return false } }
+    }
+    let width = key.byteLength()
+    if op == 70 {
+      let mut out: [u8; 1024] = [0; 1024]
+      if padding == 3 { match move key.encryptRaw(input, Slice.viewMut<u8>(&mut out, 0, width)) { Result<(), RsaError>.Success { .. } => { return unsafe emit(&mut c.*, Slice.view<u8>(&out, 0, width)) } Result<(), RsaError>.Failure { .. } => { return unsafe failWith(&mut c.*, b"error:0200006C:rsa routines::data too large for modulus") } } }
+      return match move key.recoverPkcs1Raw(input, Slice.viewMut<u8>(&mut out, 0, width)) {
+        Result<usize, RsaError>.Success { value } => unsafe emit(&mut c.*, Slice.view<u8>(&out, 0, value))
+        Result<usize, RsaError>.Failure { .. } => unsafe failWith(&mut c.*, b"error:02000072:rsa routines::padding check failed")
+      }
+    }
+    if !unsafe reserve(&mut c.*, width) { return false }
+    let mut a = ()
+    let out = unsafe Pointer.borrowManyMut<(), u8>(&mut a, unsafe Pointer.assumeManyMut<u8>(unsafe nonnull(c.output)), width)
+    let r = if padding == 4 {
+      if oaep == 1 { run Effect.result(key.encryptOaep<Md5>(label, input, move out)) |> Effect.provideMut<Random>(&mut random) }
+      else if oaep == 2 { run Effect.result(key.encryptOaep<Sha1>(label, input, move out)) |> Effect.provideMut<Random>(&mut random) }
+      else if oaep == 3 { run Effect.result(key.encryptOaep<Sha224>(label, input, move out)) |> Effect.provideMut<Random>(&mut random) }
+      else if oaep == 4 { run Effect.result(key.encryptOaep<Sha256>(label, input, move out)) |> Effect.provideMut<Random>(&mut random) }
+      else if oaep == 5 { run Effect.result(key.encryptOaep<Sha384>(label, input, move out)) |> Effect.provideMut<Random>(&mut random) }
+      else { run Effect.result(key.encryptOaep<Sha512>(label, input, move out)) |> Effect.provideMut<Random>(&mut random) }
+    } else if padding == 1 { run Effect.result(key.encryptPkcs1(input, move out)) |> Effect.provideMut<Random>(&mut random) }
+    else { match move key.encryptRaw(input, move out) { Result<(), RsaError>.Success { .. } => Result<(), RsaError>.succeed(()) Result<(), RsaError>.Failure { error } => Result<(), RsaError>.failResult(error) } }
+    return match move r { Result<(), RsaError>.Success { .. } => true Result<(), RsaError>.Failure { .. } => unsafe failWith(&mut c.*, b"error:0200006E:rsa routines::data too large for key size") }
+  }
+  if !k.isPrivate { return unsafe failWith(&mut c.*, b"error:1C8000A7:Provider routines::not a private key") }
+  let key = match move RsaPrivateKey.fromPkcs1Der(unsafe view(&anchor, &k.rsa)) { Result<RsaPrivateKey, RsaError>.Success { value } => move value Result<RsaPrivateKey, RsaError>.Failure { .. } => { return false } }
+  let width = key.publicKey().byteLength()
+  let mut out: [u8; 1024] = [0; 1024]
+  if op == 69 {
+    // privateEncrypt: PKCS #1 type 1 padding (or none) with the private exponent.
+    let r = if padding == 3 {
+      match move key.decryptRaw(input, Slice.viewMut<u8>(&mut out, 0, width)) { Result<(), RsaError>.Success { .. } => Result<usize, RsaError>.succeed(width) Result<(), RsaError>.Failure { error } => Result<usize, RsaError>.failResult(error) }
+    } else {
+      match move key.signPkcs1Raw(input, Slice.viewMut<u8>(&mut out, 0, width)) { Result<(), RsaError>.Success { .. } => Result<usize, RsaError>.succeed(width) Result<(), RsaError>.Failure { error } => Result<usize, RsaError>.failResult(error) }
+    }
+    return match move r { Result<usize, RsaError>.Success { .. } => unsafe emit(&mut c.*, Slice.view<u8>(&out, 0, width)) Result<usize, RsaError>.Failure { .. } => unsafe failWith(&mut c.*, b"error:0200006E:rsa routines::data too large for key size") }
+  }
+  let r = if padding == 4 {
+    if oaep == 1 { key.decryptOaep<Md5>(label, input, Slice.viewMut<u8>(&mut out, 0, width)) }
+    else if oaep == 2 { key.decryptOaep<Sha1>(label, input, Slice.viewMut<u8>(&mut out, 0, width)) }
+    else if oaep == 3 { key.decryptOaep<Sha224>(label, input, Slice.viewMut<u8>(&mut out, 0, width)) }
+    else if oaep == 4 { key.decryptOaep<Sha256>(label, input, Slice.viewMut<u8>(&mut out, 0, width)) }
+    else if oaep == 5 { key.decryptOaep<Sha384>(label, input, Slice.viewMut<u8>(&mut out, 0, width)) }
+    else { key.decryptOaep<Sha512>(label, input, Slice.viewMut<u8>(&mut out, 0, width)) }
+  } else if padding == 1 { key.decryptPkcs1(input, Slice.viewMut<u8>(&mut out, 0, width)) }
+  else { match move key.decryptRaw(input, Slice.viewMut<u8>(&mut out, 0, width)) { Result<(), RsaError>.Success { .. } => Result<usize, RsaError>.succeed(width) Result<(), RsaError>.Failure { error } => Result<usize, RsaError>.failResult(error) } }
+  let ok = match move r {
+    Result<usize, RsaError>.Success { value } => unsafe emit(&mut c.*, Slice.view<u8>(&out, 0, value))
+    Result<usize, RsaError>.Failure { .. } => unsafe failWith(&mut c.*, if padding == 4 { b"error:02000079:rsa routines::oaep decoding error" } else { b"error:02000072:rsa routines::padding check failed" })
+  }
+  algorithms.wipe(&mut out)
+  return ok
+}
+// RSA key parameters from the PKCS #1 DER (version, n, e, d, p, q, dp, dq, qi).
+unsafe fn rsaParameter(c: &mut Call, k: &Key, name: &[u8]) -> bool {
+  let anchor = ()
+  let der = unsafe view(&anchor, &k.rsa)
+  let outer = readTlv(der, 0)
+  if outer.tag != 48 { return false }
+  let body = contents(der, outer)
+  let names: [&[u8]; 8] = [b"n", b"e", b"d", b"p", b"q", b"dp", b"dq", b"qi"]
+  let mut index: usize = 0
+  while index < 8 { if same(name, names[index]) { break } index = index + 1 }
+  if index == 8 { return false }
+  if !k.isPrivate && index > 1 { return false }
+  let mut offset: usize = 0
+  // A private key starts with its version.
+  if k.isPrivate { offset = readTlv(body, 0).end }
+  let mut i: usize = 0
+  while i < index { let t = readTlv(body, offset) if t.tag != 2 { return false } offset = t.end i = i + 1 }
+  let t = readTlv(body, offset)
+  if t.tag != 2 { return false }
+  let mut value = contents(body, t)
+  while value.length > 1 && value[0] == 0 { value = Slice.view<u8>(value, 1, value.length - 1) }
+  return unsafe emit(&mut c.*, value)
+}
+
+/// Runs a key operation (30-39, 62, 65, 69, 70, 73-75, 80, 148, 149); false on failure.
+pub unsafe fn execute(c: &mut Call) -> bool {
+  let op = c.op
+  let anchor = ()
+  if op == 30 { return unsafe importKey(&mut c.*) }
+  if op == 31 { return unsafe exportKey(&mut c.*) }
+  if op == 32 { return unsafe generate(&mut c.*) }
+  if op == 33 { return unsafe signOrVerify(&mut c.*, false) }
+  if op == 34 { return unsafe signOrVerify(&mut c.*, true) }
+  if op == 35 { return unsafe derive(&mut c.*) }
+  if op == 38 || op == 39 || op == 69 || op == 70 { return unsafe rsaCrypt(&mut c.*, op) }
+  if op == 62 { c.resultKind = 3 return unsafe emit(&mut c.*, CURVES) }
+  let k = unsafe keyOf(&anchor, c.handle)
+  if op == 36 {
+    c.resultKind = 3
+    let name: &[u8] = if k.kind == K_RSA { b"RSA" } else if k.kind == K_EC { b"EC" } else if k.kind == K_ED25519 { b"ED25519" } else if k.kind == K_X25519 { b"X25519" } else if k.kind == K_ED448 { b"ED448" } else { b"X448" }
+    return unsafe emit(&mut c.*, name)
+  }
+  if op == 37 {
+    c.resultKind = 1
+    if k.kind == K_RSA {
+      let der = unsafe view(&anchor, &k.rsa)
+      let bits = if k.isPrivate {
+        match move RsaPrivateKey.fromPkcs1Der(der) { Result<RsaPrivateKey, RsaError>.Success { value } => value.publicKey().bitLength() Result<RsaPrivateKey, RsaError>.Failure { .. } => { return false } }
+      } else {
+        match move RsaPublicKey.fromPkcs1Der(der) { Result<RsaPublicKey, RsaError>.Success { value } => value.bitLength() Result<RsaPublicKey, RsaError>.Failure { .. } => { return false } }
+      }
+      c.result = usize.toI64(bits)
+      return true
+    }
+    c.result = if k.kind == K_EC { curveBits(k.curve) } else if k.kind == K_ED25519 { 256 } else if k.kind == K_X25519 { 253 } else if k.kind == K_ED448 { 456 } else { 448 }
+    return true
+  }
+  if op == 73 {
+    let name = trimNull(unsafe arg(&anchor, &c.*, 1))
+    if k.kind == K_RSA && c.numbers[2] == 0 { return unsafe rsaParameter(&mut c.*, &k.*, name) }
+    if k.kind == K_EC && same(name, b"group") { return unsafe emit(&mut c.*, curveName(k.curve)) }
+    return false
+  }
+  if op == 74 { c.createdKind = 4 c.resultKind = 2 c.created = unsafe publicOf(c.handle) return !Pointer.isNull<u8>(c.created) }
+  if op == 75 {
+    // The point is on the curve (checked at import), and a private scalar gives that point.
+    c.resultKind = 1 c.result = 1
+    if k.kind == K_EC && k.isPrivate {
+      let check = unsafe ecPrivateFrom(k.curve, unsafe view(&anchor, &k.secret))
+      if Pointer.isNull<u8>(check) { c.result = 0 return true }
+      let derived = unsafe keyOf(&anchor, check)
+      if !same(unsafe view(&anchor, &derived.public), unsafe view(&anchor, &k.public)) { c.result = 0 }
+      unsafe release(check)
+    }
+    return true
+  }
+  if op == 148 { return unsafe rawImport(&mut c.*) }
+  if op == 149 {
+    if c.numbers[1] == 0 {
+      if k.kind == K_EC && c.numbers[2] == 2 {
+        let group = EcGroup.named(curveOf(k.curve))
+        let key = match move EcPublicKey.fromBytes(&group, unsafe view(&anchor, &k.public)) { Result<EcPublicKey, EcError>.Success { value } => move value Result<EcPublicKey, EcError>.Failure { .. } => { return false } }
+        let mut out: [u8; 133] = [0; 133]
+        return match move key.write(EcPointFormat.Compressed, &mut out) { Result<usize, EcError>.Success { value } => unsafe emit(&mut c.*, Slice.view<u8>(&out, 0, value)) Result<usize, EcError>.Failure { .. } => false }
+      }
+      return unsafe emit(&mut c.*, unsafe view(&anchor, &k.public))
+    }
+    if !k.isPrivate { return false }
+    return unsafe emit(&mut c.*, unsafe view(&anchor, &k.secret))
+  }
+  return unsafe refuse(&mut c.*, b"ERR_CRYPTO_UNSUPPORTED_OPERATION: this operation is not available with SilkCrypto")
+}
+// providerRawImport: algorithm, bytes, format (0 public, 1 private), curve, public.
+unsafe fn rawImport(c: &mut Call) -> bool {
+  let anchor = ()
+  let algorithm = trimNull(unsafe arg(&anchor, &c.*, 0))
+  let data = unsafe arg(&anchor, &c.*, 1)
+  let private = c.numbers[2] != 0
+  let p = if same(algorithm, b"EC") {
+    let curve = curveByName(unsafe arg(&anchor, &c.*, 3))
+    if curve < 0 { return unsafe refuse(&mut c.*, b"ERR_CRYPTO_INVALID_CURVE: Invalid EC curve name") }
+    if private { unsafe ecPrivateFrom(curve, data) } else { unsafe ecPublicFrom(curve, data) }
+  } else if same(algorithm, b"ED25519") || same(algorithm, b"X25519") || same(algorithm, b"ED448") || same(algorithm, b"X448") {
+    let kind = if same(algorithm, b"ED25519") { K_ED25519 } else if same(algorithm, b"X25519") { K_X25519 } else if same(algorithm, b"ED448") { K_ED448 } else { K_X448 }
+    if private { unsafe okpPrivateFrom(kind, data) } else { unsafe okpPublicFrom(kind, data) }
+  } else { nil() }
+  if Pointer.isNull<u8>(p) { return false }
+  if private && c.numbers[4] == 1 { let q = unsafe publicOf(p) unsafe release(p) return unsafe created(&mut c.*, q) }
+  return unsafe created(&mut c.*, p)
+}
+
+// ECDH objects (crypto.createECDH): a mutable EC key, handle kind 5.
+unsafe fn keyMut<'a>(anchor: &'a mut (), p: ?*mut u8) -> &'a mut Key { return unsafe Pointer.borrowMut<(), Key>(move anchor, unsafe Intrinsic.pointerReinterpret<*mut u8, *mut Key>(unsafe nonnull(p))) }
+// Replaces the key's material with `source`'s and frees `source`.
+unsafe fn adopt(target: ?*mut u8, source: ?*mut u8) -> () {
+  let mut a = ()
+  let t = unsafe keyMut(&mut a, target)
+  let owned = unsafe Pointer.take<Key>(unsafe Intrinsic.pointerReinterpret<*mut u8, *mut Key>(unsafe nonnull(source)))
+  unsafe releaseBlob(&t.secret) unsafe releaseBlob(&t.public)
+  let isPrivate = owned.isPrivate
+  unsafe releaseBlob(&owned.rsa)
+  t.secret = move owned.secret t.public = move owned.public t.isPrivate = isPrivate
+  unsafe free(source)
+}
+// The scalar without leading zeros, as BN_bn2bin writes it.
+fn minimal(bytes: &[u8]) -> &[u8] {
+  let mut start: usize = 0
+  while start + 1 < bytes.length && bytes[start] == 0 { start = start + 1 }
+  return Slice.view<u8>(bytes, start, bytes.length - start)
+}
+/// The ECDH operations (40-46).
+pub unsafe fn executeEcdh(c: &mut Call) -> bool {
+  let op = c.op
+  let anchor = ()
+  if op == 40 {
+    let curve = curveByName(unsafe arg(&anchor, &c.*, 0))
+    if curve < 0 { return false }
+    let p = unsafe newKey(K_EC, false, curve, none(), none(), none())
+    if Pointer.isNull<u8>(p) { return false }
+    c.created = p c.createdKind = 5 c.resultKind = 2
+    return true
+  }
+  let k = unsafe keyOf(&anchor, c.handle)
+  let curve = k.curve
+  let group = EcGroup.named(curveOf(curve))
+  if op == 41 {
+    let mut random = OsRandom.make()
+    let key = run EcPrivateKey.generate(&group) |> Effect.provideMut<Random>(&mut random)
+    let mut secret: [u8; 66] = [0; 66]
+    let length = group.secretLength()
+    match move key.writeSecret(Slice.viewMut<u8>(&mut secret, 0, length)) { Result<(), EcError>.Success { .. } => () Result<(), EcError>.Failure { .. } => { return false } }
+    let fresh = unsafe ecPrivateFrom(curve, Slice.view<u8>(&secret, 0, length))
+    algorithms.wipe(&mut secret)
+    if Pointer.isNull<u8>(fresh) { return false }
+    unsafe adopt(c.handle, fresh)
+    c.resultKind = 4
+    return true
+  }
+  if op == 42 {
+    if k.public.length == 0 { return false }
+    let key = match move EcPublicKey.fromBytes(&group, unsafe view(&anchor, &k.public)) { Result<EcPublicKey, EcError>.Success { value } => move value Result<EcPublicKey, EcError>.Failure { .. } => { return false } }
+    let form = if c.numbers[1] == 2 { EcPointFormat.Compressed } else if c.numbers[1] == 6 { EcPointFormat.Hybrid } else { EcPointFormat.Uncompressed }
+    let mut out: [u8; 133] = [0; 133]
+    return match move key.write(form, &mut out) { Result<usize, EcError>.Success { value } => unsafe emit(&mut c.*, Slice.view<u8>(&out, 0, value)) Result<usize, EcError>.Failure { .. } => false }
+  }
+  if op == 43 { if !k.isPrivate { return false } return unsafe emit(&mut c.*, minimal(unsafe view(&anchor, &k.secret))) }
+  if op == 44 {
+    // A scalar shorter than the group's is left-padded; zero and values not below the order fail.
+    let given = minimal(unsafe arg(&anchor, &c.*, 1))
+    let length = group.secretLength()
+    if given.length > length { return false }
+    let mut secret: [u8; 66] = [0; 66]
+    let mut i: usize = 0
+    while i < given.length { secret[length - given.length + i] = given[i] i = i + 1 }
+    let fresh = unsafe ecPrivateFrom(curve, Slice.view<u8>(&secret, 0, length))
+    algorithms.wipe(&mut secret)
+    if Pointer.isNull<u8>(fresh) { return false }
+    unsafe adopt(c.handle, fresh)
+    c.resultKind = 4
+    return true
+  }
+  if op == 45 {
+    let fresh = unsafe ecPublicFrom(curve, unsafe arg(&anchor, &c.*, 1))
+    if Pointer.isNull<u8>(fresh) { return false }
+    // Setting the public key keeps the private scalar, as EC_KEY_set_public_key does.
+    let mut a = ()
+    let t = unsafe keyMut(&mut a, c.handle)
+    let owned = unsafe Pointer.take<Key>(unsafe Intrinsic.pointerReinterpret<*mut u8, *mut Key>(unsafe nonnull(fresh)))
+    unsafe releaseBlob(&t.public)
+    unsafe releaseBlob(&owned.secret) unsafe releaseBlob(&owned.rsa)
+    t.public = move owned.public
+    unsafe free(fresh)
+    c.resultKind = 4
+    return true
+  }
+  // ecSecret: the peer point first, then the own key pair must be valid.
+  let peer = match move EcPublicKey.fromBytes(&group, unsafe arg(&anchor, &c.*, 1)) { Result<EcPublicKey, EcError>.Success { value } => move value Result<EcPublicKey, EcError>.Failure { .. } => { return false } }
+  if !k.isPrivate { return unsafe refuse(&mut c.*, b"ERR_CRYPTO_INVALID_KEYPAIR: Invalid key pair") }
+  let check = unsafe ecPrivateFrom(curve, unsafe view(&anchor, &k.secret))
+  if Pointer.isNull<u8>(check) { return unsafe refuse(&mut c.*, b"ERR_CRYPTO_INVALID_KEYPAIR: Invalid key pair") }
+  let derived = unsafe keyOf(&anchor, check)
+  let matches = same(unsafe view(&anchor, &derived.public), unsafe view(&anchor, &k.public))
+  unsafe release(check)
+  if !matches { return unsafe refuse(&mut c.*, b"ERR_CRYPTO_INVALID_KEYPAIR: Invalid key pair") }
+  let key = match move EcPrivateKey.fromBytes(&group, unsafe view(&anchor, &k.secret)) { Result<EcPrivateKey, EcError>.Success { value } => move value Result<EcPrivateKey, EcError>.Failure { .. } => { return false } }
+  let mut secret: [u8; 66] = [0; 66]
+  let length = group.fieldLength()
+  match move key.agree(&peer, Slice.viewMut<u8>(&mut secret, 0, length)) { Result<(), EcError>.Success { .. } => () Result<(), EcError>.Failure { .. } => { return false } }
+  let ok = unsafe emit(&mut c.*, Slice.view<u8>(&secret, 0, length))
+  algorithms.wipe(&mut secret)
+  return ok
+}
+
+// Diffie-Hellman objects (crypto.createDiffieHellman and its groups): handle kind 6.
+struct DhObject { prime: Blob, generator: Blob, secret: Blob, public: Blob, named: bool }
+unsafe fn dhOf<'a>(anchor: &'a mut (), p: ?*mut u8) -> &'a mut DhObject { return unsafe Pointer.borrowMut<(), DhObject>(move anchor, unsafe Intrinsic.pointerReinterpret<*mut u8, *mut DhObject>(unsafe nonnull(p))) }
+/// Frees a DH handle (kind 6).
+pub unsafe fn releaseDh(p: ?*mut u8) -> () {
+  if Pointer.isNull<u8>(p) { return () }
+  let owned = unsafe Pointer.take<DhObject>(unsafe Intrinsic.pointerReinterpret<*mut u8, *mut DhObject>(unsafe nonnull(p)))
+  unsafe releaseBlob(&owned.prime) unsafe releaseBlob(&owned.generator) unsafe releaseBlob(&owned.secret) unsafe releaseBlob(&owned.public)
+  unsafe free(p)
+}
+fn dhNamed(name: &[u8]) -> Option<DhNamedGroup> {
+  let n = trimNull(name)
+  if same(n, b"modp_2048") || same(n, b"modp14") { return Option<DhNamedGroup>.some(DhNamedGroup.Modp14) }
+  if same(n, b"modp_3072") || same(n, b"modp15") { return Option<DhNamedGroup>.some(DhNamedGroup.Modp15) }
+  if same(n, b"modp_4096") || same(n, b"modp16") { return Option<DhNamedGroup>.some(DhNamedGroup.Modp16) }
+  if same(n, b"modp_6144") || same(n, b"modp17") { return Option<DhNamedGroup>.some(DhNamedGroup.Modp17) }
+  if same(n, b"modp_8192") || same(n, b"modp18") { return Option<DhNamedGroup>.some(DhNamedGroup.Modp18) }
+  if same(n, b"ffdhe2048") { return Option<DhNamedGroup>.some(DhNamedGroup.Ffdhe2048) }
+  if same(n, b"ffdhe3072") { return Option<DhNamedGroup>.some(DhNamedGroup.Ffdhe3072) }
+  if same(n, b"ffdhe4096") { return Option<DhNamedGroup>.some(DhNamedGroup.Ffdhe4096) }
+  if same(n, b"ffdhe6144") { return Option<DhNamedGroup>.some(DhNamedGroup.Ffdhe6144) }
+  if same(n, b"ffdhe8192") { return Option<DhNamedGroup>.some(DhNamedGroup.Ffdhe8192) }
+  return Option<DhNamedGroup>.None
+}
+unsafe fn dhGroupOf(d: &DhObject) -> Option<DhGroup> {
+  let anchor = ()
+  return match move DhGroup.make(unsafe view(&anchor, &d.prime), unsafe view(&anchor, &d.generator)) {
+    Result<DhGroup, DhError>.Success { value } => Option<DhGroup>.some(move value)
+    Result<DhGroup, DhError>.Failure { .. } => Option<DhGroup>.None
+  }
+}
+// Writes `value` big-endian into the first `length` bytes of `out`.
+unsafe fn writeNatural(value: &Natural, length: usize, out: &mut [u8]) -> bool {
+  return match move value.writeBytes(Slice.viewMut<u8>(move out, 0, length)) { Result<(), ModularError>.Success { .. } => true Result<(), ModularError>.Failure { .. } => false }
+}
+/// The DH operations (50-59).
+pub unsafe fn executeDh(c: &mut Call) -> bool {
+  let op = c.op
+  let anchor = ()
+  if op == 50 {
+    let mut prime: [u8; 1024] = [0; 1024]
+    let mut generator: [u8; 1024] = [0; 1024]
+    let mut primeLength: usize = 0 let mut generatorLength: usize = 0
+    let mut named = false
+    let group = if c.lengths[2] != 0 || c.numbers[3] != 0 {
+      named = true
+      let choice = if c.numbers[3] == 768 { Option<DhNamedGroup>.some(DhNamedGroup.Modp1) } else if c.numbers[3] == 1024 { Option<DhNamedGroup>.some(DhNamedGroup.Modp2) } else if c.numbers[3] == 1536 { Option<DhNamedGroup>.some(DhNamedGroup.Modp5) } else { dhNamed(unsafe arg(&anchor, &c.*, 2)) }
+      match move choice { Option<DhNamedGroup>.Some { value } => DhGroup.named(value) Option<DhNamedGroup>.None => { return false } }
+    } else {
+      if c.numbers[0] != 0 { return unsafe refuse(&mut c.*, b"ERR_CRYPTO_UNSUPPORTED_OPERATION: generating DH parameters is not available with SilkCrypto") }
+      match move DhGroup.make(unsafe arg(&anchor, &c.*, 0), unsafe arg(&anchor, &c.*, 1)) { Result<DhGroup, DhError>.Success { value } => move value Result<DhGroup, DhError>.Failure { .. } => { return false } }
+    }
+    primeLength = group.primeLength()
+    if !unsafe writeNatural(&group.prime(), primeLength, &mut prime) { return false }
+    let p = Slice.view<u8>(&prime, 0, primeLength)
+    let g = group.generator()
+    generatorLength = (g.bitLength() + 7) / 8
+    if generatorLength == 0 { generatorLength = 1 }
+    if !unsafe writeNatural(&g, generatorLength, &mut generator) { return false }
+    let gb = Slice.view<u8>(&generator, 0, generatorLength)
+    let raw = unsafe calloc(1, Layout.of<DhObject>().bytes)
+    if Pointer.isNull<u8>(raw) { return false }
+    unsafe Pointer.put<DhObject>(unsafe Intrinsic.pointerReinterpret<*mut u8, *mut DhObject>(unsafe nonnull(raw)), DhObject { prime: unsafe blob(p), generator: unsafe blob(gb), secret: noBlob(), public: noBlob(), named: named })
+    c.created = raw c.createdKind = 6 c.resultKind = 2
+    return true
+  }
+  let mut a = ()
+  let d = unsafe dhOf(&mut a, c.handle)
+  if op == 52 { if d.public.length == 0 { return false } return unsafe emit(&mut c.*, minimal(unsafe view(&anchor, &d.public))) }
+  if op == 53 { if d.secret.length == 0 { return false } return unsafe emit(&mut c.*, minimal(unsafe view(&anchor, &d.secret))) }
+  if op == 57 { return unsafe emit(&mut c.*, unsafe view(&anchor, &d.prime)) }
+  if op == 58 { return unsafe emit(&mut c.*, minimal(unsafe view(&anchor, &d.generator))) }
+  if op == 59 {
+    c.resultKind = 1 c.result = 0
+    // The well-known groups are checked once and for all, as OpenSSL does for a named group.
+    if d.named { return true }
+    let group = match move unsafe dhGroupOf(&d.*) { Option<DhGroup>.Some { value } => move value Option<DhGroup>.None => { return false } }
+    let mut random = OsRandom.make()
+    let check = run group.check() |> Effect.provideMut<Random>(&mut random)
+    // DH_CHECK_P_NOT_PRIME 1, DH_CHECK_P_NOT_SAFE_PRIME 2.
+    if !check.prime { c.result = 1 } else if !check.safePrime { c.result = 2 }
+    return true
+  }
+  if op == 54 || op == 55 {
+    let value = unsafe arg(&anchor, &c.*, 1)
+    if op == 54 { unsafe releaseBlob(&d.public) d.public = unsafe blob(value) } else { unsafe releaseBlob(&d.secret) d.secret = unsafe blob(value) }
+    c.resultKind = 4
+    return true
+  }
+  let group = match move unsafe dhGroupOf(&d.*) { Option<DhGroup>.Some { value } => move value Option<DhGroup>.None => { return false } }
+  if op == 51 {
+    // DH_generate_key: a private key already set gives its public key; otherwise a new pair.
+    let key = if d.secret.length > 0 {
+      match move DhPrivateKey.fromBytes(&group, unsafe view(&anchor, &d.secret)) { Result<DhPrivateKey, DhError>.Success { value } => move value Result<DhPrivateKey, DhError>.Failure { .. } => { return false } }
+    } else {
+      let mut random = OsRandom.make()
+      run DhPrivateKey.generate(&group) |> Effect.provideMut<Random>(&mut random)
+    }
+    let length = group.primeLength()
+    let mut out: [u8; 1024] = [0; 1024]
+    key.writePublicKey(Slice.viewMut<u8>(&mut out, 0, length))
+    let mut secret: [u8; 1024] = [0; 1024]
+    if !unsafe writeNatural(&key.secret(), length, &mut secret) { return false }
+    let s = Slice.view<u8>(&secret, 0, length)
+    unsafe releaseBlob(&d.public) unsafe releaseBlob(&d.secret)
+    d.public = unsafe blob(Slice.view<u8>(&out, 0, length)) d.secret = unsafe blob(minimal(s))
+    algorithms.wipe(&mut secret)
+    c.resultKind = 4
+    return true
+  }
+  // dhSecret: the shared secret, left-padded to the prime's length (DH_compute_key_padded).
+  if d.secret.length == 0 { return false }
+  let key = match move DhPrivateKey.fromBytes(&group, unsafe view(&anchor, &d.secret)) { Result<DhPrivateKey, DhError>.Success { value } => move value Result<DhPrivateKey, DhError>.Failure { .. } => { return false } }
+  let length = group.primeLength()
+  let mut out: [u8; 1024] = [0; 1024]
+  return match move key.agree(unsafe arg(&anchor, &c.*, 1), Slice.viewMut<u8>(&mut out, 0, length)) {
+    Result<(), DhError>.Success { .. } => unsafe emit(&mut c.*, Slice.view<u8>(&out, 0, length))
+    Result<(), DhError>.Failure { error } => match move error {
+      DhError.KeyTooSmall => unsafe failWith(&mut c.*, b"error:02800066:Diffie-Hellman routines::invalid public key")
+      DhError.KeyTooLarge => unsafe failWith(&mut c.*, b"error:02800066:Diffie-Hellman routines::invalid public key")
+      _ => false
+    }
+  }
+}

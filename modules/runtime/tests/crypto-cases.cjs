@@ -75,11 +75,67 @@ record('random length', () => [crypto.randomBytes(0).length, crypto.randomBytes(
 record('timingSafeEqual', () => [crypto.timingSafeEqual(Buffer.from('ab'), Buffer.from('ab')), crypto.timingSafeEqual(Buffer.from('ab'), Buffer.from('ac'))]);
 record('getHashes has', () => ['sha256', 'md5', 'sha3-512', 'shake256', 'RSA-SHA256'].map(h => crypto.getHashes().includes(h)));
 record('getCiphers has', () => ['aes-128-cbc', 'aes-256-gcm', 'chacha20-poly1305'].map(c => crypto.getCiphers().includes(c)));
+// Keys: fixed keys (tests/fixtures/crypto/keys.json), so exports and deterministic signatures compare.
+const keys = require('./fixtures/crypto/keys.json');
+const sha = b => crypto.createHash('sha256').update(b).digest('hex');
+for (const [name, pem] of Object.entries(keys)) {
+  record(`key ${name} details`, () => { const k = crypto.createPrivateKey(pem); return [k.type, k.asymmetricKeyType, k.asymmetricKeyDetails]; });
+  for (const [type, format] of [['pkcs8', 'pem'], ['pkcs8', 'der']]) record(`key ${name} export ${type} ${format}`, () => sha(crypto.createPrivateKey(pem).export({ type, format })));
+  record(`key ${name} public spki`, () => crypto.createPublicKey(pem).export({ type: 'spki', format: 'pem' }));
+  record(`key ${name} public der`, () => sha(crypto.createPublicKey(pem).export({ type: 'spki', format: 'der' })));
+  record(`key ${name} jwk`, () => crypto.createPrivateKey(pem).export({ format: 'jwk' }));
+  record(`key ${name} public jwk`, () => crypto.createPublicKey(pem).export({ format: 'jwk' }));
+  record(`key ${name} roundtrip der`, () => sha(crypto.createPrivateKey({ key: crypto.createPrivateKey(pem).export({ type: 'pkcs8', format: 'der' }), format: 'der', type: 'pkcs8' }).export({ type: 'pkcs8', format: 'der' })));
+  record(`key ${name} encrypted pkcs8`, () => { const enc = crypto.createPrivateKey(pem).export({ type: 'pkcs8', format: 'pem', cipher: 'aes-256-cbc', passphrase: 'pw' }); return sha(crypto.createPrivateKey({ key: enc, passphrase: 'pw' }).export({ type: 'pkcs8', format: 'der' })); });
+  record(`key ${name} wrong passphrase`, () => { const enc = crypto.createPrivateKey(pem).export({ type: 'pkcs8', format: 'pem', cipher: 'aes-128-cbc', passphrase: 'pw' }); return crypto.createPrivateKey({ key: enc, passphrase: 'nope' }); });
+  record(`key ${name} missing passphrase`, () => { const enc = crypto.createPrivateKey(pem).export({ type: 'pkcs8', format: 'der', cipher: 'aes-128-cbc', passphrase: 'pw' }); return crypto.createPrivateKey({ key: enc, format: 'der', type: 'pkcs8' }); });
+}
+record('rsa pkcs1 export', () => [sha(crypto.createPrivateKey(keys.rsa).export({ type: 'pkcs1', format: 'pem' })), crypto.createPublicKey(keys.rsa).export({ type: 'pkcs1', format: 'pem' })]);
+record('rsa pkcs1 import', () => sha(crypto.createPrivateKey(crypto.createPrivateKey(keys.rsa).export({ type: 'pkcs1', format: 'pem' })).export({ type: 'pkcs8', format: 'der' })));
+record('rsa legacy encrypted', () => { const enc = crypto.createPrivateKey(keys.rsa).export({ type: 'pkcs1', format: 'pem', cipher: 'aes-128-cbc', passphrase: 'pw' }); return [enc.includes('DEK-Info: AES-128-CBC'), sha(crypto.createPrivateKey({ key: enc, passphrase: 'pw' }).export({ type: 'pkcs1', format: 'der' }))]; });
+record('ec sec1 export', () => sha(crypto.createPrivateKey(keys['ec-prime256v1']).export({ type: 'sec1', format: 'der' })));
+record('ec sec1 import', () => sha(crypto.createPrivateKey({ key: crypto.createPrivateKey(keys['ec-prime256v1']).export({ type: 'sec1', format: 'der' }), format: 'der', type: 'sec1' }).export({ type: 'pkcs8', format: 'der' })));
+record('garbage key', () => crypto.createPrivateKey('-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----\n'));
+record('public from private pem', () => crypto.createPublicKey(keys.ed25519).asymmetricKeyType);
+for (const digest of ['sha1', 'sha256', 'sha384', 'sha512', 'sha3-256', 'md5']) {
+  record(`rsa sign ${digest}`, () => crypto.sign(digest, Buffer.from('message'), keys.rsa).toString('base64'));
+  record(`rsa verify ${digest}`, () => crypto.verify(digest, Buffer.from('message'), crypto.createPublicKey(keys.rsa), crypto.sign(digest, Buffer.from('message'), keys.rsa)));
+}
+record('rsa sign stream', () => crypto.createSign('SHA256').update('a').update('b').sign(keys.rsa, 'hex'));
+record('rsa verify tampered', () => crypto.verify('sha256', Buffer.from('message!'), keys.rsa, crypto.sign('sha256', Buffer.from('message'), keys.rsa)));
+for (const saltLength of [undefined, 0, 32]) record(`rsa pss ${saltLength}`, () => { const s = crypto.sign('sha256', Buffer.from('m'), { key: keys.rsa, padding: crypto.constants.RSA_PKCS1_PSS_PADDING, saltLength }); return [s.length, crypto.verify('sha256', Buffer.from('m'), { key: keys.rsa, padding: crypto.constants.RSA_PKCS1_PSS_PADDING, saltLength }, s)]; });
+for (const curve of ['prime256v1', 'secp384r1', 'secp521r1', 'secp256k1']) for (const dsaEncoding of ['der', 'ieee-p1363']) record(`ecdsa ${curve} ${dsaEncoding}`, () => { const key = keys['ec-' + curve]; const s = crypto.sign('sha256', Buffer.from('m'), { key, dsaEncoding }); return [dsaEncoding === 'der' ? s[0] : s.length, crypto.verify('sha256', Buffer.from('m'), { key, dsaEncoding }, s), crypto.verify('sha256', Buffer.from('x'), { key, dsaEncoding }, s)]; });
+record('ed25519 sign', () => { const s = crypto.sign(null, Buffer.from('m'), keys.ed25519); return [s.toString('hex'), crypto.verify(null, Buffer.from('m'), keys.ed25519, s), crypto.verify(null, Buffer.from('n'), keys.ed25519, s)]; });
+record('x25519 derive', () => crypto.diffieHellman({ privateKey: crypto.createPrivateKey(keys.x25519), publicKey: crypto.createPublicKey(keys.x25519b) }).toString('hex'));
+record('ecdh derive', () => crypto.diffieHellman({ privateKey: crypto.createPrivateKey(keys['ec-prime256v1']), publicKey: crypto.createPublicKey(keys['ec-prime256v1-b']) }).toString('hex'));
+record('ecdh curve mismatch', () => crypto.diffieHellman({ privateKey: crypto.createPrivateKey(keys['ec-prime256v1']), publicKey: crypto.createPublicKey(keys['ec-secp384r1']) }));
+for (const [padding, oaepHash] of [[crypto.constants.RSA_PKCS1_OAEP_PADDING, undefined], [crypto.constants.RSA_PKCS1_OAEP_PADDING, 'sha256'], [crypto.constants.RSA_NO_PADDING, undefined]]) record(`rsa crypt ${padding} ${oaepHash}`, () => { const data = padding === crypto.constants.RSA_NO_PADDING ? Buffer.alloc(256, 1) : Buffer.from('secret'); const enc = crypto.publicEncrypt({ key: keys.rsa, padding, oaepHash }, data); return [enc.length, crypto.privateDecrypt({ key: keys.rsa, padding, oaepHash }, enc).equals(data)]; });
+record('rsa privateEncrypt', () => { const enc = crypto.privateEncrypt(keys.rsa, Buffer.from('hello')); return [enc.toString('base64'), crypto.publicDecrypt(keys.rsa, enc).toString()]; });
+record('generate rsa', () => { const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 1024 }); return [publicKey.asymmetricKeyDetails, crypto.verify('sha256', Buffer.from('m'), publicKey, crypto.sign('sha256', Buffer.from('m'), privateKey))]; });
+for (const type of ['ec', 'ed25519', 'x25519']) record(`generate ${type}`, () => { const { publicKey, privateKey } = crypto.generateKeyPairSync(type, { namedCurve: 'P-256' }); return [publicKey.asymmetricKeyType, privateKey.asymmetricKeyDetails]; });
+record('generate pem encodings', () => { const { publicKey, privateKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'secp384r1', publicKeyEncoding: { type: 'spki', format: 'pem' }, privateKeyEncoding: { type: 'sec1', format: 'pem' } }); return [publicKey.split('\n')[0], privateKey.split('\n')[0]]; });
+record('jwk import', () => { const jwk = crypto.createPrivateKey(keys['ec-prime256v1']).export({ format: 'jwk' }); return sha(crypto.createPrivateKey({ key: jwk, format: 'jwk' }).export({ type: 'pkcs8', format: 'der' })); });
+record('getCurves has', () => ['prime256v1', 'secp384r1', 'secp521r1', 'secp256k1'].map(c2 => crypto.getCurves().includes(c2)));
+record('ecdh object', () => { const a = crypto.createECDH('prime256v1'), b = crypto.createECDH('prime256v1'); a.setPrivateKey(Buffer.alloc(32, 7)); b.setPrivateKey(Buffer.alloc(32, 9)); return [a.getPublicKey('hex'), a.getPublicKey('hex', 'compressed'), a.computeSecret(b.getPublicKey()).toString('hex'), a.getPrivateKey('hex')]; });
+record('ecdh generate', () => { const a = crypto.createECDH('secp384r1'); a.generateKeys(); const b = crypto.createECDH('secp384r1'); b.generateKeys(); return a.computeSecret(b.getPublicKey()).equals(b.computeSecret(a.getPublicKey())); });
+record('ecdh convertKey', () => crypto.ECDH.convertKey(crypto.createECDH('prime256v1').setPrivateKey(Buffer.alloc(32, 3)) ?? crypto.createECDH('prime256v1'), 'prime256v1'));
+record('ecdh bad curve', () => crypto.createECDH('nope'));
+record('dh group', () => { const a = crypto.getDiffieHellman('modp14'), b = crypto.getDiffieHellman('modp14'); a.generateKeys(); b.generateKeys(); return [a.verifyError, a.getPrime('hex').length, a.getGenerator('hex'), a.computeSecret(b.getPublicKey()).equals(b.computeSecret(a.getPublicKey()))]; });
+record('dh legacy group', () => { const a = crypto.getDiffieHellman('modp2'); a.setPrivateKey(Buffer.alloc(32, 5)); a.generateKeys(); return a.getPublicKey('hex'); });
+record('dh custom', () => { const prime = crypto.getDiffieHellman('modp5').getPrime(); const a = crypto.createDiffieHellman(prime, Buffer.from([2])); return [a.verifyError, a.getPrime().equals(prime)]; });
+for (const type of ['ed448', 'x448']) record(`generate ${type}`, () => { const { publicKey, privateKey } = crypto.generateKeyPairSync(type); return [publicKey.asymmetricKeyType, privateKey.export({ format: 'der', type: 'pkcs8' }).length, publicKey.export({ format: 'der', type: 'spki' }).length]; });
+record('ed448 sign', () => { const { publicKey, privateKey } = crypto.generateKeyPairSync('ed448'); const s = crypto.sign(null, Buffer.from('m'), privateKey); return [s.length, crypto.verify(null, Buffer.from('m'), publicKey, s)]; });
+record('x448 derive', () => { const a = crypto.generateKeyPairSync('x448'), b = crypto.generateKeyPairSync('x448'); return crypto.diffieHellman({ privateKey: a.privateKey, publicKey: b.publicKey }).equals(crypto.diffieHellman({ privateKey: b.privateKey, publicKey: a.publicKey })); });
+for (const name of ['des-ede3-cbc', 'des-ede3']) record(`cipher ${name}`, () => { const c = crypto.createCipheriv(name, key(24), name === 'des-ede3' ? null : iv(8)); const enc = Buffer.concat([c.update(big), c.final()]); const d = crypto.createDecipheriv(name, key(24), name === 'des-ede3' ? null : iv(8)); return [sha(enc), Buffer.concat([d.update(enc), d.final()]).equals(big)]; });
+for (const name of ['id-aes128-wrap', 'aes256-wrap', 'id-aes192-wrap-pad']) record(`cipher ${name}`, () => { const k = key(name.includes('128') ? 16 : name.includes('192') ? 24 : 32); const ivv = name.endsWith('pad') ? Buffer.from('a65959a6', 'hex') : Buffer.from('a6a6a6a6a6a6a6a6', 'hex'); const data = Buffer.alloc(name.endsWith('pad') ? 20 : 32, 0x11); const c = crypto.createCipheriv(name, k, ivv); const enc = Buffer.concat([c.update(data), c.final()]); const d = crypto.createDecipheriv(name, k, ivv); return [enc.toString('hex'), Buffer.concat([d.update(enc), d.final()]).equals(data)]; });
+record('ccm', () => { const c = crypto.createCipheriv('aes-128-ccm', key(16), iv(12), { authTagLength: 16 }); c.setAAD(Buffer.from('aad'), { plaintextLength: 5 }); const enc = Buffer.concat([c.update('hello'), c.final()]); const tag = c.getAuthTag(); const d = crypto.createDecipheriv('aes-128-ccm', key(16), iv(12), { authTagLength: 16 }); d.setAuthTag(tag); d.setAAD(Buffer.from('aad'), { plaintextLength: 5 }); return [enc.toString('hex'), tag.toString('hex'), Buffer.concat([d.update(enc), d.final()]).toString()]; });
 let pending = 0;
 function later(name, start) { pending++; start((e, v) => { out.push(e ? { name, error: { code: e.code, message: e.message } } : { name, value: v }); if (--pending === 0) finish(); }); }
 later('pbkdf2 async', cb => crypto.pbkdf2('p', 's', 10, 16, 'sha256', (e, k) => cb(e, k && k.toString('hex'))));
 later('scrypt async', cb => crypto.scrypt('p', 's', 16, (e, k) => cb(e, k && k.toString('hex'))));
 later('hkdf async', cb => crypto.hkdf('sha256', 'k', 's', 'i', 16, (e, k) => cb(e, k && Buffer.from(k).toString('hex'))));
 later('randomBytes async', cb => crypto.randomBytes(16, (e, b) => cb(e, b && b.length)));
+later('keygen async', cb => crypto.generateKeyPair('ed25519', (e, pub, priv) => cb(e, pub && [pub.asymmetricKeyType, priv.type])));
+later('subtle ecdsa', cb => crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']).then(async k => { const s = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, k.privateKey, Buffer.from('m')); return [s.byteLength, await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, k.publicKey, s, Buffer.from('m'))]; }).then(v => cb(null, v), cb));
 later('subtle digest', cb => crypto.subtle.digest('SHA-384', Buffer.from('abc')).then(d => cb(null, Buffer.from(d).toString('hex')), cb));
-function finish() { for (const line of out) console.log(JSON.stringify(line)); }
+function finish() { for (const line of out) console.log(JSON.stringify(line, (k, v) => typeof v === "bigint" ? `${v}n` : v)); }
