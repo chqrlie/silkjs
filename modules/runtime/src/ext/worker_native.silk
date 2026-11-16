@@ -63,8 +63,25 @@ unsafe extern "C" fn pthread_attr_setdetachstate(attributes: *mut u8, state: i32
 unsafe extern "C" fn pthread_attr_destroy(attributes: *mut u8) -> i32
 @threadCallbacks("start")
 unsafe extern "C" fn pthread_create(thread: *mut usize, attributes: ?*const u8, start: extern "C" fn(?*mut u8) -> ?*mut u8, argument: ?*mut u8) -> i32
-@foreign(noCapture: .("name"))
-unsafe extern "C" fn uv_thread_setname(name: *const u8) -> i32
+// A thread's name, as libuv's uv_thread_setname sets it (the loop plan): at most 15 bytes on
+// Linux, whose pthread_setname_np takes the thread; on macOS, the calling thread's.
+static if Intrinsic.targetOperatingSystem() == "darwin" {
+  @foreign(noCapture: .("name"))
+  unsafe extern "C" fn pthread_setname_np(name: *const u8) -> i32
+} else {
+  unsafe extern "C" fn pthread_self() -> usize
+  @foreign(noCapture: .("name"))
+  unsafe extern "C" fn pthread_setname_np(thread: usize, name: *const u8) -> i32
+}
+unsafe fn setThreadName(name: &[u8; 64]) -> i32 {
+  let mut short: [u8; 64] = [0; 64]
+  let mut limit: usize = 15
+  static if Intrinsic.targetOperatingSystem() == "darwin" { limit = 63 }
+  let mut i: usize = 0
+  while i < limit && name[i] != 0 { short[i] = name[i] i = i + 1 }
+  static if Intrinsic.targetOperatingSystem() == "darwin" { return unsafe pthread_setname_np(Pointer.fromRef<u8>(&short[0])) }
+  else { return unsafe pthread_setname_np(unsafe pthread_self(), Pointer.fromRef<u8>(&short[0])) }
+}
 pub struct State { pub group: Group, pub id: u32, pub control: u32, pub metadata: List<u8>, io: ?*mut fs_async.State, setup: ThreadSetup, held: bool, signalGuards: ?*mut SignalGuard, nextSignalGuard: u32, diagnostics: Option<Mailbox>, embedded: bool }
 pub struct Start { pub group: Group, pub id: u32, pub control: u32, pub metadata: List<u8>, name: [u8; 64] }
 struct SignalGuard { next: ?*mut SignalGuard, id: u32, watcher: Arc<vm_interrupt.Service>, slot: vm_interrupt.Slot }
@@ -332,7 +349,7 @@ pub fn threadCapabilities<C: Composition>(start: &Start) -> C {
 pub export "C" fn silkNodeWorkerEntry<C: Composition>(raw: ?*mut u8) -> ?*mut u8 {
   let pointer = unsafe Intrinsic.pointerReinterpret<*mut u8, *mut Start>(unsafe nonnull(raw))
   let packet = unsafe Pointer.take<Start>(pointer) unsafe resources.release(raw)
-  let _ignored = unsafe uv_thread_setname(Pointer.fromRef<u8>(&packet.name[0]))
+  let _ignored = unsafe setThreadName(&packet.name)
   let group = packet.group.clone() let id = packet.id
   let cpu = unsafe Cpu.current()
   let guard = group.registry.get().lock() let mut anchor = ()

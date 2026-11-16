@@ -99,7 +99,7 @@ unsafe effect fn spawn<'m,S:EngineServices>(engine:&mut Engine<'m,S>,context:*mu
   let mut i:i32=0 while i<count { run parents.fds.append(-1) run children.fds.append(-1) run stdio.append(abi.Stdio { flags:0,data:0 }) i=i+1 }
   i=0 while i<count {
     let descriptor=run unsafe owners.getIndex(&mut engine,context,args.values[4],i32.toU32(i)) let fd=number(descriptor) unsafe owners.release(&mut engine,context,descriptor) let index=i32.toUsize(i)
-    if fd==-1 { let mut pair:[i32;2]=[-1;2] if unsafe abi.socketpair(1,1,0,Pointer.fromMutRef<i32>(&mut pair[0]))<0 { return ValueBits.Int { value:unsafe uv.uv_translate_sys_error(unsafe platform.errno()) } }
+    if fd==-1 { let mut pair:[i32;2]=[-1;2] if unsafe abi.socketpair(1,1,0,Pointer.fromMutRef<i32>(&mut pair[0]))<0 { return ValueBits.Int { value:0-unsafe platform.errno() } }
       let parentFds=parents.fds.asMutSlice() parentFds[index]=pair[0] drop parentFds
       let childFds=children.fds.asMutSlice() childFds[index]=pair[1] drop childFds
       let _ignored=unsafe net.fcntl(pair[0],2,1) let _ignored2=unsafe net.fcntl(pair[1],2,1)
@@ -170,7 +170,7 @@ unsafe effect fn acquireSignalService(state:*mut State)->i32 !OutOfMemoryError {
     }
     Result<Arc<Service>,OutOfMemoryError|vm_interrupt.StartError>.Failure { error }=>match move error {
       OutOfMemoryError {}=>{ fail OutOfMemoryError {} }
-      vm_interrupt.StartError { code }=>if code<0 { code } else { unsafe uv.uv_translate_sys_error(code) }
+      vm_interrupt.StartError { code }=>if code<0 { code } else { 0-code }
     }
   }
 }
@@ -414,7 +414,7 @@ unsafe effect fn ipcTransfer<'m,S:EngineServices>(engine:&mut Engine<'m,S>,conte
   let mut n:isize=0
   if writing { control.fd=number(args.values[4]) if control.fd<0 { message.control=Pointer.null<u8>() message.controlLength=0 } n=unsafe abi.sendmsg(fd,Pointer.fromRef<abi.Message>(&message),abi.noSignal()) }
   else { n=unsafe abi.recvmsg(fd,Pointer.fromMutRef<abi.Message>(&mut message),0) }
-  if n<0 { return ValueBits.Int { value:unsafe uv.uv_translate_sys_error(unsafe platform.errno()) } }
+  if n<0 { return ValueBits.Int { value:0-unsafe platform.errno() } }
   if writing { return ValueBits.number(isize.toF64(n)) }
   let mut received:i32=-1 if message.controlLength>=16 && control.level==abi.socketLevel() && control.kind==1 { received=control.fd let _ignored=unsafe net.fcntl(received,2,1) }
   let memory=engine.memory let buffer=run unsafe buffers.newArrayBufferCopy(&mut engine,memory,unsafe lendRealm(&context, context),data,isize.toU64(n))

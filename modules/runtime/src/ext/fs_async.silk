@@ -133,10 +133,12 @@ pub effect fn make() -> *mut State ! OutOfMemoryError ? &mut Allocator {
   let made = run Effect.result(Reactor.make())
   let mut reactor = match move made {
     Result<Reactor, ReactorError | OutOfMemoryError>.Success { value } => move value
-    Result<Reactor, ReactorError | OutOfMemoryError>.Failure { .. } => Intrinsic.trap("the runtime reactor cannot be opened")
+    // Out of descriptors (EMFILE, as a worker started under a low `ulimit -n` can be): the
+    // runtime cannot start, which a worker reports as ERR_WORKER_INIT_FAILED.
+    Result<Reactor, ReactorError | OutOfMemoryError>.Failure { .. } => { let _ignored = unsafe uv_loop_close(loop) unsafe free(loop) unsafe free(raw) fail OutOfMemoryError {} }
   }
   let registered = run Effect.result(reactor.register(unsafe uv_backend_fd(loop), LIBUV_TOKEN, Interest.readOnly()))
-  if let Result<(), ReactorError>.Failure { .. } = move registered { Intrinsic.trap("libuv's backend descriptor cannot join the runtime reactor") }
+  if let Result<(), ReactorError>.Failure { .. } = move registered { let _ignored = unsafe uv_loop_close(loop) unsafe free(loop) unsafe free(raw) fail OutOfMemoryError {} }
   let anchorMemory = unsafe calloc(1, unsafe uv_handle_size(1))
   if Pointer.isNull<u8>(anchorMemory) { let _ignored = unsafe uv_loop_close(loop) unsafe free(loop) unsafe free(raw) fail OutOfMemoryError {} }
   let loopAnchor = unsafe nonnull(anchorMemory)
