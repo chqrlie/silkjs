@@ -18,7 +18,7 @@ declarations, the libc and library surface each service reaches today. Requires 
 | Files | 18 | 238.9 | 76 | 40 | 5 | 81.2 | 49 |
 | Network | 45 | 1,423.8 | 275 | 64 | 4 | 255.4 | 107 |
 | Processes | 10 | 88.4 | 50 | 14 | 3 | 68.5 | 60 |
-| SystemInfo | 2 | 8.5 | 5 | 2 | 2 | 37.6 | 56 |
+| SystemInfo | 2 | 8.5 | 5 | 2 | 2 | 42.6 | 31 |
 | Workers | 6 | 47.8 | 15 | 21 | 4 | 117.0 | 24 |
 | Crypto | 28 | 454.0 | 159 | 55 | 3 | 164.5 | 285 |
 | Tls | 12 | 316.2 | 44 | 10 | 5 | 223.8 | 218 |
@@ -31,7 +31,7 @@ declarations, the libc and library surface each service reaches today. Requires 
 | Inspector | 15 | 83.7 | 30 | 24 | 6 | 78.8 | 18 |
 | NativeAddons | 1 | 10.6 | 0 | 7 | 4 | 221.9 | 205 |
 | Executable | 47 | 577.1 | 323 | 35 | 6 | 40.2 | 21 |
-| **Total** | 562 | 11,135.8 | 2050 | 687 | 159 | 3,425.9 | 1593 |
+| **Total** | 562 | 11,135.8 | 2050 | 687 | 159 | 3,430.8 | 1568 |
 
 ## Linked size
 
