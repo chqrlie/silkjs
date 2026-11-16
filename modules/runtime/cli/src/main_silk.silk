@@ -7,6 +7,8 @@ import silk.system.host_input { HostInput }
 import silkcompress.silk_compression { SilkCompression }
 import silkhttp.silk_http { SilkHttp }
 import silkhttp2.silk_http2 { SilkHttp2 }
+// Crypto stays OpenSSL's here until SilkCrypto (./silkcrypto) has keys and signatures.
+import openssl.openssl_capabilities { OpenSslCrypto }
 import main as executable
 
-pub effect fn main() -> i32 ? &mut HostInput { return run executable.mainWith(SilkCompression.make(), SilkHttp2.make(), SilkHttp.make()) }
+pub effect fn main() -> i32 ? &mut HostInput { return run executable.mainWith(SilkCompression.make(), SilkHttp2.make(), OpenSslCrypto.make(), SilkHttp.make()) }
