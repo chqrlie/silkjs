@@ -64,17 +64,31 @@ jobs:
           function f() { n++; if (performance.now() - t0 < 4000) setImmediate(f); else console.log(`setImmediate ${Math.round(n / 4)} turns/s`); }
           setImmediate(f);
           EOF
-          for round in 1 2; do
-            for name in df9c30baf2b211c60153eea8807e1206cbedb409 branch; do
+          for round in 1 2 3 4 5 6 7 8 9 10 11 12; do
+            names="df9c30baf2b211c60153eea8807e1206cbedb409 branch"
+            [ $((round % 2)) -eq 0 ] && names="branch df9c30baf2b211c60153eea8807e1206cbedb409"
+            for name in $names; do
               bin="$RUNNER_TEMP/bin/profile-silkjs-$name/silkjs"
               SILKJS_PREPARSE_THREADS=0 "$bin" "$RUNNER_TEMP/imm4.js" > "$RUNNER_TEMP/out-$name-$round.txt" &
               pid=$!
               sleep 0.5
-              sample $pid 2 -file "$RUNNER_TEMP/sample-$name-$round.txt" > /dev/null 2>&1 || true
+              [ $round -le 2 ] && { sample $pid 2 -file "$RUNNER_TEMP/sample-$name-$round.txt" > /dev/null 2>&1 || true; }
               wait $pid
               echo "== $name round $round: $(cat "$RUNNER_TEMP/out-$name-$round.txt")"
             done
           done
+          python3 - "$RUNNER_TEMP" <<'PY'
+          import glob, re, statistics, sys
+          values = {}
+          for path in sorted(glob.glob(sys.argv[1] + '/out-*.txt')):
+              name, number = re.match(r'.*/out-(.+)-(\d+)\.txt', path).groups()
+              match = re.search(r'(\d+) turns', open(path).read())
+              values.setdefault(name, {})[int(number)] = int(match.group(1)) if match else 0
+          base, branch = values['df9c30baf2b211c60153eea8807e1206cbedb409'], values['branch']
+          rounds = sorted(base)
+          wins = sum(1 for r in rounds if branch[r] >= base[r])
+          print(f'setImmediate turns/s, median of {len(rounds)} rounds: main df9c30b {statistics.median(base.values()):.0f}, branch {statistics.median(branch.values()):.0f}; branch at least as fast in {wins} of {len(rounds)} rounds')
+          PY
           for name in df9c30baf2b211c60153eea8807e1206cbedb409 branch; do
             echo "=================== $name: top of stack (round 2)"
             sed -n '/Sort by top of stack/,/Binary Images/p' "$RUNNER_TEMP/sample-$name-2.txt" | head -40
