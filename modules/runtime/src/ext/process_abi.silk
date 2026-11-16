@@ -1,20 +1,8 @@
-//! POSIX process ABI, and libuv's signal handles and loop storage until the loop plan's last step;
-//! callbacks never enter JavaScript.
-import silk.mem.pointer { Pointer }
+//! POSIX process ABI: socket pairs, descriptors and descriptor passing for child processes and
+//! their IPC channels.
 import silk.core.ownership { Drop }
 import silk.collections.list { List }
 import silk.num.i32
-import ext.uv_net as net
-pub type SignalCallback = extern "C" fn(*mut u8,i32)->()
-pub unsafe extern "C" fn uv_signal_init(loop:*mut u8,handle:*mut u8)->i32
-@deferredCallbacks("callback")
-pub unsafe extern "C" fn uv_signal_start(handle:*mut u8,callback:SignalCallback,signal:i32)->i32
-pub unsafe extern "C" fn uv_signal_stop(handle:*mut u8)->i32
-pub unsafe extern "C" fn uv_loop_size()->usize
-@foreign(noCapture: .("loop"))
-pub unsafe extern "C" fn uv_loop_init(loop:*mut u8)->i32
-@foreign(noCapture: .("loop"))
-pub unsafe extern "C" fn uv_loop_close(loop:*mut u8)->i32
 pub unsafe extern "C" fn socketpair(domain:i32,kind:i32,protocol:i32,fds:*mut i32)->i32
 pub unsafe extern "C" fn close(fd:i32)->i32
 @foreign(noCapture: .("buffer"))
@@ -41,5 +29,3 @@ static if Intrinsic.targetOperatingSystem()=="darwin" {
 @foreign(noCapture: .("message"))
 pub unsafe extern "C" fn sendmsg(fd:i32,message:*const Message,flags:i32)->isize
 pub unsafe extern "C" fn recvmsg(fd:i32,message:*mut Message,flags:i32)->isize
-pub struct LoopStorage { pub pointer:?*mut u8 }
-impl Drop for LoopStorage { fn drop(self:&mut Self)->() { if !Pointer.isNull<u8>(self.pointer) { let loop=unsafe Intrinsic.pointerRequalify<?*mut u8,*mut u8>(self.pointer) let _ignored=unsafe uv_loop_close(loop) unsafe net.free(loop) } } }

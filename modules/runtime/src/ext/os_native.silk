@@ -454,8 +454,9 @@ unsafe effect fn dispatchBody<'m,S:EngineServices>(engine:&mut Engine<'m,S>,cont
       }
     }
   } else if fs.equal(op,b"componentVersions") {
-    // libuv's: each library capability answers for its own (a call of its native with no arguments).
-    run unsafe pushText(&mut engine,context,output,&mut index,unsafe abi.uv_version_string())
+    // process.versions.uv: the libuv of the Node release the runtime follows, whose loop semantics
+    // the runtime keeps without libuv (the loop plan); each library capability answers for its own.
+    run unsafe pushText(&mut engine,context,output,&mut index,Pointer.fromRef<u8>(&b"1.51.0\0"[0]))
   } else if fs.equal(op,b"uname") {
     let got=run Effect.result(SystemInfo.kernel()) |> Effect.provideMut<SystemInfo>(&mut info)
     let kernel=match move got {

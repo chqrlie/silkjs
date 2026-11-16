@@ -72,7 +72,7 @@ effect fn report(out: &mut List<u8>, id: u32, stack: &[u8], heap: usize, externa
   run json.raw(&mut out, b"],\"silkjs\":{\"snapshotStatus\":\"available\",\"heapAccounting\":\"live allocator charges, not V8 arenas\"}}")
 }
 
-unsafe effect fn capture<'m, S: EngineServices>(engine: &mut Engine<'m, S>, context: *mut HeapHeader, loop: *mut u8, mailbox: Mailbox, generation: u64, scope: &mut Scope) -> () ! OutOfMemoryError | StringLengthError | JsException ? &mut Allocator {
+unsafe effect fn capture<'m, S: EngineServices>(engine: &mut Engine<'m, S>, context: *mut HeapHeader, loop: *mut loops.State, mailbox: Mailbox, generation: u64, scope: &mut Scope) -> () ! OutOfMemoryError | StringLengthError | JsException ? &mut Allocator {
   let rt = unsafe runtime.contextRuntime(context)
   // Read the accounting before allocating report formatting scratch storage.
   let charged = engine.memory.stats().usedBytes
@@ -91,7 +91,7 @@ unsafe effect fn capture<'m, S: EngineServices>(engine: &mut Engine<'m, S>, cont
 /// Call at EngineServices.debugger CONTROL/interrupt and before/after blocking
 /// event-loop polling. The no-request path is one atomic load.
 /// Errors belong to the request, never the interrupted JavaScript execution.
-pub unsafe effect fn pumpSnapshot<'m, S: EngineServices>(engine: &mut Engine<'m, S>, context: *mut HeapHeader, loop: *mut u8, mailbox: Mailbox) -> () ? &mut Allocator {
+pub unsafe effect fn pumpSnapshot<'m, S: EngineServices>(engine: &mut Engine<'m, S>, context: *mut HeapHeader, loop: *mut loops.State, mailbox: Mailbox) -> () ? &mut Allocator {
   let generation = unsafe hub.pending(mailbox)
   if generation == 0 { return }
   let rt = unsafe runtime.contextRuntime(context)

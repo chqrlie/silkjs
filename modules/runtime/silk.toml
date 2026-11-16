@@ -11,10 +11,9 @@ kind = "library"
 silk-version = "0.1.0-dev.78+e02346fdb3aa"
 
 [dependencies]
-# The engine, from this repository's modules/engine.
+# The engine, from this repository's modules/engine. The core links no C library: its loop is
+# silk.io.reactor's (docs/composable-runtime.md, the loop plan); libuv is ./napi's and ./wamr's.
 silkjs = { path = "../engine" }
-# The C libraries Node builds with, each compiled by Silk from its pinned release (../native).
-libuv = { path = "../native/libuv", package = "silkjs-libuv" }
 
 # The runtime's own C. builtin_sources.c embeds the built-in JavaScript (tools/embed.py).
 # tools/build.py links the executable with the built-ins' bytecode and a build identity besides.

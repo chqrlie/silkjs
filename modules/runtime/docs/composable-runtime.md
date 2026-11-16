@@ -208,7 +208,7 @@ pub service Binding {
 | --- | --- | --- |
 | `silkjs` (engine) | Unchanged. The runtime stops importing its `js_std` and `js_os` libc modules | None |
 | `silkjsruntime-core` | `Runtime`, the loop and immediates, bootstrap, loader, every service contract and every empty implementation, the registry of id blocks, the Node surface over the resource services (`fs`, `net`, `dgram`, `dns`, `child_process`, `os`, `worker_threads`, fetch, WebSocket), and the JavaScript with no outside dependency: `events`, `buffer`, `util`, `path`, `url`, `stream`, `timers`, `assert`, `console`, `string_decoder`, `querystring`, `async_hooks`, `diagnostics_channel`, `vm`, `module`, `process` | None |
-| `silkjsruntime-os` | `OsPlatform`, `OsFiles`, `OsNetwork`, `OsProcesses`, `OsSystemInfo`, `ThreadWorkers`, the reactor and blocking pool | libc; libuv until the loop plan removes it |
+| `silkjsruntime-os` | `OsPlatform`, `OsFiles`, `OsNetwork`, `OsProcesses`, `OsSystemInfo`, `ThreadWorkers`, the reactor and blocking pool | libc (libuv left with the loop plan) |
 | `silkjsruntime-memory` | `MemoryFiles`, `FixedPlatform`, `FixedSystemInfo`, bundle module storage | None |
 | `silkjsruntime-openssl` | `OpenSslCrypto`, `OpenSslTls` | OpenSSL |
 | `silkjsruntime-compress` | `NativeCompression` | zlib, zstd, brotli |
@@ -740,9 +740,9 @@ expected output and its symbol checks (`silk task symbols`). The executable is t
   packages do. The 15 that take a callback cannot be taken as values, so a program that loads
   addons exports those itself (`cli/src/napi_exports.silk`); the compiler change that makes every
   loaded dependency's exports roots, done in Silk and waiting for a release, removes that file.
-- libuv stays in the core until the loop plan replaces it; `OsFiles`, `OsNetwork`,
-  `OsProcesses`, `OsSystemInfo` and `ThreadWorkers` stay with it for now (a `silkjsruntime-os`
-  package once libuv is gone, so that the core touches no libc).
+- The loop plan took libuv out of the core; `OsFiles`, `OsNetwork`, `OsProcesses`,
+  `OsSystemInfo` and `ThreadWorkers` stay in it for now (a `silkjsruntime-os` package next, so
+  that the core touches no libc).
 - The heap image is now an embedder's too. An embedder whose process ends with the runtime says
   so (`Options.ownsProcess`), and gets the executable's image modes: it starts from an image
   appended to its program, and `--silk-write-heap-image PATH` as its second argument writes one.
@@ -902,16 +902,16 @@ executable with the C libraries, runs the compression and crypto differentials a
 parser differential against llhttp, Node's HTTP/2 tests and the compatibility suite.
 
 What is left of step 8 is moving `SilkTls` into `main_silk.silk` when the toolchain has
-`silk.tls`'s deferred verification, the gaps of `SilkCrypto` and `SilkTls` listed with them, and
-libuv, which stays in the core until the loop plan replaces it.
+`silk.tls`'s deferred verification, and the gaps of `SilkCrypto` and `SilkTls` listed with them.
+libuv left the core with the loop plan, below.
 
 ### The loop plan: libuv out of the runtime
 
-libuv is the last vendored library every build links. It is not one library service: the event
-loop itself is libuv's (`fs_async` runs a `silk.io.reactor` Reactor with libuv's loop as a guest),
+libuv was the last vendored library every build linked. It was not one library service: the event
+loop itself was libuv's (`fs_async` ran a `silk.io.reactor` Reactor with libuv's loop as a guest),
 and files, sockets, terminals, child processes, signals and the facts about the computer each
-reach it from their own modules. It leaves area by area, each moved onto the standard library and
-measured against Node's tests for that area, and the loop goes last, when nothing else needs it:
+reached it from their own modules. It left area by area, each moved onto the standard library and
+measured against Node's tests for that area, and the loop went last, when nothing else needed it:
 
 | Step | Area | libuv today | In its place | Measured by |
 | ---: | --- | --- | --- | --- |
@@ -923,21 +923,53 @@ measured against Node's tests for that area, and the loop goes last, when nothin
 | 6 | Sockets, pipes and terminals | none: `net_native` is `silk.net.socket_native`, `silk.net.datagram_native` and the reactor's; `uv_net` kept only unused declarations | (done: the declarations are gone) | `test-net-*`, `test-dgram-*`, `test-tty-*`, `test-http-*` |
 | 7 | The loop and its handles | `fs_async` (the guest loop, `uv_async_*`, `uv_fs_event_*` for `fs.watch`, `uv_fs_poll_*` for `fs.watchFile`, idle-time metrics), `vm_interrupt` (its signal loop), `process_native` (the handles of step 4), `resource_snapshot` and `host` (handle bookkeeping, `uv_walk`, `uv_metrics_info`) | `silk.io.reactor` alone: the runtime's own handle table (kind, reference, active, closing) for liveness, `process.getActiveResourcesInfo` and loop metrics; wakeups through the reactor's waker; inotify and kqueue descriptors, and a timer with `stat`, for the watchers | the whole suite |
 
-Then `modules/native/libuv` goes, with uvwasi, which WASI's `preopens` replace with the `Files`
-service (step 4 of the migration plan). The Os* implementations move to `silkjsruntime-os`, and
-the core touches no libc. `process.versions.uv` is libuv's version while any of it is linked.
+All seven steps are done: the core links no libuv, and its loop is `silk.io.reactor` alone.
 
-Steps 1 to 3 are done. `os_native` reads `silk.system.system_info`, with libuv's semantics kept
-where the two differ, and every `os` and `process` fact a probe reads matches Node; `spawnSync`
-times with the engine's monotonic clock; `ext/inet` converts addresses (`silk test --root
-src/inet_tests.silk`). Node's `os` and `process` tests pass as with libuv (94 of the 98 that pass
-under Node), its DNS, `spawnSync` and `exec` tests all pass (59 of 59), and the compatibility suite
-passes. Steps 5 and 6 needed no move: file requests and sockets were already off libuv, which only
-kept unused declarations, now deleted; `uv_thread_setname` is `pthread_setname_np` (as libuv
-truncates the name). What remains is libuv's loop and the handles that live on it: step 4's
-process-exit, signal and IPC-poll handles (`process_native`; a child's standard streams are
-already sockets), and step 7's. They leave together, as the runtime's own handle table on the
-reactor replaces libuv's.
+- Steps 1 to 3. `os_native` reads `silk.system.system_info`, with libuv's semantics kept where the
+  two differ, and every `os` and `process` fact a probe reads matches Node; `spawnSync` times with
+  the engine's monotonic clock; `ext/inet` converts addresses (`silk test --root
+  src/inet_tests.silk`). Steps 5 and 6 needed no move: file requests and sockets were already off
+  libuv, which only kept unused declarations, now deleted; `uv_thread_setname` is
+  `pthread_setname_np` (as libuv truncates the name).
+- Step 4. A child starts with `ext/spawn_sync`'s `posix_spawn`, as `spawnSync`'s do. Its exit is a
+  `silk.system.subprocess` `ExitWatch` (a pidfd on Linux, a kqueue `EVFILT_PROC` on Darwin) in the
+  reactor, reported once, as libuv's exit callback was; an IPC channel's descriptor joins the
+  reactor in place of a `uv_poll` handle; `kill` is kill(2). As libuv's child does, an inherited
+  standard descriptor is made blocking before the child starts.
+- Signals. One `silk.system.signal_watch` per runtime holds every signal with a listener (and
+  SIGUSR1 for the inspector's activation) as a reactor descriptor. SIGINT goes through
+  `ext/vm_interrupt`'s broker, which watches it on a thread with a reactor of its own while an
+  execution (`breakOnSigint`, the REPL) or a listener is registered, marks the newest execution or
+  counts the signal for each listener, and wakes the listener's loop through its `Waker` (in place
+  of `uv_async_send`). Callbacks run in the order the events arrived, as libuv's. A watched signal
+  is blocked (Linux) in the thread that adds it, the main thread, so each thread the runtime starts
+  (the blocking pool, workers, the broker, the engine's pre-parse helpers) starts and stays with
+  process signals blocked (`ext/thread_signals`): they reach the main thread or its watch, and a
+  signal without a listener takes its default action, as in Node.
+- Step 7. `fs.watch` is an inotify instance (Linux) or a kqueue `EVFILT_VNODE` filter (Darwin) for
+  each watcher (`ext/file_watch`), with libuv's rename and change events and names; `fs.watchFile`
+  is a stat timer with libuv `fs_poll`'s rules (a change when the status differs, an error once).
+  Liveness is each executor's own references (`fs_async.hold`), `process.getActiveResourcesInfo`
+  and the report's handle list read the runtime's records, and idle time is the reactor's.
+  An N-API addon that asks `napi_get_uv_event_loop` gets a libuv loop from `silkjsruntime-napi`,
+  which runs it as the reactor's guest (`fs_async.Guest`); WASI's uvwasi links libuv in
+  `silkjsruntime-wamr`. `process.versions.uv` is 1.51.0, the libuv of the Node release the
+  runtime follows.
+
+Measured with the libuv-free build: Node's `os` and `process` tests pass as with libuv (94 of the 98
+that pass under Node), its DNS, `spawnSync` and `exec` tests all pass (59 of 59); its child
+process, worker, `fs.watch`, `fs.watchFile`, signal and `process.kill` tests pass as with libuv
+(304 of 307); 909 more (`vm`, `repl`, `process`, `report`, WASI, timers, `fs`, async hooks,
+diagnostics, trace events, `readline`, terminals and standard streams) pass as with libuv (895),
+with no test that passed before failing; and the compatibility suite passes (75 of 75). The core
+program of `tests/embed-smoke.py` defines no libuv symbol.
+
+Gaps. Darwin's `fs.watch` is kqueue's, without FSEvents' recursive watching of a directory tree. On
+Linux, a worker thread's `vm` `breakOnSigint` does not stop the process's SIGINT: the watch blocks
+SIGINT in the thread that registers, and a worker's is the only one, so the main thread takes
+it with its default action (Node interrupts the worker). `modules/native/libuv` stays for uvwasi
+and addons; it goes when WASI's `preopens` are the `Files` service (step 4 of the migration plan).
+The Os* implementations move to `silkjsruntime-os` next, so that the core touches no libc.
 
 ## Risks and decisions taken
 

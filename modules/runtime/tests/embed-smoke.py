@@ -25,7 +25,9 @@ LIBRARIES = {'WAMR': 'wasm_runtime_full_init', 'zlib': 'deflate', 'brotli': 'Bro
              'OpenSSL': 'SSL_CTX_new',
              'inspector server': 'silk_inspector_create',
              'amaro': 'silk_type_stripping_sources_linked',
-             'Node-API': 'napi_create_object'}
+             'Node-API': 'napi_create_object',
+             # libuv is WASI's (uvwasi) and addons' (Node-API), never the core's.
+             'libuv': 'uv_loop_init'}
 PROGRAMS = [
     ('embed-smoke', ROOT / 'smoke', 'src/main.silk', 'undefined', False),
     ('embed-smoke-wamr', ROOT / 'cli', 'src/embed_smoke_wamr.silk', 'object', True),

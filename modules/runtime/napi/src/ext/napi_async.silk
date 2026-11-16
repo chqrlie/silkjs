@@ -8,8 +8,8 @@
 //! A thread-safe function is a queue that any thread fills. A producer wakes the runtime reactor;
 //! [`poll`] drains the queue on the owner thread. A referenced function holds the loop open.
 //!
-//! `napi_get_uv_event_loop` returns the runtime's libuv loop, which runs as a guest of the reactor,
-//! so addon libuv handles share the one runtime loop as they do in Node.
+//! `napi_get_uv_event_loop` returns this package's libuv loop (ext/napi_loop), which runs as a guest
+//! of the runtime's reactor, so addon libuv handles share the one runtime loop as they do in Node.
 import silk.mem.allocator { Allocator, OutOfMemoryError }
 import silk.core.effect { Effect }
 import silk.core.result { Result }
@@ -22,7 +22,7 @@ import silk.io.reactor { ReactorError, Waker }
 import silk.num.usize
 import silkjsruntime.ext.blocking_pool as pool
 import silkjsruntime.ext.fs_async as loops
-import silkjsruntime.ext.uv_fs as uv
+import ext.napi_loop as addonLoop
 import ext.napi_core as napi
 import ext.napi_values as values
 
@@ -789,7 +789,9 @@ export "C" fn napi_get_uv_event_loop(env: ?*mut u8, result: ?*mut ?*mut u8) -> i
   let state = unsafe stateOf(env)
   if Pointer.isNull<Async>(state) { return unsafe status(env, GENERIC_FAILURE) }
   let a = () let s = unsafe Pointer.borrow<(), Async>(&a, unsafe nn(state)) let io = s.io drop s
-  unsafe store<?*mut u8>(result, unsafe loops.shareLoop(io))
+  let loop = unsafe addonLoop.loopOf(io)
+  if Pointer.isNull<u8>(loop) { return unsafe status(env, GENERIC_FAILURE) }
+  unsafe store<?*mut u8>(result, loop)
   return unsafe status(env, OK)
 }
 export "C" fn napi_fatal_exception(env: ?*mut u8, error: ?*mut u8) -> i32 {
@@ -866,7 +868,7 @@ pub export "C" fn silk_napi_async_close(env: *mut u8) -> () {
     let s2 = unsafe Pointer.borrow<(), Async>(&a, unsafe nn(state)) let functions = s2.functions drop s2
     if !cleanup && !more && !unsafe workPending(unsafe nn(state)) && Pointer.isNull<Function>(functions) { break }
     // Addon libuv handles, such as an async cleanup hook's timer, run on the runtime's guest loop.
-    let _ignored = unsafe uv.uv_run(unsafe loops.loopPointer(io), RUN_NOWAIT)
+    unsafe loops.runGuest(io)
     if !more { run unsafe loops.waitWork(io) }
   }
   while true {

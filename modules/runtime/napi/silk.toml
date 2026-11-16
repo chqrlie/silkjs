@@ -5,8 +5,10 @@ version = "0.1.0"
 silk-version = "0.1.0-dev.78+e02346fdb3aa"
 kind = "library"
 # `dlopen_addons` is DlopenAddons; the Node-API modules are the executable's too (cli/src/napi_exports.silk).
-exports = ["dlopen_addons", "ext.napi_async", "ext.napi_core", "ext.napi_values"]
+exports = ["dlopen_addons", "ext.napi_async", "ext.napi_core", "ext.napi_loop", "ext.napi_values"]
 
 [dependencies]
 silkjs = { path = "../../engine" }
 silkjsruntime = { path = ".." }
+# libuv, for the loop napi_get_uv_event_loop gives addons (ext/napi_loop).
+libuv = { path = "../../native/libuv", package = "silkjs-libuv" }

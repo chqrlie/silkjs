@@ -256,7 +256,7 @@ unsafe effect fn pumpControl<'m, C: Composition>(engine: &mut Engine<'m, Service
   let mailbox = match attached { Option<Mailbox>.Some { value } => value _ => { return } }
   if !Pointer.isNull<fs_async.State>(engine.services.io) {
     let io = unsafe ioState(&engine.*)
-    run unsafe diagnostics.pumpSnapshot(&mut engine, context, unsafe fs_async.loopPointer(io), mailbox)
+    run unsafe diagnostics.pumpSnapshot(&mut engine, context, io, mailbox)
   }
   run unsafe profile_transport.pump(&mut engine, context, mailbox)
   run unsafe Composition.inspectorPumpCallback(&mut engine, context, 0)

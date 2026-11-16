@@ -301,7 +301,7 @@ pins = ["silkjs-simde", "silkjs-wamr"]
 paths = ["/native/wamr/"]
 [[library]]
 name = "libuv"
-service = "Platform"
+service = "Wasm, NativeAddons"
 pins = ["silkjs-uv"]
 paths = ["/native/libuv/"]
 [[library]]

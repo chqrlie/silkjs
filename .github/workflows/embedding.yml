@@ -42,7 +42,8 @@ jobs:
       - name: The program of the core alone links no capability library
         working-directory: modules/runtime/tools/capabilities
         run: |
-          for prefix in wasm_runtime_ BrotliEncoder ZSTD_ nghttp2_ llhttp_ sqlite3_ SSL_CTX_ silk_inspector_ silk_type_stripping_sources_linked napi_create_object; do
+          # libuv (uv_loop_init) is the WAMR program's for WASI (uvwasi), never the core's.
+          for prefix in wasm_runtime_ uv_loop_init BrotliEncoder ZSTD_ nghttp2_ llhttp_ sqlite3_ SSL_CTX_ silk_inspector_ silk_type_stripping_sources_linked napi_create_object; do
             silk task symbols --binary ../../build/embed-smoke/embed-smoke --prefix "$prefix" --absent
             silk task symbols --binary ../../build/embed-smoke-wamr/embed-smoke-wamr --prefix "$prefix"
           done

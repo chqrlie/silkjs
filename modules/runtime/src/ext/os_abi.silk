@@ -17,8 +17,6 @@ pub effect fn allocate(size:usize)->Allocation !OutOfMemoryError {
   let p=unsafe calloc(1,size) if Pointer.isNull<u8>(p) { fail OutOfMemoryError {} }
   return Allocation { pointer:unsafe Intrinsic.pointerRequalify<?*mut u8,*mut u8>(p) }
 }
-// The version of libuv linked into the binary (process.versions.uv), as long as the loop uses it.
-pub unsafe extern "C" fn uv_version_string()->*const u8
 pub unsafe extern "C" fn getuid()->u32
 pub unsafe extern "C" fn geteuid()->u32
 pub unsafe extern "C" fn getgid()->u32

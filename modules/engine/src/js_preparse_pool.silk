@@ -269,7 +269,10 @@ effect fn startPool(count: usize) -> *mut Pool ! OutOfMemoryError | SpawnError ?
   while index < count {
     let helper = index
     unsafe tally(words, P_ALIVE)
-    let thread = run NativeThread.spawn(fn() -> i32 { return helperMain(handle, helper) })
+    let previous = blockHelperSignals()
+    let spawned = run Effect.result(NativeThread.spawn(fn() -> i32 { return helperMain(handle, helper) }))
+    restoreHelperSignals(move previous)
+    let thread = match move spawned { Result<JoinHandle<i32>, OutOfMemoryError | SpawnError>.Success { value } => move value Result<JoinHandle<i32>, OutOfMemoryError | SpawnError>.Failure { error } => { fail move error } }
     let mut anchor = ()
     let owner = unsafe Pointer.borrowMut<(), Pool>(&mut anchor, pool)
     run owner.handles.append(move thread)
@@ -279,7 +282,44 @@ effect fn startPool(count: usize) -> *mut Pool ! OutOfMemoryError | SpawnError ?
   return pool
 }
 
+// A helper leaves process signals to the embedder's main thread, which may hold them for a
+// signal descriptor (signalfd); one left unblocked here would take them with their default action.
+static if Intrinsic.targetOperatingSystem() == "linux" || Intrinsic.targetOperatingSystem() == "darwin" {
+  extern "C" struct HelperSignalSet { words: [u64; 16] }
+  @foreign(noCapture: .("set"))
+  unsafe extern "C" fn sigfillset(set: *mut HelperSignalSet) -> i32
+  @foreign(noCapture: .("set"))
+  unsafe extern "C" fn sigdelset(set: *mut HelperSignalSet, signal: i32) -> i32
+  @foreign(noCapture: ("set", "previous"))
+  unsafe extern "C" fn pthread_sigmask(how: i32, set: ?*const HelperSignalSet, previous: ?*mut HelperSignalSet) -> i32
+  fn helperBusError() -> i32 { static if Intrinsic.targetOperatingSystem() == "darwin" { return 10 } return 7 }
+  fn helperBlock() -> i32 { static if Intrinsic.targetOperatingSystem() == "darwin" { return 1 } return 0 }
+  fn helperSetMask() -> i32 { static if Intrinsic.targetOperatingSystem() == "darwin" { return 3 } return 2 }
+  pub struct HelperMask { set: HelperSignalSet }
+  // Blocks every signal but the faults (SIGSEGV, SIGBUS, SIGFPE, SIGILL, SIGTRAP), and returns the
+  // mask it replaced. A helper starts with its creator's mask, so the pool blocks them around the
+  // start too: no signal reaches a helper before it blocks them itself.
+  fn blockHelperSignals() -> HelperMask {
+    let mut previous = HelperMask { set: HelperSignalSet { words: [0; 16] } }
+    let mut set = HelperSignalSet { words: [0; 16] }
+    if unsafe sigfillset(Pointer.fromMutRef(&mut set)) != 0 { return move previous }
+    let faults: [i32; 5] = [11, helperBusError(), 8, 4, 5]
+    let mut i: usize = 0
+    while i < 5 { let _removed = unsafe sigdelset(Pointer.fromMutRef(&mut set), faults[i]) i = i + 1 }
+    let _blocked = unsafe pthread_sigmask(helperBlock(), Pointer.fromRef(&set), Pointer.fromMutRef(&mut previous.set))
+    return move previous
+  }
+  fn restoreHelperSignals(previous: HelperMask) -> () {
+    let _restored = unsafe pthread_sigmask(helperSetMask(), Pointer.fromRef(&previous.set), Pointer.null<HelperSignalSet>())
+  }
+} else {
+  pub struct HelperMask {}
+  fn blockHelperSignals() -> HelperMask { return HelperMask {} }
+  fn restoreHelperSignals(previous: HelperMask) -> () {}
+}
+
 fn helperMain(handle: PoolRef, index: usize) -> i32 {
+  let _previous = blockHelperSignals()
   let mut system = Allocator.systemAllocatorProvider()
   let result = run Effect.result(helperRun(handle, index)) |> Effect.provideMut<Allocator>(&mut system)
   let words = poolWords(handle.pool)
