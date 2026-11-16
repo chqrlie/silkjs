@@ -11,11 +11,3 @@ exports = ["lib"]
 # the part of libuv 1.51's interface that uvwasi uses, with every function named silk_uvwasi_*, and
 # the runtime defines those functions in Silk (modules/runtime/src/ext/uvwasi_host.silk). The
 # package keeps its name, and as its version the libuv release whose behavior the functions follow.
-[native]
-sources = [
-  { c = "uvwasi/src/*.c", include = ["uvwasi/include", "uvwasi/shim"], flags = ["-std=gnu99", "-O2", "-w", "-DNDEBUG", "-D_GNU_SOURCE", "-D_POSIX_C_SOURCE=200112"], os = "linux" },
-  { c = "uvwasi/src/*.c", include = ["uvwasi/include", "uvwasi/shim"], flags = ["-std=gnu99", "-O2", "-w", "-DNDEBUG"], os = "macos" },
-]
-link = [
-  { library = "pthread", mode = "dynamic", os = "linux" },
-]

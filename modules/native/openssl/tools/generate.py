@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Writes what OpenSSL's Configure would: generated/ and the source lists of ../silk.toml.
+"""Writes what OpenSSL's Configure would: generated/ and the native compilation plan in ../build.silk.
 
     python3 tools/generate.py <openssl source directory>
 
@@ -72,21 +72,33 @@ def main():
         path = 'generated/' + file if (GENERATED / file).is_file() else 'silkjs-openssl:' + file
         system = '"linux"' if file in LINUX_ONLY else '["linux", "macos"]'
         groups.setdefault((tuple(includes), tuple(flags), system), []).append(path)
-    entries = []
+    entries = ['import silk.build.plan { Plan }\nimport silk.build.step { sourcePath }\n\nstatic fn plan() -> Plan {\n  let mut plan = Plan.empty()\n']
     for (includes, flags, system), files in groups.items():
-        entries.append('  { c = [\n' + ''.join(f'    "{f}",\n' for f in files) + '  ], include = ['
-                       + ', '.join(f'"{i}"' for i in includes) + '], flags = ['
-                       + ', '.join(toml(f) for f in flags) + f'], os = {system} }},\n')
-    manifest = PACKAGE / 'silk.toml'
-    text = manifest.read_text()
-    begin, end = '# Begin generated sources\n', '# End generated sources\n'
-    text = text[:text.index(begin) + len(begin)] + 'sources = [\n' + ''.join(entries) + ']\n' + text[text.index(end):]
-    manifest.write_text(text)
+        condition = 'Intrinsic.targetOperatingSystem() == "linux"'
+        if system != '\"linux\"':
+            condition += ' || Intrinsic.targetOperatingSystem() == "darwin"'
+        entries.append(f'  if {condition} {{\n')
+        for file in files:
+            entries.append('    plan = plan |> Plan.compileNative("c", ' + plan_path(file)
+                           + ', &[' + ', '.join(literal(f) for f in flags)
+                           + '], &[' + ', '.join(plan_path(i) for i in includes) + '])\n')
+        entries.append('  }\n')
+    entries.append('  if Intrinsic.targetOperatingSystem() == "linux" {\n'
+                   '    plan = plan |> Plan.linkLibrary("pthread", "dynamic", false, false)\n'
+                   '    plan = plan |> Plan.linkLibrary("dl", "dynamic", false, false)\n  }\n'
+                   '  return plan\n}\n\npub const PLAN: Plan = plan()\n')
+    (PACKAGE / 'build.silk').write_text(''.join(entries))
     shutil.rmtree(PACKAGE / 'build', ignore_errors=True)
     print(f'{len(objects)} objects in {len(entries)} groups')
 
 
-def toml(text):
+def plan_path(text):
+    if text.startswith("silkjs-openssl:"):
+        return 'Plan.archivePath("silkjs-openssl", ' + literal(text.split(":", 1)[1]) + ")"
+    return "sourcePath(" + literal(text) + ")"
+
+
+def literal(text):
     return '"' + text.replace('\\', '\\\\').replace('"', '\\"') + '"'
 
 

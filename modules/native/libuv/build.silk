@@ -1,0 +1,32 @@
+import silk.build.plan { Plan }
+import silk.build.step { sourcePath }
+
+static fn plan() -> Plan {
+  let mut plan = Plan.empty()
+  if Intrinsic.targetOperatingSystem() == "linux" {
+    plan = plan
+      |> Plan.compileSources(
+        "c",
+        sourcePath("uvwasi/src"),
+        "*.c",
+        &["-std=gnu99", "-O2", "-w", "-DNDEBUG", "-D_GNU_SOURCE", "-D_POSIX_C_SOURCE=200112"],
+        &[sourcePath("uvwasi/include"), sourcePath("uvwasi/shim")],
+      )
+  }
+  if Intrinsic.targetOperatingSystem() == "darwin" {
+    plan = plan
+      |> Plan.compileSources(
+        "c",
+        sourcePath("uvwasi/src"),
+        "*.c",
+        &["-std=gnu99", "-O2", "-w", "-DNDEBUG"],
+        &[sourcePath("uvwasi/include"), sourcePath("uvwasi/shim")],
+      )
+  }
+  if Intrinsic.targetOperatingSystem() == "linux" {
+    plan = plan |> Plan.linkLibrary("pthread", "dynamic", false, false)
+  }
+  return plan
+}
+
+pub const PLAN: Plan = plan()

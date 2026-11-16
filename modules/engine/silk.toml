@@ -66,9 +66,5 @@ exports = [
   "js_std_support",
 ]
 
-[native]
-function-order = "startup.order"
-sources = [{ c = "native/text_align.c" }]
-
-[profiles.tasks.dependencies]
+[dependencies]
 benchkit = { path = "../benchkit" }
