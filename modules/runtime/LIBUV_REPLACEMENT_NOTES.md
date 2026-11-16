@@ -170,6 +170,14 @@ first, and prints per metric the median change, the rounds in which the branch d
   -4.2% against df9c30b (6 of 12) in this run, between -10.7% and +1.8% in the others, and +10.6%
   in twelve four-second rounds sampled with macOS's `sample`, where both spend their time in the
   same `kevent` calls (`.github/workflows/macos-profile.yml`).
+- Settled with longer runs (`macos-profile.yml`, 24 alternating rounds against df9c30b, run of
+  5d96c7c): spawnSync -0.9% (12 of 24 rounds worse), cat +1.1% (14 of 24). setImmediate's median
+  read -5.1% while the branch was faster in 14 of the 24 paired rounds, and -4.3% in twelve
+  four-second rounds with 6 of 12 worse: the pairs show no consistent loss, the medians a few
+  percent either way.
+- Linux x64, sqlite, 16 alternating rounds of the build merged with main's zlib work: `db.exec`
+  -1.6, -0.9, +1.1 and -0.2% against f3d5ea8 and -1.5 to -7.0% against current main; the earlier
+  +6.8 and +10.1% readings of single builds were code placement, which moves between builds.
 - One macOS difference was real and is fixed: `uv_hrtime` read the Mach timebase on every call
   (libuv reads it once), and spawnSync read +20%; with the timebase kept it is level.
 
