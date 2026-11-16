@@ -374,7 +374,7 @@ function Hmac(hmac, key, options) {
   if (encoding !== undefined && options !== null && typeof options === 'object') validate.string(encoding, 'options.encoding');
   key = prepareSecretKey(key, encoding);
   if (digestSize(hmac) === undefined) throw codes.ERR_CRYPTO_INVALID_DIGEST(hmac);
-  let id; try { id = call('hmacCreate', [hmac, packed(key)]); } catch (e) { if (e.library !== undefined) throw e; throw codes.ERR_CRYPTO_OPERATION_FAILED('Failed to initialize HMAC'); }
+  let id; try { id = call('hmacCreate', [hmac, packed(key)]); } catch (e) { if (e.library !== undefined) throw e; throw new Error('error:00000000:lib(0)::reason(0)'); } // HmacInit throws ERR_get_error() even when it is 0.
   attach(this, id); this[kState] = { [kFinalized]: false };
   LazyTransform.call(this, options);
 }
@@ -1137,12 +1137,14 @@ function keygenJob(type, options) {
   const encoding = keygenEncoding(type, options);
   return { args: keygenArgs(type, options), encoding };
 }
-function generateKeyPairSync(type, options) { const job = keygenJob(type, options); return keypair(call('keyGenerate', job.args), job.encoding); }
+// KeyPairGenJob reports an OpenSSL failure as a plain Error with its message only.
+function keygenError(e) { return e && e.library !== undefined ? new Error(e.message) : e; }
+function generateKeyPairSync(type, options) { const job = keygenJob(type, options); let id; try { id = call('keyGenerate', job.args); } catch (e) { throw keygenError(e); } return keypair(id, job.encoding); }
 function generateKeyPair(type, options, cb) {
   if (typeof options === 'function') { cb = options; options = undefined; }
   validate.function(cb, 'callback');
   const job = keygenJob(type, options);
-  submit('keyGenerate', job.args, (e, pair) => e ? cb(e) : cb(null, pair.publicKey, pair.privateKey), id => keypair(id, job.encoding));
+  submit('keyGenerate', job.args, (e, pair) => e ? cb(keygenError(e)) : cb(null, pair.publicKey, pair.privateKey), id => keypair(id, job.encoding));
 }
 Object.defineProperty(generateKeyPair, require('internal/util').customPromisifyArgs, { value: ['publicKey', 'privateKey'], enumerable: false });
 function secretKeygenLength(type, options) {

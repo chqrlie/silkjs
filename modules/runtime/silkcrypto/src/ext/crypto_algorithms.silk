@@ -38,7 +38,12 @@ import silk.crypto.hkdf { Hkdf, OutputTooLongError }
 import silk.crypto.scrypt { Scrypt, ScryptError }
 import silk.crypto.aes { AesCbc, AesEcb, AesCtr, AesCfb, AesCfb8, AesCfb1, AesOfb, AesError }
 import silk.crypto.aes_gcm { AesGcmEncryptor, AesGcmDecryptor, AesGcmError }
-import silk.crypto.block_cipher { Cbc, Ecb, BlockCipherError }
+import silk.crypto.block_cipher { Cbc, Ecb, Cfb, Cfb8, Cfb1, Ofb, Ctr, BlockCipherError }
+import silk.crypto.aes_xts { AesXts, AesXtsError }
+import silk.crypto.aes_ocb { AesOcbEncryptor, AesOcbDecryptor, AesOcbError }
+import silk.crypto.des_wrap { TripleDesKeyWrap, TripleDesKeyWrapError }
+import ext.crypto_blocks as blocks
+import ext.crypto_blocks { AnyBlock, BlockInfo }
 import silk.crypto.des { TripleDes }
 import silk.crypto.aes_wrap { AesKeyWrap, AesKeyWrapError }
 import silk.crypto.aes_ccm { AesCcm, AesCcmError }
@@ -129,9 +134,21 @@ const H_MD5_SHA1: i32 = 19
 
 /// The digest a name means, as OpenSSL resolves names Node passes: case-insensitive, with the
 /// RSA- signature aliases, dss1, the SHA2- and SHA- spellings and RIPEMD's aliases. 0 is none.
+fn endsWith(name: &[u8], suffix: &[u8]) -> bool { return name.length > suffix.length && same(Slice.view<u8>(name, name.length - suffix.length, suffix.length), suffix) }
 pub fn digestCode(raw: &[u8]) -> i32 {
   let mut name = Slice.view<u8>(raw, 0, endsWithNull(raw))
+  // OpenSSL's signature-algorithm aliases name their digest: RSA-SHA256, sha256WithRSAEncryption,
+  // id-rsassa-pkcs1-v1_5-with-sha3-256, ripemd160WithRSA, ssl3-md5.
   if name.length > 4 && same(Slice.view<u8>(name, 0, 4), b"rsa-") { name = Slice.view<u8>(name, 4, name.length - 4) }
+  if name.length > 5 && same(Slice.view<u8>(name, 0, 5), b"ssl3-") { name = Slice.view<u8>(name, 5, name.length - 5) }
+  if name.length > 26 && same(Slice.view<u8>(name, 0, 26), b"id-rsassa-pkcs1-v1_5-with-") { name = Slice.view<u8>(name, 26, name.length - 26) }
+  if endsWith(name, b"withrsaencryption") { name = Slice.view<u8>(name, 0, name.length - 17) }
+  if endsWith(name, b"withrsa") { name = Slice.view<u8>(name, 0, name.length - 7) }
+  if same(name, b"sha1-2") { return H_SHA1 }
+  if same(name, b"sha512/224") { return H_SHA512_224 }
+  if same(name, b"sha512/256") { return H_SHA512_256 }
+  if same(name, b"blake2b-512") { return H_BLAKE2B512 }
+  if same(name, b"blake2s-256") { return H_BLAKE2S256 }
   if same(name, b"md5") { return H_MD5 }
   if same(name, b"sha1") || same(name, b"sha-1") || same(name, b"dss1") { return H_SHA1 }
   if same(name, b"sha224") || same(name, b"sha2-224") || same(name, b"sha-224") { return H_SHA224 }
@@ -278,6 +295,15 @@ fn hmacFinish(state: HmacState, output: &mut [u8]) -> () {
     HmacState.Sm3 { v } => v.finishInto(move output) HmacState.Md5Sha1 { v } => v.finishInto(move output)
   }
 }
+/// HMAC of `data` under `key` with the digest `code` into `out` (the digest's length); for
+/// ext/crypto_mac.
+pub fn hmacInto(code: i32, key: &[u8], data: &[u8], out: &mut [u8]) -> () {
+  let mut state = hmacMake(code, key)
+  hmacUpdate(&mut state, data)
+  hmacFinish(move state, move out)
+}
+/// The output length of the digest `code`.
+pub fn digestOutput(code: i32) -> usize { return digestSize(code) }
 fn pbkdf2With(code: i32, password: &[u8], salt: &[u8], iterations: u32, output: &mut [u8]) -> bool {
   let result = if code == H_MD5 { Pbkdf2.derive<Md5>(password, salt, iterations, move output) }
     else if code == H_SHA1 { Pbkdf2.derive<Sha1>(password, salt, iterations, move output) }
@@ -298,7 +324,7 @@ fn pbkdf2With(code: i32, password: &[u8], salt: &[u8], iterations: u32, output: 
     else { Pbkdf2.derive<Md5Sha1>(password, salt, iterations, move output) }
   return match move result { Result<(), Pbkdf2Error>.Success { .. } => true Result<(), Pbkdf2Error>.Failure { .. } => false }
 }
-fn hkdfWith(code: i32, salt: &[u8], key: &[u8], info: &[u8], output: &mut [u8]) -> bool {
+pub fn hkdfWith(code: i32, salt: &[u8], key: &[u8], info: &[u8], output: &mut [u8]) -> bool {
   let result = if code == H_MD5 { Hkdf.derive<Md5>(salt, key, info, move output) }
     else if code == H_SHA1 { Hkdf.derive<Sha1>(salt, key, info, move output) }
     else if code == H_SHA224 { Hkdf.derive<Sha224>(salt, key, info, move output) }
@@ -335,6 +361,24 @@ const C_TDES_ECB: i32 = 12
 const C_WRAP: i32 = 13
 const C_WRAP_PAD: i32 = 14
 const C_CCM: i32 = 15
+// The ciphers of ext/crypto_blocks: 15 + its kind (16-22 the generic modes, then CTS, XTS, OCB and
+// the 3DES wrap).
+const C_BLOCKS: i32 = 15
+const C_B_ECB: i32 = 16
+const C_B_CBC: i32 = 17
+const C_B_CFB: i32 = 18
+const C_B_CFB8: i32 = 19
+const C_B_CFB1: i32 = 20
+const C_B_OFB: i32 = 21
+const C_B_CTR: i32 = 22
+const C_CTS: i32 = 23
+const C_XTS: i32 = 24
+const C_OCB: i32 = 25
+const C_DES3_WRAP: i32 = 26
+fn fromBlocks(b: BlockInfo) -> CipherInfo {
+  if b.family == 0 { return noCipher() }
+  return CipherInfo { kind: C_BLOCKS + b.kind, mode: b.mode, nid: b.nid, keyLength: b.keyLength, ivLength: b.ivLength, blockSize: b.blockSize, name: b.name }
+}
 impl Copy for CipherInfo {}
 struct CipherInfo { kind: i32, mode: i32, nid: i32, keyLength: i32, ivLength: i32, blockSize: i32, name: &'static [u8] }
 fn none() -> &'static [u8] { return Slice.view<u8>(&EMPTY, 0, 0) }
@@ -355,8 +399,35 @@ const MODES: [&[u8]; 8] = [b"ecb", b"cbc", b"cfb", b"cfb8", b"cfb1", b"ofb", b"c
 const MODE_KINDS: [i32; 8] = [1, 2, 3, 4, 5, 6, 7, 8]
 const BITS: [i32; 3] = [128, 192, 256]
 /// The cipher a name means (case-insensitive, with OpenSSL's aes128-style and id-aes aliases).
+// OpenSSL also finds a cipher by its object identifier: AES (2.16.840.1.101.3.4.1.n) and 3DES-CBC.
+fn cipherByOid(name: &[u8]) -> CipherInfo {
+  if same(name, b"1.2.840.113549.3.7") { return cipherByName(b"des-ede3-cbc") }
+  let prefix = b"2.16.840.1.101.3.4.1."
+  if name.length <= prefix.length || name.length > prefix.length + 2 || !same(Slice.view<u8>(name, 0, prefix.length), prefix) { return noCipher() }
+  let mut n: i32 = 0
+  let mut i = prefix.length
+  while i < name.length { if name[i] < 48 || name[i] > 57 { return noCipher() } n = n * 10 + u8.toI32(name[i] - 48) i = i + 1 }
+  let bits = if n >= 1 && n <= 8 { 128 } else if n >= 21 && n <= 28 { 192 } else if n >= 41 && n <= 48 { 256 } else { 0 }
+  if bits == 0 { return noCipher() }
+  let mode = n % 20
+  let kind = if mode == 1 { C_ECB } else if mode == 2 { C_CBC } else if mode == 3 { C_OFB } else if mode == 4 { C_CFB } else if mode == 6 { C_GCM } else { 0 }
+  if kind != 0 { return aesInfo(kind, bits) }
+  let digits: &[u8] = if bits == 128 { b"128" } else if bits == 192 { b"192" } else { b"256" }
+  let mut wanted: [u8; 24] = [0; 24]
+  let base: &[u8] = b"id-aes"
+  let mut length: usize = 0
+  i = 0
+  while i < base.length { wanted[length] = base[i] length = length + 1 i = i + 1 }
+  i = 0
+  while i < 3 { wanted[length] = digits[i] length = length + 1 i = i + 1 }
+  let suffix: &[u8] = if mode == 5 { b"-wrap" } else if mode == 7 { b"-ccm" } else { b"-wrap-pad" }
+  i = 0
+  while i < suffix.length { wanted[length] = suffix[i] length = length + 1 i = i + 1 }
+  return cipherByName(Slice.view<u8>(&wanted, 0, length))
+}
 fn cipherByName(raw: &[u8]) -> CipherInfo {
   let name = Slice.view<u8>(raw, 0, endsWithNull(raw))
+  if name.length > 0 && name[0] >= 48 && name[0] <= 57 { return cipherByOid(name) }
   if same(name, b"chacha20-poly1305") { return CipherInfo { kind: C_CHACHA_POLY, mode: 0, nid: 1018, keyLength: 32, ivLength: 12, blockSize: 1, name: b"ChaCha20-Poly1305" } }
   if same(name, b"chacha20") { return CipherInfo { kind: C_CHACHA, mode: 0, nid: 1019, keyLength: 32, ivLength: 16, blockSize: 1, name: b"ChaCha20" } }
   if same(name, b"des-ede3-cbc") || same(name, b"des3") { return CipherInfo { kind: C_TDES_CBC, mode: 2, nid: 44, keyLength: 24, ivLength: 8, blockSize: 8, name: b"DES-EDE3-CBC" } }
@@ -396,7 +467,7 @@ fn cipherByName(raw: &[u8]) -> CipherInfo {
     if name.length == 13 && same(Slice.view<u8>(name, 0, 6), b"id-aes") && same(Slice.view<u8>(name, 6, 3), digits) && same(Slice.view<u8>(name, 9, 4), b"-gcm") { return aesInfo(C_GCM, bits) }
     b = b + 1
   }
-  return noCipher()
+  return fromBlocks(blocks.blockByName(name))
 }
 fn cipherByNid(nid: i32) -> CipherInfo {
   if nid == 1018 { return cipherByName(b"chacha20-poly1305") }
@@ -412,16 +483,18 @@ fn cipherByNid(nid: i32) -> CipherInfo {
     while m < 8 { let info = aesInfo(MODE_KINDS[m], BITS[b]) if info.nid == nid { return info } m = m + 1 }
     b = b + 1
   }
-  return noCipher()
+  return fromBlocks(blocks.blockByNid(nid))
 }
 
 union CipherState {
   Pending, Done, Ecb { v: AesEcb }, Cbc { v: AesCbc }, Cfb { v: AesCfb }, Cfb8 { v: AesCfb8 }, Cfb1 { v: AesCfb1 }, Ofb { v: AesOfb },
   Ctr { v: AesCtr }, GcmSeal { v: AesGcmEncryptor }, GcmOpen { v: AesGcmDecryptor }, PolySeal { v: ChaCha20Poly1305Encryptor },
-  PolyOpen { v: ChaCha20Poly1305Decryptor }, Stream { v: ChaCha20 }, TdesCbc { v: Cbc<TripleDes> }, TdesEcb { v: Ecb<TripleDes> }, Consumed,
+  PolyOpen { v: ChaCha20Poly1305Decryptor, shadow: ChaCha20Poly1305Encryptor }, Stream { v: ChaCha20 }, TdesCbc { v: Cbc<TripleDes> }, TdesEcb { v: Ecb<TripleDes> }, Consumed,
+  BEcb { v: Ecb<AnyBlock> }, BCbc { v: Cbc<AnyBlock> }, BCfb { v: Cfb<AnyBlock> }, BCfb8 { v: Cfb8<AnyBlock> }, BCfb1 { v: Cfb1<AnyBlock> },
+  BOfb { v: Ofb<AnyBlock> }, BCtr { v: Ctr<AnyBlock> }, OcbSeal { v: AesOcbEncryptor }, OcbOpen { v: AesOcbDecryptor },
 }
 struct CipherContext {
-  kind: i32, encrypt: bool, padding: bool, key: [u8; 32], keyLength: usize, iv: ?*mut u8, ivLength: usize,
+  kind: i32, family: i32, variant: i32, processed: usize, encrypt: bool, padding: bool, key: [u8; 64], keyLength: usize, iv: ?*mut u8, ivLength: usize,
   aad: ?*mut u8, aadLength: usize, tag: [u8; 16], tagLength: usize, authTagLength: usize, state: CipherState,
 }
 fn aesFailed(result: Result<usize, AesError>, n: &mut usize) -> bool {
@@ -463,8 +536,42 @@ unsafe fn start(x: &mut CipherContext) -> bool {
     let made = if x.encrypt { Cbc<TripleDes>.encryptor(move cipher, iv, x.padding) } else { Cbc<TripleDes>.decryptor(move cipher, iv, x.padding) }
     match move made { Result<Cbc<TripleDes>, BlockCipherError>.Success { value } => { x.state = CipherState.TdesCbc { v: move value } return true } Result<Cbc<TripleDes>, BlockCipherError>.Failure { .. } => { return false } }
   }
-  // Key wrap and CCM run whole in their one update.
-  if k == C_WRAP || k == C_WRAP_PAD || k == C_CCM { return true }
+  // Key wrap, CCM, CTS, XTS and the 3DES wrap run whole in their one update.
+  if k == C_WRAP || k == C_WRAP_PAD || k == C_CCM || k == C_CTS || k == C_XTS || k == C_DES3_WRAP { return true }
+  if k == C_OCB {
+    let tagLength = x.authTagLength
+    if x.encrypt {
+      match move AesOcbEncryptor.make(key, iv, aad, tagLength) { Result<AesOcbEncryptor, AesOcbError>.Success { value } => { x.state = CipherState.OcbSeal { v: move value } return true } Result<AesOcbEncryptor, AesOcbError>.Failure { .. } => { return false } }
+    }
+    match move AesOcbDecryptor.make(key, iv, aad, if x.tagLength == 0 { tagLength } else { x.tagLength }) { Result<AesOcbDecryptor, AesOcbError>.Success { value } => { x.state = CipherState.OcbOpen { v: move value } return true } Result<AesOcbDecryptor, AesOcbError>.Failure { .. } => { return false } }
+  }
+  if k > C_BLOCKS && k <= C_B_CTR {
+    let cipher = match move blocks.makeBlock(x.family, key) { Option<AnyBlock>.Some { value } => move value Option<AnyBlock>.None => { return false } }
+    if k == C_B_ECB {
+      x.state = if x.encrypt { CipherState.BEcb { v: Ecb<AnyBlock>.encryptor(move cipher, x.padding) } } else { CipherState.BEcb { v: Ecb<AnyBlock>.decryptor(move cipher, x.padding) } }
+      return true
+    }
+    if k == C_B_CBC {
+      let made = if x.encrypt { Cbc<AnyBlock>.encryptor(move cipher, iv, x.padding) } else { Cbc<AnyBlock>.decryptor(move cipher, iv, x.padding) }
+      match move made { Result<Cbc<AnyBlock>, BlockCipherError>.Success { value } => { x.state = CipherState.BCbc { v: move value } return true } Result<Cbc<AnyBlock>, BlockCipherError>.Failure { .. } => { return false } }
+    }
+    if k == C_B_CFB {
+      let made = if x.encrypt { Cfb<AnyBlock>.encryptor(move cipher, iv) } else { Cfb<AnyBlock>.decryptor(move cipher, iv) }
+      match move made { Result<Cfb<AnyBlock>, BlockCipherError>.Success { value } => { x.state = CipherState.BCfb { v: move value } return true } Result<Cfb<AnyBlock>, BlockCipherError>.Failure { .. } => { return false } }
+    }
+    if k == C_B_CFB8 {
+      let made = if x.encrypt { Cfb8<AnyBlock>.encryptor(move cipher, iv) } else { Cfb8<AnyBlock>.decryptor(move cipher, iv) }
+      match move made { Result<Cfb8<AnyBlock>, BlockCipherError>.Success { value } => { x.state = CipherState.BCfb8 { v: move value } return true } Result<Cfb8<AnyBlock>, BlockCipherError>.Failure { .. } => { return false } }
+    }
+    if k == C_B_CFB1 {
+      let made = if x.encrypt { Cfb1<AnyBlock>.encryptor(move cipher, iv) } else { Cfb1<AnyBlock>.decryptor(move cipher, iv) }
+      match move made { Result<Cfb1<AnyBlock>, BlockCipherError>.Success { value } => { x.state = CipherState.BCfb1 { v: move value } return true } Result<Cfb1<AnyBlock>, BlockCipherError>.Failure { .. } => { return false } }
+    }
+    if k == C_B_OFB {
+      match move Ofb<AnyBlock>.make(move cipher, iv) { Result<Ofb<AnyBlock>, BlockCipherError>.Success { value } => { x.state = CipherState.BOfb { v: move value } return true } Result<Ofb<AnyBlock>, BlockCipherError>.Failure { .. } => { return false } }
+    }
+    match move Ctr<AnyBlock>.make(move cipher, iv) { Result<Ctr<AnyBlock>, BlockCipherError>.Success { value } => { x.state = CipherState.BCtr { v: move value } return true } Result<Ctr<AnyBlock>, BlockCipherError>.Failure { .. } => { return false } }
+  }
   if k == C_CFB {
     let made = if x.encrypt { AesCfb.encryptor(key, iv) } else { AesCfb.decryptor(key, iv) }
     match move made { Result<AesCfb, AesError>.Success { value } => { x.state = CipherState.Cfb { v: move value } return true } Result<AesCfb, AesError>.Failure { .. } => { return false } }
@@ -497,7 +604,10 @@ unsafe fn start(x: &mut CipherContext) -> bool {
     if x.encrypt {
       match move ChaCha20Poly1305Encryptor.make(key, &nonce, aad) { Result<ChaCha20Poly1305Encryptor, AeadError>.Success { value } => { x.state = CipherState.PolySeal { v: move value } return true } Result<ChaCha20Poly1305Encryptor, AeadError>.Failure { .. } => { return false } }
     }
-    match move ChaCha20Poly1305Decryptor.make(key, &nonce, aad) { Result<ChaCha20Poly1305Decryptor, AeadError>.Success { value } => { x.state = CipherState.PolyOpen { v: move value } return true } Result<ChaCha20Poly1305Decryptor, AeadError>.Failure { .. } => { return false } }
+    // Opening also seals the plaintext again (a shadow encryptor), whose tag is the full expected one:
+    // Node compares a shorter tag with its first bytes.
+    let shadow = match move ChaCha20Poly1305Encryptor.make(key, &nonce, aad) { Result<ChaCha20Poly1305Encryptor, AeadError>.Success { value } => move value Result<ChaCha20Poly1305Encryptor, AeadError>.Failure { .. } => { return false } }
+    match move ChaCha20Poly1305Decryptor.make(key, &nonce, aad) { Result<ChaCha20Poly1305Decryptor, AeadError>.Success { value } => { x.state = CipherState.PolyOpen { v: move value, shadow: move shadow } return true } Result<ChaCha20Poly1305Decryptor, AeadError>.Failure { .. } => { return false } }
   }
   // OpenSSL's ChaCha20 IV: a 32-bit little-endian counter, then the 96-bit nonce.
   if iv.length != 16 { return false }
@@ -506,12 +616,33 @@ unsafe fn start(x: &mut CipherContext) -> bool {
 }
 // Bytes an update of `length` can write.
 fn updateRoom(x: &CipherContext, length: usize) -> usize { return length + 32 }
+unsafe fn polyOpenFailed(v: &mut ChaCha20Poly1305Decryptor, shadow: &mut ChaCha20Poly1305Encryptor, input: &[u8], out: &mut [u8]) -> bool {
+  let plain = Slice.viewMut<u8>(move out, 0, input.length)
+  if aeadFailed(v.update(input, &mut plain)) { return true }
+  let scratch = unsafe calloc(1, input.length + 1)
+  if Pointer.isNull<u8>(scratch) { return true }
+  let mut a = ()
+  let sink = unsafe Pointer.borrowManyMut<(), u8>(&mut a, unsafe Pointer.assumeManyMut<u8>(unsafe nonnull(scratch)), input.length)
+  let failed = aeadFailed(shadow.update(&plain, move sink))
+  unsafe free(scratch)
+  return failed
+}
+unsafe fn randomInto(bytes: &mut [u8]) -> () {
+  let mut random = OsRandom.make()
+  run Random.fillBytes(move bytes) |> Effect.provideMut<Random>(&mut random)
+}
+fn blockApplyFailed(result: Result<(), BlockCipherError>) -> bool { return match move result { Result<(), BlockCipherError>.Success { .. } => false Result<(), BlockCipherError>.Failure { .. } => true } }
+fn ocbFailed(result: Result<usize, AesOcbError>, n: &mut usize) -> bool {
+  return match move result { Result<usize, AesOcbError>.Success { value } => { n.* = value false } Result<usize, AesOcbError>.Failure { .. } => true }
+}
 unsafe fn blockFailed(result: Result<usize, BlockCipherError>, n: &mut usize) -> bool {
   return match move result { Result<usize, BlockCipherError>.Success { value } => { n.* = value false } Result<usize, BlockCipherError>.Failure { .. } => true }
 }
 // Key wrap and CCM: the whole message in one update.
 unsafe fn oneShotUpdate(c: &mut Call, x: &mut CipherContext, input: &[u8]) -> bool {
   match &x.state { CipherState.Pending => () _ => { return unsafe failWith(&mut c.*, b"") } }
+  // CTS and XTS need a block: a shorter input fails and leaves the cipher as it was.
+  if (x.kind == C_CTS || x.kind == C_XTS) && input.length < 16 { return unsafe failWith(&mut c.*, b"") }
   x.state = CipherState.Consumed
   let anchor = ()
   let key = Slice.view<u8>(&x.key, 0, x.keyLength)
@@ -519,6 +650,33 @@ unsafe fn oneShotUpdate(c: &mut Call, x: &mut CipherContext, input: &[u8]) -> bo
   if !unsafe reserve(&mut c.*, input.length + 16) { return false }
   let mut a = ()
   let out = unsafe outputSlice(&mut a, &c.*)
+  if x.kind == C_CTS {
+    let cipher = match move blocks.makeBlock(x.family, key) { Option<AnyBlock>.Some { value } => move value Option<AnyBlock>.None => { return unsafe failWith(&mut c.*, b"") } }
+    let body = Slice.viewMut<u8>(move out, 0, input.length)
+    let ok = if x.encrypt { blocks.ctsEncrypt(&cipher, iv, x.variant, input, move body) } else { blocks.ctsDecrypt(&cipher, iv, x.variant, input, move body) }
+    if !ok { return unsafe failWith(&mut c.*, b"error:1C80006B:Provider routines::wrong final block length") }
+    c.length = input.length
+    return true
+  }
+  if x.kind == C_XTS {
+    let body = Slice.viewMut<u8>(move out, 0, input.length)
+    let r = if x.encrypt { AesXts.encrypt(key, iv, input, move body) } else { AesXts.decrypt(key, iv, input, move body) }
+    return match move r {
+      Result<(), AesXtsError>.Success { .. } => { c.length = input.length true }
+      Result<(), AesXtsError>.Failure { error } => match move error {
+        AesXtsError.DuplicateKeyHalves => unsafe failWith(&mut c.*, b"error:1C800095:Provider routines::xts duplicated keys")
+        _ => unsafe failWith(&mut c.*, b"error:1C80006B:Provider routines::wrong final block length")
+      }
+    }
+  }
+  if x.kind == C_DES3_WRAP {
+    let r = if x.encrypt {
+      let mut random: [u8; 8] = [0; 8]
+      unsafe randomInto(&mut random)
+      TripleDesKeyWrap.wrap(key, &random, input, move out)
+    } else { TripleDesKeyWrap.unwrap(key, input, move out) }
+    return match move r { Result<usize, TripleDesKeyWrapError>.Success { value } => { c.length = value true } Result<usize, TripleDesKeyWrapError>.Failure { .. } => unsafe failWith(&mut c.*, b"") }
+  }
   if x.kind == C_CCM {
     let aad = unsafe ctxAad(&anchor, &x.*)
     let body = Slice.viewMut<u8>(move out, 0, input.length)
@@ -538,8 +696,9 @@ unsafe fn oneShotUpdate(c: &mut Call, x: &mut CipherContext, input: &[u8]) -> bo
   return match move r { Result<usize, AesKeyWrapError>.Success { value } => { c.length = value true } Result<usize, AesKeyWrapError>.Failure { .. } => unsafe failWith(&mut c.*, b"") }
 }
 unsafe fn cipherUpdate(c: &mut Call, x: &mut CipherContext, input: &[u8]) -> bool {
-  if x.kind == C_WRAP || x.kind == C_WRAP_PAD || x.kind == C_CCM { return unsafe oneShotUpdate(&mut c.*, &mut x.*, input) }
+  if x.kind == C_WRAP || x.kind == C_WRAP_PAD || x.kind == C_CCM || x.kind == C_CTS || x.kind == C_XTS || x.kind == C_DES3_WRAP { return unsafe oneShotUpdate(&mut c.*, &mut x.*, input) }
   if !unsafe start(&mut x.*) { return unsafe failWith(&mut c.*, b"") }
+  x.processed = x.processed + input.length
   if !unsafe reserve(&mut c.*, updateRoom(&x.*, input.length)) { return false }
   let mut anchor = ()
   let out = unsafe outputSlice(&mut anchor, &c.*)
@@ -555,10 +714,19 @@ unsafe fn cipherUpdate(c: &mut Call, x: &mut CipherContext, input: &[u8]) -> boo
     CipherState.GcmSeal { v } => gcmFailed(v.update(input, move out))
     CipherState.GcmOpen { v } => gcmFailed(v.update(input, move out))
     CipherState.PolySeal { v } => aeadFailed(v.update(input, move out))
-    CipherState.PolyOpen { v } => aeadFailed(v.update(input, move out))
+    CipherState.PolyOpen { v, shadow } => unsafe polyOpenFailed(&mut v, &mut shadow, input, move out)
     CipherState.Stream { v } => match move v.apply(input, move out) { Result<(), ChaCha20Error>.Success { .. } => false Result<(), ChaCha20Error>.Failure { .. } => true }
     CipherState.TdesEcb { v } => unsafe blockFailed(v.update(input, move out), &mut n)
     CipherState.TdesCbc { v } => unsafe blockFailed(v.update(input, move out), &mut n)
+    CipherState.BEcb { v } => unsafe blockFailed(v.update(input, move out), &mut n)
+    CipherState.BCbc { v } => unsafe blockFailed(v.update(input, move out), &mut n)
+    CipherState.BCfb { v } => blockApplyFailed(v.apply(input, move out))
+    CipherState.BCfb8 { v } => blockApplyFailed(v.apply(input, move out))
+    CipherState.BCfb1 { v } => blockApplyFailed(v.apply(input, move out))
+    CipherState.BOfb { v } => blockApplyFailed(v.apply(input, move out))
+    CipherState.BCtr { v } => blockApplyFailed(v.apply(input, move out))
+    CipherState.OcbSeal { v } => ocbFailed(v.update(input, move out), &mut n)
+    CipherState.OcbOpen { v } => ocbFailed(v.update(input, move out), &mut n)
     _ => true
   }
   if failed { return unsafe failWith(&mut c.*, b"") }
@@ -575,15 +743,18 @@ unsafe fn cipherFinal(c: &mut Call, x: &mut CipherContext) -> bool {
   let mut anchor = ()
   let out = unsafe outputSlice(&mut anchor, &c.*)
   let encrypt = x.encrypt
+  // EVP_DecryptFinal: with padding, no complete block or a partial one is a wrong length.
+  let blockLength: usize = if x.kind == C_TDES_CBC || x.kind == C_TDES_ECB || x.family == 5 || x.family == 6 { 8 } else { 16 }
+  let noFinalBlock = x.processed == 0 || x.processed % blockLength != 0
   match move state {
     CipherState.Ecb { v } => {
       let mut n: usize = 0
-      if aesFailed(v.finish(move out), &mut n) { return unsafe failWith(&mut c.*, if encrypt { b"error:1C80006B:Provider routines::wrong final block length" } else { b"error:1C800064:Provider routines::bad decrypt" }) }
+      if aesFailed(v.finish(move out), &mut n) { return unsafe failWith(&mut c.*, if encrypt || noFinalBlock { b"error:1C80006B:Provider routines::wrong final block length" } else { b"error:1C800064:Provider routines::bad decrypt" }) }
       c.length = n
     }
     CipherState.Cbc { v } => {
       let mut n: usize = 0
-      if aesFailed(v.finish(move out), &mut n) { return unsafe failWith(&mut c.*, if encrypt { b"error:1C80006B:Provider routines::wrong final block length" } else { b"error:1C800064:Provider routines::bad decrypt" }) }
+      if aesFailed(v.finish(move out), &mut n) { return unsafe failWith(&mut c.*, if encrypt || noFinalBlock { b"error:1C80006B:Provider routines::wrong final block length" } else { b"error:1C800064:Provider routines::bad decrypt" }) }
       c.length = n
     }
     CipherState.GcmSeal { v } => {
@@ -599,17 +770,46 @@ unsafe fn cipherFinal(c: &mut Call, x: &mut CipherContext) -> bool {
       if aeadFailed(v.finish(&mut full)) { return unsafe failWith(&mut c.*, b"") }
       x.tag = full x.tagLength = 16
     }
-    CipherState.PolyOpen { v } => {
-      if x.tagLength != 16 || aeadFailed(v.finish(Slice.view<u8>(&x.tag, 0, 16))) { return unsafe failWith(&mut c.*, b"") }
+    CipherState.PolyOpen { v, shadow } => {
+      drop v
+      let mut full: [u8; 16] = [0; 16]
+      if x.tagLength == 0 || aeadFailed(shadow.finish(&mut full)) { return unsafe failWith(&mut c.*, b"") }
+      // Constant time over the given tag's length.
+      let mut difference: u8 = 0
+      let mut i: usize = 0
+      while i < x.tagLength { difference = u8.bitOr(difference, u8.bitXor(full[i], x.tag[i])) i = i + 1 }
+      if difference != 0 { return unsafe failWith(&mut c.*, b"") }
     }
     CipherState.TdesEcb { v } => {
       let mut n: usize = 0
-      if unsafe blockFailed(v.finish(move out), &mut n) { return unsafe failWith(&mut c.*, if encrypt { b"error:1C80006B:Provider routines::wrong final block length" } else { b"error:1C800064:Provider routines::bad decrypt" }) }
+      if unsafe blockFailed(v.finish(move out), &mut n) { return unsafe failWith(&mut c.*, if encrypt || noFinalBlock { b"error:1C80006B:Provider routines::wrong final block length" } else { b"error:1C800064:Provider routines::bad decrypt" }) }
       c.length = n
     }
     CipherState.TdesCbc { v } => {
       let mut n: usize = 0
-      if unsafe blockFailed(v.finish(move out), &mut n) { return unsafe failWith(&mut c.*, if encrypt { b"error:1C80006B:Provider routines::wrong final block length" } else { b"error:1C800064:Provider routines::bad decrypt" }) }
+      if unsafe blockFailed(v.finish(move out), &mut n) { return unsafe failWith(&mut c.*, if encrypt || noFinalBlock { b"error:1C80006B:Provider routines::wrong final block length" } else { b"error:1C800064:Provider routines::bad decrypt" }) }
+      c.length = n
+    }
+    CipherState.BEcb { v } => {
+      let mut n: usize = 0
+      if unsafe blockFailed(v.finish(move out), &mut n) { return unsafe failWith(&mut c.*, if encrypt || noFinalBlock { b"error:1C80006B:Provider routines::wrong final block length" } else { b"error:1C800064:Provider routines::bad decrypt" }) }
+      c.length = n
+    }
+    CipherState.BCbc { v } => {
+      let mut n: usize = 0
+      if unsafe blockFailed(v.finish(move out), &mut n) { return unsafe failWith(&mut c.*, if encrypt || noFinalBlock { b"error:1C80006B:Provider routines::wrong final block length" } else { b"error:1C800064:Provider routines::bad decrypt" }) }
+      c.length = n
+    }
+    CipherState.OcbSeal { v } => {
+      let length = x.authTagLength
+      let mut n: usize = 0
+      if ocbFailed(v.finish(move out, Slice.viewMut<u8>(&mut x.tag, 0, length)), &mut n) { return unsafe failWith(&mut c.*, b"") }
+      x.tagLength = length
+      c.length = n
+    }
+    CipherState.OcbOpen { v } => {
+      let mut n: usize = 0
+      if x.tagLength == 0 || ocbFailed(v.finish(move out, Slice.view<u8>(&x.tag, 0, x.tagLength)), &mut n) { return unsafe failWith(&mut c.*, b"") }
       c.length = n
     }
     CipherState.Consumed => ()
@@ -621,27 +821,37 @@ unsafe fn cipherFinal(c: &mut Call, x: &mut CipherContext) -> bool {
         let anchor = ()
         let r = AesCcm.seal(Slice.view<u8>(&x.key, 0, x.keyLength), unsafe ctxIv(&anchor, &x.*), unsafe ctxAad(&anchor, &x.*), none(), Slice.viewMut<u8>(&mut nothing, 0, 0), Slice.viewMut<u8>(&mut x.tag, 0, length))
         match move r { Result<(), AesCcmError>.Success { .. } => { x.tagLength = length } Result<(), AesCcmError>.Failure { .. } => { return unsafe failWith(&mut c.*, b"") } }
-      } else if x.kind != C_WRAP && x.kind != C_WRAP_PAD && x.kind != C_CCM { return unsafe failWith(&mut c.*, b"") }
+      } else if x.kind != C_WRAP && x.kind != C_WRAP_PAD && x.kind != C_CCM && x.kind != C_CTS && x.kind != C_XTS && x.kind != C_DES3_WRAP { return unsafe failWith(&mut c.*, b"") }
     }
     CipherState.Done => { return unsafe failWith(&mut c.*, b"") }
     _ => ()
   }
   return true
 }
-unsafe fn cipherCreate(c: &mut Call, name: &[u8], key: &[u8], iv: &[u8], encrypt: bool, authTagLength: usize) -> bool {
+fn halvesEqual(key: &[u8]) -> bool {
+  let half = key.length / 2
+  let mut i: usize = 0
+  while i < half { if key[i] != key[half + i] { return false } i = i + 1 }
+  return true
+}
+unsafe fn cipherCreate(c: &mut Call, name: &[u8], key: &[u8], iv: &[u8], encrypt: bool, authTagLength: usize, ctsMode: &[u8]) -> bool {
   let info = cipherByName(name)
   if info.kind == 0 { return unsafe failWith(&mut c.*, b"error:0308010C:digital envelope routines::unsupported") }
   if i32.toUsize(info.keyLength) != key.length { return unsafe refuse(&mut c.*, b"ERR_CRYPTO_INVALID_KEYLEN: Invalid key length") }
+  // OpenSSL's XTS init refuses equal key halves for encryption.
+  if info.kind == C_XTS && encrypt && halvesEqual(key) { return unsafe failWith(&mut c.*, b"error:1C800095:Provider routines::xts duplicated keys") }
   let p = unsafe calloc(1, Layout.of<CipherContext>().bytes)
   if Pointer.isNull<u8>(p) { return false }
   let ivCopy = if iv.length > 0 { unsafe calloc(1, iv.length) } else { nil() }
-  let mut keyBytes: [u8; 32] = [0; 32]
+  let mut keyBytes: [u8; 64] = [0; 64]
+  let family = blocks.blockByName(name).family
+  let variant = if same(ctsMode, b"cs3") { 3 } else if same(ctsMode, b"cs2") { 2 } else { 1 }
   let mut i: usize = 0
   while i < key.length { keyBytes[i] = key[i] i = i + 1 }
   i = 0
   while i < iv.length { unsafe Pointer.put<u8>(unsafe at(ivCopy, i), iv[i]) i = i + 1 }
   unsafe Pointer.put<CipherContext>(unsafe Intrinsic.pointerReinterpret<*mut u8, *mut CipherContext>(unsafe nonnull(p)), CipherContext {
-    kind: info.kind, encrypt: encrypt, padding: true, key: keyBytes, keyLength: key.length, iv: ivCopy, ivLength: iv.length,
+    kind: info.kind, family: family, variant: variant, processed: 0, encrypt: encrypt, padding: true, key: keyBytes, keyLength: key.length, iv: ivCopy, ivLength: iv.length,
     aad: nil(), aadLength: 0, tag: [0; 16], tagLength: 0, authTagLength: if authTagLength > 16 { 16 } else { authTagLength }, state: CipherState.Pending })
   c.created = p c.createdKind = 3 c.resultKind = 2
   return true
@@ -671,8 +881,10 @@ unsafe fn newHash(c: &mut Call, code: i32) -> bool {
   return true
 }
 // The lists Node shows (crypto.getHashes, getCiphers): OpenSSL's names, sorted.
-const HASH_NAMES: &[u8] = b"RSA-MD5\nRSA-RIPEMD160\nRSA-SHA1\nRSA-SHA1-2\nRSA-SHA224\nRSA-SHA256\nRSA-SHA3-224\nRSA-SHA3-256\nRSA-SHA3-384\nRSA-SHA3-512\nRSA-SHA384\nRSA-SHA512\nRSA-SHA512/224\nRSA-SHA512/256\nRSA-SM3\nblake2b512\nblake2s256\nid-rsassa-pkcs1-v1_5-with-sha3-224\nid-rsassa-pkcs1-v1_5-with-sha3-256\nid-rsassa-pkcs1-v1_5-with-sha3-384\nid-rsassa-pkcs1-v1_5-with-sha3-512\nmd5\nmd5-sha1\nmd5WithRSAEncryption\nripemd\nripemd160\nripemd160WithRSA\nrmd160\nsha1\nsha1WithRSAEncryption\nsha224\nsha224WithRSAEncryption\nsha256\nsha256WithRSAEncryption\nsha3-224\nsha3-256\nsha3-384\nsha3-512\nsha384\nsha384WithRSAEncryption\nsha512\nsha512-224\nsha512-224WithRSAEncryption\nsha512-256\nsha512-256WithRSAEncryption\nsha512WithRSAEncryption\nshake128\nshake256\nsm3\nsm3WithRSAEncryption\nssl3-md5\nssl3-sha1\n"
-const CIPHER_NAMES: &[u8] = b"aes-128-cbc\naes-128-ccm\naes-128-cfb\naes-128-cfb1\naes-128-cfb8\naes-128-ctr\naes-128-ecb\naes-128-gcm\naes-128-ofb\naes-192-cbc\naes-192-ccm\naes-192-cfb\naes-192-cfb1\naes-192-cfb8\naes-192-ctr\naes-192-ecb\naes-192-gcm\naes-192-ofb\naes-256-cbc\naes-256-ccm\naes-256-cfb\naes-256-cfb1\naes-256-cfb8\naes-256-ctr\naes-256-ecb\naes-256-gcm\naes-256-ofb\naes128\naes128-wrap\naes128-wrap-pad\naes192\naes192-wrap\naes192-wrap-pad\naes256\naes256-wrap\naes256-wrap-pad\nchacha20\nchacha20-poly1305\ndes-ede3\ndes-ede3-cbc\ndes3\nid-aes128-ccm\nid-aes128-gcm\nid-aes128-wrap\nid-aes128-wrap-pad\nid-aes192-ccm\nid-aes192-gcm\nid-aes192-wrap\nid-aes192-wrap-pad\nid-aes256-ccm\nid-aes256-gcm\nid-aes256-wrap\nid-aes256-wrap-pad\n"
+const HASH_NAMES: &[u8] = b"RSA-MD5\nRSA-RIPEMD160\nRSA-SHA1\nRSA-SHA1-2\nRSA-SHA224\nRSA-SHA256\nRSA-SHA3-224\nRSA-SHA3-256\nRSA-SHA3-384\nRSA-SHA3-512\nRSA-SHA384\nRSA-SHA512\nRSA-SHA512/224\nRSA-SHA512/256\nRSA-SM3\nblake2b-512\nblake2b512\nblake2s-256\nblake2s256\nid-rsassa-pkcs1-v1_5-with-sha3-224\nid-rsassa-pkcs1-v1_5-with-sha3-256\nid-rsassa-pkcs1-v1_5-with-sha3-384\nid-rsassa-pkcs1-v1_5-with-sha3-512\nmd5\nmd5-sha1\nmd5WithRSAEncryption\nripemd\nripemd-160\nripemd160\nripemd160WithRSA\nrmd160\nsha-1\nsha-224\nsha-256\nsha-384\nsha-512\nsha-512/224\nsha-512/256\nsha1\nsha1WithRSAEncryption\nsha2-224\nsha2-256\nsha2-384\nsha2-512\nsha2-512/224\nsha2-512/256\nsha224\nsha224WithRSAEncryption\nsha256\nsha256WithRSAEncryption\nsha3-224\nsha3-256\nsha3-384\nsha3-512\nsha384\nsha384WithRSAEncryption\nsha512\nsha512-224\nsha512-224WithRSAEncryption\nsha512-256\nsha512-256WithRSAEncryption\nsha512WithRSAEncryption\nshake128\nshake256\nsm3\nsm3WithRSAEncryption\nssl3-md5\nssl3-sha1\n"
+const CIPHER_NAMES: &[u8] = b"aes-128-cbc\naes-128-cbc-cts\naes-128-ccm\naes-128-cfb\naes-128-cfb1\naes-128-cfb8\naes-128-ctr\naes-128-ecb\naes-128-gcm\naes-128-ocb\naes-128-ofb\naes-128-wrap\naes-128-wrap-pad\naes-128-xts\naes-192-cbc\naes-192-cbc-cts\naes-192-ccm\naes-192-cfb\naes-192-cfb1\naes-192-cfb8\naes-192-ctr\naes-192-ecb\naes-192-gcm\naes-192-ocb\naes-192-ofb\naes-192-wrap\naes-192-wrap-pad\naes-256-cbc\naes-256-cbc-cts\naes-256-ccm\naes-256-cfb\naes-256-cfb1\naes-256-cfb8\naes-256-ctr\naes-256-ecb\naes-256-gcm\naes-256-ocb\naes-256-ofb\naes-256-wrap\naes-256-wrap-pad\naes-256-xts\naes128\naes128-wrap\naes128-wrap-pad\naes192\naes192-wrap\naes192-wrap-pad\naes256\naes256-wrap\naes256-wrap-pad\naria-128-cbc\naria-128-cfb\naria-128-cfb1\naria-128-cfb8\naria-128-ctr\naria-128-ecb\naria-128-ofb\naria-192-cbc\naria-192-cfb\naria-192-cfb1\naria-192-cfb8\naria-192-ctr\naria-192-ecb\naria-192-ofb\naria-256-cbc\naria-256-cfb\naria-256-cfb1\naria-256-cfb8\naria-256-ctr\naria-256-ecb\naria-256-ofb\naria128\naria192\naria256\ncamellia-128-cbc\ncamellia-128-cbc-cts\ncamellia-128-cfb\ncamellia-128-cfb1\ncamellia-128-cfb8\ncamellia-128-ctr\ncamellia-128-ecb\ncamellia-128-ofb\ncamellia-192-cbc\ncamellia-192-cbc-cts\ncamellia-192-cfb\ncamellia-192-cfb1\ncamellia-192-cfb8\ncamellia-192-ctr\ncamellia-192-ecb\ncamellia-192-ofb\ncamellia-256-cbc\ncamellia-256-cbc-cts\ncamellia-256-cfb\ncamellia-256-cfb1\ncamellia-256-cfb8\ncamellia-256-ctr\ncamellia-256-ecb\ncamellia-256-ofb\ncamellia128\ncamellia192\ncamellia256\nchacha20\nchacha20-poly1305\ndes-ede\ndes-ede-cbc\ndes-ede-cfb\ndes-ede-ecb\ndes-ede-ofb\ndes-ede3\ndes-ede3-cbc\ndes-ede3-cfb\ndes-ede3-cfb1\ndes-ede3-cfb8\ndes-ede3-ofb\ndes3\ndes3-wrap\nid-aes128-ccm\nid-aes128-gcm\nid-aes128-wrap\nid-aes128-wrap-pad\nid-aes192-ccm\nid-aes192-gcm\nid-aes192-wrap\nid-aes192-wrap-pad\nid-aes256-ccm\nid-aes256-gcm\nid-aes256-wrap\nid-aes256-wrap-pad\nid-smime-alg-cms3deswrap\nsm4\nsm4-cbc\nsm4-cfb\nsm4-cfb128\nsm4-ctr\nsm4-ecb\nsm4-ofb\nsm4-ofb128\n"
+/// A text result, for the other files.
+pub unsafe fn emitText(c: &mut Call, value: &[u8]) -> bool { return unsafe text(&mut c.*, value) }
 unsafe fn text(c: &mut Call, value: &[u8]) -> bool {
   c.resultKind = 3
   if !unsafe reserve(&mut c.*, value.length) { return false }
@@ -837,7 +1049,8 @@ pub unsafe fn execute(c: &mut Call) -> bool {
   if op == 20 {
     let name = unsafe arg(&anchor, &c.*, 0) let key = unsafe arg(&anchor, &c.*, 1) let iv = unsafe arg(&anchor, &c.*, 2)
     let encrypt = c.numbers[3] == 1 let tagLength = i64.toUsize(c.numbers[4])
-    return unsafe cipherCreate(&mut c.*, name, key, iv, encrypt, tagLength)
+    let ctsMode = unsafe arg(&anchor, &c.*, 6)
+    return unsafe cipherCreate(&mut c.*, name, key, iv, encrypt, tagLength, Slice.view<u8>(ctsMode, 0, endsWithNull(ctsMode)))
   }
   if op >= 21 && op <= 26 {
     let mut a = ()
@@ -848,7 +1061,7 @@ pub unsafe fn execute(c: &mut Call) -> bool {
     if op == 23 {
       // Additional data: only before the first update, and only for the AEAD ciphers.
       match &x.state { CipherState.Pending => () _ => { return false } }
-      if x.kind != C_GCM && x.kind != C_CHACHA_POLY && x.kind != C_CCM { return false }
+      if x.kind != C_GCM && x.kind != C_CHACHA_POLY && x.kind != C_CCM && x.kind != C_OCB { return false }
       let aad = unsafe arg(&anchor, &c.*, 1)
       let grown = unsafe realloc(x.aad, x.aadLength + aad.length + 1)
       if Pointer.isNull<u8>(grown) { return false }
@@ -887,12 +1100,12 @@ pub unsafe fn execute(c: &mut Call) -> bool {
     let encrypt = c.numbers[4] == 1
     let name = unsafe arg(&anchor, &c.*, 0) let key = unsafe arg(&anchor, &c.*, 1) let iv = unsafe arg(&anchor, &c.*, 2)
     let sealTag = i64.toUsize(c.numbers[7])
-    if !unsafe cipherCreate(&mut c.*, name, key, iv, encrypt, sealTag) { return false }
+    if !unsafe cipherCreate(&mut c.*, name, key, iv, encrypt, sealTag, Slice.view<u8>(&EMPTY, 0, 0)) { return false }
     let p = c.created c.created = nil() c.createdKind = 0 c.resultKind = 0
     let mut a = ()
     let x = unsafe context(&mut a, p)
     let info = cipherByName(unsafe arg(&anchor, &c.*, 0))
-    if !encrypt && (x.kind == C_GCM || x.kind == C_CHACHA_POLY || x.kind == C_CCM) {
+    if !encrypt && (x.kind == C_GCM || x.kind == C_CHACHA_POLY || x.kind == C_CCM || x.kind == C_OCB) {
       let tag = unsafe arg(&anchor, &c.*, 6)
       let mut i: usize = 0
       while i < tag.length && i < 16 { x.tag[i] = tag[i] i = i + 1 }
@@ -911,7 +1124,7 @@ pub unsafe fn execute(c: &mut Call) -> bool {
     let first = c.output let firstLength = c.length
     c.output = nil() c.capacity = 0
     ok = ok && unsafe cipherFinal(&mut c.*, &mut x.*)
-    let tagLength = if encrypt && (x.kind == C_GCM || x.kind == C_CHACHA_POLY || x.kind == C_CCM) { x.tagLength } else { 0 }
+    let tagLength = if encrypt && (x.kind == C_GCM || x.kind == C_CHACHA_POLY || x.kind == C_CCM || x.kind == C_OCB) { x.tagLength } else { 0 }
     let tag = x.tag
     drop x
     if ok {
@@ -934,13 +1147,11 @@ pub unsafe fn execute(c: &mut Call) -> bool {
   if op == 60 { return unsafe text(&mut c.*, HASH_NAMES) }
   if op == 61 { return unsafe text(&mut c.*, CIPHER_NAMES) }
   if op == 63 || op == 79 || op == 84 || op == 71 || op == 77 || op == 72 { c.resultKind = 1 c.result = 0 return true }
-  if op == 64 { c.resultKind = 4 return c.numbers[0] == 0 }
+  // setFips: accepted; without a FIPS provider nothing changes, as getFips keeps reporting.
+  if op == 64 { c.resultKind = 4 return true }
   if op == 78 { c.resultKind = 1 c.result = 1 return true }
   if op == 83 { c.resultKind = 1 c.result = 1 return true }
   if op == 82 || op == 85 { c.resultKind = 4 return true }
-  // No provider algorithms (ML-KEM, ML-DSA, KMAC, Argon2) and no provider MACs.
-  if op == 150 { c.resultKind = 1 c.result = 0 return true }
-  if op == 144 { return unsafe text(&mut c.*, b"") }
   if op == 68 {
     c.resultKind = 4
     let info = if c.numbers[3] != 0 { cipherByNid(i64.toI32(c.numbers[0])) } else { cipherByName(unsafe arg(&anchor, &c.*, 0)) }
@@ -952,6 +1163,7 @@ pub unsafe fn execute(c: &mut Call) -> bool {
       if info.kind == C_GCM { if wanted < 1 { return true } }
       else if info.kind == C_CHACHA_POLY { if wanted < 1 || wanted > 12 { return true } }
       else if info.kind == C_CCM { if wanted < 7 || wanted > 13 { return true } }
+      else if info.kind == C_OCB { if wanted < 1 || wanted > 15 { return true } }
       else if wanted != info.ivLength { return true }
       ivLength = wanted
     }

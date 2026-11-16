@@ -810,36 +810,55 @@ the two `misbehaving-flow-control` tests). The compatibility suite passes with i
 runs Node's HTTP/2 tests with both and requires every test that passes with nghttp2 to pass with
 it.
 
-**Step 8, fourth swap (in progress): crypto.** `SilkCrypto` (./silkcrypto) is `Crypto` over
-`silk.crypto`. It keeps ../openssl's bridge (the operations by name, their arguments, handles,
-worker jobs and results: `ext/crypto_silk`) and replaces its OpenSSL calls: `ext/crypto_algorithms`
-has random bytes, constant-time comparison, PBKDF2, scrypt, HKDF, streaming and one-shot hashes
-(MD5, SHA-1, SHA-2, SHA-3, SHAKE, BLAKE2, RIPEMD-160, SM3, MD5-SHA1), HMAC, AES in ECB, CBC, CFB,
-CFB8, CFB1, OFB, CTR, GCM, CCM and key wrap, 3DES and ChaCha20 with and without Poly1305;
-`ext/crypto_keys` has RSA, EC (P-256, P-384, P-521, secp256k1, P-224, P-192), Ed25519, X25519,
-Ed448 and X448 keys, read and written as PEM and DER (SubjectPublicKeyInfo, PKCS #8 plain and
-PBES2-encrypted, PKCS #1, SEC1, legacy encrypted PEM) and through JWK, generated, and used to sign
-and verify (RSA PKCS #1 v1.5 and PSS, ECDSA, EdDSA), to agree (ECDH, X25519, X448, and the
-`createECDH` and `createDiffieHellman` objects over the RFC 2409, 3526 and 7919 groups or a given
-prime) and to encrypt (RSA OAEP, PKCS #1 v1.5, raw). Failures carry OpenSSL's error strings, so
-Node's error codes come out the same, and `process.versions.openssl` is `3.5.4+silk`: the OpenSSL
-release whose behaviour it follows, marked as not OpenSSL. Not there yet, and failing with
-`ERR_CRYPTO_UNSUPPORTED_OPERATION`: DSA and RSA-PSS keys, DH parameter generation, X.509
-certificates and SPKAC, the provider algorithms (ML-KEM, ML-DSA, SLH-DSA, Argon2, KMAC,
-TurboSHAKE), Ed25519 context strings and the rarer ciphers (OCB, SIV, CTS, XTS, Camellia, ARIA,
-SM4, DES). `tests/crypto-differential.mjs` runs `tests/crypto-cases.cjs` (502 cases over fixed keys
-in `tests/fixtures/crypto`) under Node and a runtime: SilkCrypto agrees on 501, OpenSSL's build
-on the same 501 (the other is the JavaScript's HMAC-with-SHAKE message). The compatibility suite
-passes with it; of Node's 207 crypto and Web Crypto tests that pass under Node, 112 pass with it,
-against all 207 with OpenSSL. TLS stays OpenSSL's (`OpenSslTls` beside `SilkCrypto`) until
-`silk.tls` takes its place.
+**Step 8, fourth swap: crypto.** `SilkCrypto` (./silkcrypto) is `Crypto` over `silk.crypto` and
+`silk.tls`'s certificate code. It keeps ../openssl's bridge (the operations by name, their
+arguments, handles, worker jobs and results: `ext/crypto_silk`) and replaces its OpenSSL calls:
+
+- `ext/crypto_algorithms`: random bytes, constant-time comparison, PBKDF2, scrypt, HKDF, hashes
+  (MD5, SHA-1, SHA-2, SHA-3, SHAKE, BLAKE2, RIPEMD-160, SM3, MD5-SHA1, under all of OpenSSL's names
+  and aliases), HMAC, and the ciphers: AES in ECB, CBC, CFB, CFB8, CFB1, OFB, CTR, GCM, CCM and key
+  wrap, 3DES, ChaCha20 with and without Poly1305 (tags of any length), found by name, nid or OID;
+- `ext/crypto_blocks`: ARIA, Camellia, SM4 and two- and three-key DES in the generic modes, CBC
+  with ciphertext stealing (CS1, CS2, CS3), AES-XTS, AES-OCB and the CMS 3DES key wrap;
+- `ext/crypto_keys`: RSA, RSA-PSS (with its restrictions), DSA, DH, EC (P-256, P-384, P-521,
+  secp256k1, P-224, P-192), Ed25519, X25519, Ed448, X448, ML-DSA and ML-KEM keys: PEM and DER
+  (SubjectPublicKeyInfo, PKCS #8 plain and PBES2-encrypted, PKCS #1, SEC1, legacy encrypted PEM,
+  certificates), JWK and raw forms, generation (DSA and DH parameters and primes included),
+  signatures (PKCS #1 v1.5, PSS, DSA, ECDSA, EdDSA, ML-DSA with context), key agreement (ECDH, X25519,
+  X448, DH, and the `createECDH` and `createDiffieHellman` objects), RSA encryption, and
+  `encapsulate` and `decapsulate` (ML-KEM, DHKEM over P-256/384/521, X25519 and X448, RSASVE);
+- `ext/crypto_x509`: `X509Certificate` (names, times, fingerprints, serial, extensions, host,
+  e-mail and IP checks, `checkIssued`, `checkPrivateKey`, `verify`, the legacy object) and SPKAC;
+- `ext/crypto_argon2`: Argon2d, Argon2i and Argon2id (with its own BLAKE2b, whose output length
+  H' needs); `ext/crypto_keccak`: TurboSHAKE, KangarooTwelve's sponge, cSHAKE's KECCAK-KMAC and KMAC;
+  `ext/crypto_mac`: `createMac` with HMAC, KMAC, CMAC, GMAC, Poly1305, SipHash and keyed BLAKE2b
+  and BLAKE2s; `ext/crypto_mldsa`: the public key of an ML-DSA private key given only in its
+  expanded form (`silk.crypto.ml_dsa` makes keys from seeds only).
+
+Failures carry OpenSSL's error strings, so Node's error codes come out the same, and
+`process.versions.openssl` is `3.5.4+silk`: the OpenSSL release whose behaviour it follows, marked
+as not OpenSSL. Not there, and failing with `ERR_CRYPTO_UNSUPPORTED_OPERATION` or OpenSSL's
+"unsupported": SLH-DSA, PKCS #12, key stores, Ed25519 with a context (Ed25519ctx), multi-prime RSA,
+RSA keys under 512 bits, RSA OAEP with an MGF1 digest other than its OAEP digest, AES-SIV,
+AES-GCM-SIV and the inverse key wraps. DH parameters are slow to generate: a 1024-bit safe prime
+takes tens of seconds (`silk.crypto.prime` sieves the two primes separately).
+
+`tests/crypto-differential.mjs` runs `tests/crypto-cases.cjs` (811 cases over fixed keys and
+certificates in `tests/fixtures/crypto`) under Node and a runtime: SilkCrypto agrees on all of
+them. The compatibility suite passes with it; of Node's 207 crypto and Web Crypto tests that pass
+under Node, 182 pass with it (all 55 Web Crypto ones), against all 207 with OpenSSL.
+
+TLS stays OpenSSL's (`OpenSslTls` beside `SilkCrypto`) until `silk.tls` takes its place: its
+client always rejects a server whose chain or name does not verify, while Node finishes the
+handshake and decides afterwards (`rejectUnauthorized`, `checkServerIdentity`), so `silk.tls` needs
+that mode first.
 
 `cli/src/main_silk.silk` is the executable with the four Silk libraries. The CI job `silk-libraries`
 (`.github/workflows/embedding.yml`) builds it and the executable with the C libraries, runs the
 compression and crypto differentials against Node, the parser differential against llhttp,
 Node's HTTP/2 tests and the compatibility suite.
 
-What is left of step 8 is the rest of `Crypto` (above) and `Tls` over `silk.tls`.
+What is left of step 8 is `Tls` over `silk.tls` (above), and the gaps of `SilkCrypto` listed with it.
 
 ## Risks and decisions taken
 

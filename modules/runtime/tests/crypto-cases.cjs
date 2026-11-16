@@ -77,6 +77,7 @@ record('getHashes has', () => ['sha256', 'md5', 'sha3-512', 'shake256', 'RSA-SHA
 record('getCiphers has', () => ['aes-128-cbc', 'aes-256-gcm', 'chacha20-poly1305'].map(c => crypto.getCiphers().includes(c)));
 // Keys: fixed keys (tests/fixtures/crypto/keys.json), so exports and deterministic signatures compare.
 const keys = require('./fixtures/crypto/keys.json');
+const extras = require('./fixtures/crypto/extras.json');
 const sha = b => crypto.createHash('sha256').update(b).digest('hex');
 for (const [name, pem] of Object.entries(keys)) {
   record(`key ${name} details`, () => { const k = crypto.createPrivateKey(pem); return [k.type, k.asymmetricKeyType, k.asymmetricKeyDetails]; });
@@ -129,6 +130,92 @@ record('x448 derive', () => { const a = crypto.generateKeyPairSync('x448'), b = 
 for (const name of ['des-ede3-cbc', 'des-ede3']) record(`cipher ${name}`, () => { const c = crypto.createCipheriv(name, key(24), name === 'des-ede3' ? null : iv(8)); const enc = Buffer.concat([c.update(big), c.final()]); const d = crypto.createDecipheriv(name, key(24), name === 'des-ede3' ? null : iv(8)); return [sha(enc), Buffer.concat([d.update(enc), d.final()]).equals(big)]; });
 for (const name of ['id-aes128-wrap', 'aes256-wrap', 'id-aes192-wrap-pad']) record(`cipher ${name}`, () => { const k = key(name.includes('128') ? 16 : name.includes('192') ? 24 : 32); const ivv = name.endsWith('pad') ? Buffer.from('a65959a6', 'hex') : Buffer.from('a6a6a6a6a6a6a6a6', 'hex'); const data = Buffer.alloc(name.endsWith('pad') ? 20 : 32, 0x11); const c = crypto.createCipheriv(name, k, ivv); const enc = Buffer.concat([c.update(data), c.final()]); const d = crypto.createDecipheriv(name, k, ivv); return [enc.toString('hex'), Buffer.concat([d.update(enc), d.final()]).equals(data)]; });
 record('ccm', () => { const c = crypto.createCipheriv('aes-128-ccm', key(16), iv(12), { authTagLength: 16 }); c.setAAD(Buffer.from('aad'), { plaintextLength: 5 }); const enc = Buffer.concat([c.update('hello'), c.final()]); const tag = c.getAuthTag(); const d = crypto.createDecipheriv('aes-128-ccm', key(16), iv(12), { authTagLength: 16 }); d.setAuthTag(tag); d.setAAD(Buffer.from('aad'), { plaintextLength: 5 }); return [enc.toString('hex'), tag.toString('hex'), Buffer.concat([d.update(enc), d.final()]).toString()]; });
+// The rest of the block ciphers: ARIA, Camellia, SM4, two-key and three-key DES, CTS, XTS, OCB.
+for (const name of ['aria-128-ecb', 'aria-192-cbc', 'aria-256-ctr', 'aria-128-cfb', 'aria-128-cfb8', 'aria-128-cfb1', 'aria-256-ofb', 'aria128',
+  'camellia-128-ecb', 'camellia-192-cbc', 'camellia-256-ctr', 'camellia-128-cfb', 'camellia-128-cfb8', 'camellia-128-cfb1', 'camellia-256-ofb', 'camellia256',
+  'sm4', 'sm4-ecb', 'sm4-cbc', 'sm4-cfb', 'sm4-ofb', 'sm4-ctr', 'sm4-cfb128', 'des-ede', 'des-ede-cbc', 'des-ede-cfb', 'des-ede-ofb', 'des-ede3-cfb',
+  'des-ede3-cfb1', 'des-ede3-cfb8', 'des-ede3-ofb']) record(`cipher ${name}`, () => {
+  const info = crypto.getCipherInfo(name);
+  const c = crypto.createCipheriv(name, key(info.keyLength), info.ivLength ? iv(info.ivLength) : null);
+  const enc = Buffer.concat([c.update(big), c.final()]);
+  const d = crypto.createDecipheriv(name, key(info.keyLength), info.ivLength ? iv(info.ivLength) : null);
+  return [info, sha(enc), Buffer.concat([d.update(enc), d.final()]).equals(big)];
+});
+record('cipher sm4 bad final', () => { const d = crypto.createDecipheriv('sm4-cbc', key(16), iv(16)); d.update(Buffer.alloc(16, 9)); return d.final(); });
+for (const name of ['aes-128-cbc-cts', 'aes-256-cbc-cts', 'camellia-192-cbc-cts']) for (const ctsMode of [undefined, 'CS1', 'CS2', 'CS3']) for (const length of [16, 32, 45]) record(`cipher ${name} ${ctsMode} ${length}`, () => {
+  const k = key(crypto.getCipherInfo(name).keyLength), data = big.subarray(0, length);
+  const c = crypto.createCipheriv(name, k, iv(16), ctsMode && { ctsMode }); const enc = Buffer.concat([c.update(data), c.final()]);
+  const d = crypto.createDecipheriv(name, k, iv(16), ctsMode && { ctsMode }); return [enc.toString('hex'), Buffer.concat([d.update(enc), d.final()]).equals(data)];
+});
+record('cipher cts short', () => { const c = crypto.createCipheriv('aes-128-cbc-cts', key(16), iv(16)); return Buffer.concat([c.update(Buffer.alloc(5)), c.final()]); });
+for (const name of ['aes-128-xts', 'aes-256-xts']) record(`cipher ${name}`, () => { const k = Buffer.concat([key(name.includes('128') ? 16 : 32), Buffer.alloc(name.includes('128') ? 16 : 32, 1)]); const c = crypto.createCipheriv(name, k, iv(16)); const enc = Buffer.concat([c.update(big.subarray(0, 1000)), c.final()]); const d = crypto.createDecipheriv(name, k, iv(16)); return [sha(enc), Buffer.concat([d.update(enc), d.final()]).equals(big.subarray(0, 1000))]; });
+record('cipher xts duplicate keys', () => { const c = crypto.createCipheriv('aes-128-xts', key(32), iv(16)); return Buffer.concat([c.update(Buffer.alloc(32)), c.final()]); });
+for (const [name, nonce, tagLength] of [['aes-128-ocb', 12, 16], ['aes-256-ocb', 7, 8], ['aes-192-ocb', 15, 12]]) record(`cipher ${name} ${nonce} ${tagLength}`, () => {
+  const k = key(crypto.getCipherInfo(name).keyLength), o = { authTagLength: tagLength };
+  const c = crypto.createCipheriv(name, k, iv(nonce), o); c.setAAD(Buffer.from('header')); const enc = Buffer.concat([c.update(big.subarray(0, 333)), c.final()]); const tag = c.getAuthTag();
+  const d = crypto.createDecipheriv(name, k, iv(nonce), o); d.setAAD(Buffer.from('header')); d.setAuthTag(tag);
+  const bad = crypto.createDecipheriv(name, k, iv(nonce), o); bad.setAAD(Buffer.from('header!')); bad.setAuthTag(tag); bad.update(enc);
+  let failed = false; try { bad.final(); } catch { failed = true; }
+  return [sha(enc), tag.toString('hex'), Buffer.concat([d.update(enc), d.final()]).equals(big.subarray(0, 333)), failed];
+});
+record('cipher des3-wrap', () => { const c = crypto.createCipheriv('des3-wrap', key(24), Buffer.alloc(0)); const w = c.update(Buffer.alloc(24, 3)); const d = crypto.createDecipheriv('des3-wrap', key(24), Buffer.alloc(0)); return [w.length, d.update(w).toString('hex')]; });
+for (const name of ['aes-128-wrap', 'aes-256-wrap-pad', 'aes-128-ocb', 'aes-256-xts', 'aes-192-cbc-cts', 'camellia128', 'sm4-ofb128', 'des-ede-ecb', 'des3-wrap', 'id-smime-alg-cms3deswrap', 1066, 958, 913, 246, 32]) record(`cipher info ${name}`, () => crypto.getCipherInfo(name));
+for (const name of ['RSA-SHA1-2', 'RSA-SHA512/224', 'sha256WithRSAEncryption', 'md5WithRSAEncryption', 'ripemd160WithRSA', 'ssl3-md5', 'ssl3-sha1', 'sm3WithRSAEncryption',
+  'id-rsassa-pkcs1-v1_5-with-sha3-384', 'blake2b-512', 'blake2s-256', 'sha2-512/256', 'sha-512/224', 'ripemd-160']) record(`hash alias ${name}`, () => crypto.createHash(name).update('abc').digest('hex'));
+// DSA.
+record('dsa key', () => { const k = crypto.createPrivateKey(keys.dsa); return [k.asymmetricKeyType, k.asymmetricKeyDetails, sha(k.export({ type: 'pkcs8', format: 'der' })), sha(crypto.createPublicKey(k).export({ type: 'spki', format: 'der' }))]; });
+record('dsa verify node signature', () => [crypto.verify('sha256', Buffer.from('message'), crypto.createPublicKey(keys.dsa), Buffer.from(extras['dsa-signature'], 'base64')), crypto.verify('sha256', Buffer.from('massage'), crypto.createPublicKey(keys.dsa), Buffer.from(extras['dsa-signature'], 'base64'))]);
+for (const dsaEncoding of ['der', 'ieee-p1363']) record(`dsa sign ${dsaEncoding}`, () => { const s = crypto.sign('sha1', Buffer.from('m'), { key: keys.dsa, dsaEncoding }); return [dsaEncoding === 'der' ? s[0] : s.length, crypto.verify('sha1', Buffer.from('m'), { key: keys.dsa, dsaEncoding }, s)]; });
+record('dsa jwk', () => crypto.createPrivateKey(keys.dsa).export({ format: 'jwk' }));
+record('dsa generate small', () => crypto.generateKeyPairSync('dsa', { modulusLength: 512 }));
+record('dsa generate divisor', () => crypto.generateKeyPairSync('dsa', { modulusLength: 1024, divisorLength: 200 }));
+record('dsa generate', () => crypto.generateKeyPairSync('dsa', { modulusLength: 1024 }).privateKey.asymmetricKeyDetails);
+// RSA-PSS keys.
+for (const name of ['rsa-pss', 'rsa-pss-plain']) record(`${name} key`, () => { const k = crypto.createPrivateKey(keys[name]); const s = crypto.sign(null, Buffer.from('m'), k); return [k.asymmetricKeyType, k.asymmetricKeyDetails, sha(k.export({ type: 'pkcs8', format: 'der' })), sha(crypto.createPublicKey(k).export({ type: 'spki', format: 'der' })), s.length, crypto.verify(null, Buffer.from('m'), crypto.createPublicKey(k), s)]; });
+for (const options of [{}, { hashAlgorithm: 'sha256' }, { hashAlgorithm: 'sha512', mgf1HashAlgorithm: 'sha256', saltLength: 10 }, { saltLength: 4 }]) record(`rsa-pss generate ${JSON.stringify(options)}`, () => { const k = crypto.generateKeyPairSync('rsa-pss', { modulusLength: 1024, ...options }); return [k.publicKey.asymmetricKeyDetails, k.publicKey.export({ type: 'spki', format: 'der' }).subarray(0, 24).toString('hex')]; });
+record('rsa-pss encrypt', () => crypto.publicEncrypt(crypto.createPublicKey(keys['rsa-pss']), Buffer.from('x')));
+// DH keys.
+record('dh keys', () => { const a = crypto.createPrivateKey(keys.dh), b = crypto.createPrivateKey(keys['dh-b']); return [a.asymmetricKeyType, a.asymmetricKeyDetails, sha(a.export({ type: 'pkcs8', format: 'der' })), sha(crypto.createPublicKey(a).export({ type: 'spki', format: 'der' })), sha(crypto.diffieHellman({ privateKey: a, publicKey: crypto.createPublicKey(b) }))]; });
+record('dh generate', () => { const a = crypto.generateKeyPairSync('dh', { group: 'modp14' }), b = crypto.generateKeyPairSync('dh', { group: 'modp14' }); return crypto.diffieHellman({ privateKey: a.privateKey, publicKey: b.publicKey }).equals(crypto.diffieHellman({ privateKey: b.privateKey, publicKey: a.publicKey })); });
+record('dh generate prime', () => { const prime = crypto.getDiffieHellman('modp2').getPrime(); const a = crypto.generateKeyPairSync('dh', { prime, generator: 2 }); const spki = a.publicKey.export({ type: 'spki', format: 'der' }); return [a.privateKey.asymmetricKeyType, spki.length >= 290 && spki.length <= 292, crypto.createPublicKey({ key: spki, format: 'der', type: 'spki' }).asymmetricKeyType]; });
+// ML-DSA and ML-KEM.
+for (const name of ['ml-dsa-44', 'ml-dsa-87', 'ml-kem-768']) record(`${name} key`, () => { const k = crypto.createPrivateKey(keys[name]); const pub = crypto.createPublicKey(k); return [k.asymmetricKeyType, k.asymmetricKeyDetails, sha(k.export({ type: 'pkcs8', format: 'der' })), sha(pub.export({ type: 'spki', format: 'der' })), sha(pub.export({ format: 'raw-public' })), sha(k.export({ format: 'raw-seed' })), k.export({ format: 'jwk' }).kty]; });
+record('ml-dsa verify node signature', () => { const pub = crypto.createPublicKey(keys['ml-dsa-44']); const s = Buffer.from(extras['ml-dsa-44-signature'], 'base64'); return [crypto.verify(null, Buffer.from('message'), pub, s), crypto.verify(null, Buffer.from('messages'), pub, s)]; });
+record('ml-dsa sign', () => { const s = crypto.sign(null, Buffer.from('m'), keys['ml-dsa-87']); return [s.length, crypto.verify(null, Buffer.from('m'), crypto.createPublicKey(keys['ml-dsa-87']), s)]; });
+record('ml-dsa context', () => { const s = crypto.sign(null, Buffer.from('m'), { key: keys['ml-dsa-44'], context: Buffer.from('ctx') }); const pub = crypto.createPublicKey(keys['ml-dsa-44']); return [crypto.verify(null, Buffer.from('m'), { key: pub, context: Buffer.from('ctx') }, s), crypto.verify(null, Buffer.from('m'), pub, s)]; });
+record('ml-kem decapsulate node', () => crypto.decapsulate(keys['ml-kem-768'], Buffer.from(extras['ml-kem-768-ciphertext'], 'base64')).toString('base64') === extras['ml-kem-768-shared']);
+record('ml-kem encapsulate', () => { const { sharedKey, ciphertext } = crypto.encapsulate(crypto.createPublicKey(keys['ml-kem-768'])); return [sharedKey.length, ciphertext.length, crypto.decapsulate(keys['ml-kem-768'], ciphertext).equals(sharedKey)]; });
+record('ml generate', () => ['ml-dsa-65', 'ml-kem-512', 'ml-kem-1024'].map(t => { const k = crypto.generateKeyPairSync(t); return [k.publicKey.asymmetricKeyType, k.publicKey.export({ type: 'spki', format: 'der' }).length, k.privateKey.export({ type: 'pkcs8', format: 'der' }).length]; }));
+record('ml raw import', () => { const seed = Buffer.alloc(32, 1); const k = crypto.createPrivateKey({ key: seed, format: 'raw-seed', asymmetricKeyType: 'ml-dsa-44' }); return sha(crypto.createPublicKey(k).export({ format: 'raw-public' })); });
+// Certificates and SPKAC.
+const ca = new crypto.X509Certificate(extras['cert-ca1-cert']);
+for (const name of ['agent1-cert', 'ca1-cert', 'ec-cert', 'rsa_pss_cert_2048_sha256_sha256_16', 'agent6-cert']) record(`x509 ${name}`, () => {
+  const x = new crypto.X509Certificate(extras['cert-' + name]);
+  return [x.subject, x.issuer, x.subjectAltName, x.infoAccess, x.validFrom, x.validTo, x.validToDate.toISOString(), x.fingerprint, x.fingerprint256, x.fingerprint512, x.serialNumber, x.signatureAlgorithm, x.signatureAlgorithmOid,
+    x.ca, x.keyUsage, x.publicKey.asymmetricKeyType, x.publicKey.asymmetricKeyDetails, x.checkIssued(ca), x.verify(ca.publicKey), x.checkHost('agent1'), x.checkHost('localhost'), x.checkHost('www.example.com'), x.checkHost('a.b', { subject: 'always' }),
+    x.checkEmail('ry@tinyclouds.org'), x.checkEmail('nobody@example.com'), x.checkIP('127.0.0.1'), sha(x.raw), x.toString().split('\n')[0], Object.keys(x.toLegacyObject()).sort().join(), x.toLegacyObject().bits, x.toLegacyObject().asn1Curve];
+});
+record('x509 der input', () => new crypto.X509Certificate(ca.raw).subject);
+record('x509 garbage', () => new crypto.X509Certificate('not a certificate'));
+record('x509 bad pem', () => new crypto.X509Certificate('-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----\n'));
+record('x509 checkIP invalid', () => ca.checkIP('not an ip'));
+record('spkac', () => [crypto.Certificate.verifySpkac(Buffer.from(extras.spkac)), crypto.Certificate.verifySpkac(Buffer.from(extras['spkac-invalid'])), crypto.Certificate.exportChallenge(extras.spkac).toString(), crypto.Certificate.exportPublicKey(extras.spkac).toString()]);
+// Argon2 (RFC 9106 5.1-5.3 parameters, and small ones).
+const argon2Parameters = { message: Buffer.alloc(32, 1), nonce: Buffer.alloc(16, 2), secret: Buffer.alloc(8, 3), associatedData: Buffer.alloc(12, 4), parallelism: 4, tagLength: 32, memory: 32, passes: 3 };
+for (const algorithm of ['argon2d', 'argon2i', 'argon2id']) record(`argon2 ${algorithm} rfc`, () => crypto.argon2Sync(algorithm, argon2Parameters).toString('hex'));
+for (const [parallelism, tagLength, memory, passes] of [[1, 4, 8, 1], [2, 100, 64, 2], [1, 32, 1000, 1]]) record(`argon2id ${parallelism} ${tagLength} ${memory} ${passes}`, () => crypto.argon2Sync('argon2id', { message: Buffer.from('password'), nonce: Buffer.from('somesalt'), parallelism, tagLength, memory, passes }).toString('hex'));
+for (const set of ['44', '65', '87']) record(`ml-dsa-${set} expanded only`, () => { const k = crypto.createPrivateKey(extras[`ml_dsa_${set}_private_priv_only`]); const pub = crypto.createPublicKey(k); const s = crypto.sign(null, Buffer.from('m'), k); return [pub.equals(crypto.createPublicKey(extras[`ml_dsa_${set}_public`])), crypto.verify(null, Buffer.from('m'), pub, s), sha(k.export({ type: 'pkcs8', format: 'der' }))]; });
+// createMac.
+record('getMacs', () => crypto.getMacs());
+for (const [algorithm, keyLength, options] of [['hmac', 32, { digest: 'sha256' }], ['hmac', 200, { digest: 'sha3-512' }], ['kmac128', 32, {}], ['kmac256', 16, { customization: Buffer.from('c'), outputLength: 20 }],
+  ['kmac-128', 32, { outputLength: 0 }], ['cmac', 16, { cipher: 'aes-128-cbc' }], ['cmac', 32, { cipher: 'aes-256-cbc' }], ['cmac', 24, { cipher: 'des-ede3-cbc' }], ['gmac', 16, { cipher: 'aes-128-gcm', iv: Buffer.alloc(12, 1) }],
+  ['gmac', 32, { cipher: 'aes-256-gcm', iv: Buffer.alloc(16, 2) }], ['poly1305', 32, {}], ['siphash', 16, {}], ['siphash', 16, { outputLength: 8 }], ['blake2bmac', 64, {}],
+  ['blake2bmac', 16, { outputLength: 32, salt: Buffer.alloc(16, 3), customization: Buffer.alloc(16, 4) }], ['blake2smac', 32, {}], ['blake2smac', 16, { outputLength: 16, salt: Buffer.alloc(8, 5) }]]) {
+  for (const [label, data] of [['empty', Buffer.alloc(0)], ['abc', Buffer.from('abc')], ['big', big]]) record(`mac ${algorithm} ${keyLength} ${JSON.stringify(Object.keys(options))} ${label}`, () => crypto.createMac(algorithm, key(keyLength), options).update(data).final('hex'));
+}
+record('mac stream', () => { const m = crypto.createMac('cmac', key(16), { cipher: 'aes-128-cbc' }); for (let i = 0; i < 1000; i += 7) m.update(big.subarray(i, i + 7)); return m.final('base64'); });
+for (const [algorithm, options] of [['nope', {}], ['hmac', {}], ['hmac', { digest: 'nope' }], ['hmac', { digest: 'sha256', cipher: 'aes-128-cbc' }], ['cmac', {}], ['cmac', { cipher: 'aes-256-cbc', iv: Buffer.alloc(16) }],
+  ['gmac', { cipher: 'aes-256-gcm' }], ['poly1305', { customization: Buffer.alloc(0) }], ['siphash', { outputLength: 12 }], ['blake2bmac', { outputLength: 65 }], ['kmac128', { digest: 'sha256' }]]) record(`mac error ${algorithm} ${JSON.stringify(options)}`, () => crypto.createMac(algorithm, key(32).subarray(0, algorithm === 'siphash' ? 16 : 32), options));
 let pending = 0;
 function later(name, start) { pending++; start((e, v) => { out.push(e ? { name, error: { code: e.code, message: e.message } } : { name, value: v }); if (--pending === 0) finish(); }); }
 later('pbkdf2 async', cb => crypto.pbkdf2('p', 's', 10, 16, 'sha256', (e, k) => cb(e, k && k.toString('hex'))));
@@ -138,4 +225,9 @@ later('randomBytes async', cb => crypto.randomBytes(16, (e, b) => cb(e, b && b.l
 later('keygen async', cb => crypto.generateKeyPair('ed25519', (e, pub, priv) => cb(e, pub && [pub.asymmetricKeyType, priv.type])));
 later('subtle ecdsa', cb => crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']).then(async k => { const s = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, k.privateKey, Buffer.from('m')); return [s.byteLength, await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, k.publicKey, s, Buffer.from('m'))]; }).then(v => cb(null, v), cb));
 later('subtle digest', cb => crypto.subtle.digest('SHA-384', Buffer.from('abc')).then(d => cb(null, Buffer.from(d).toString('hex')), cb));
+later('subtle turboshake', cb => Promise.all([{ name: 'TurboSHAKE128', outputLength: 256 }, { name: 'TurboSHAKE256', outputLength: 512, domainSeparation: 0x0b }, { name: 'KT128', outputLength: 256 }, { name: 'KT256', outputLength: 512, customization: Buffer.from('c') }].map(a => crypto.subtle.digest(a, big).then(d => Buffer.from(d).toString('hex'), e => e.message))).then(v => cb(null, v), cb));
+later('subtle cshake', cb => Promise.all([{ name: 'cSHAKE128', outputLength: 256 }, { name: 'cSHAKE256', outputLength: 512, customization: Buffer.from('custom') }].map(a => crypto.subtle.digest(a, Buffer.from('abc')).then(d => Buffer.from(d).toString('hex'), e => e.message))).then(v => cb(null, v), cb));
+later('subtle kmac', cb => Promise.all(['KMAC128', 'KMAC256'].map(name => crypto.subtle.importKey('raw-secret', Buffer.alloc(32, 1), { name }, false, ['sign']).then(k => crypto.subtle.sign({ name, outputLength: 256, customization: Buffer.from('c') }, k, Buffer.from('abc'))).then(d => Buffer.from(d).toString('hex'), e => e.message))).then(v => cb(null, v), cb));
+later('subtle argon2', cb => crypto.subtle.importKey('raw-secret', Buffer.from('pw'), { name: 'Argon2id' }, false, ['deriveBits']).then(k => crypto.subtle.deriveBits({ name: 'Argon2id', nonce: Buffer.alloc(16, 2), parallelism: 1, memory: 16, passes: 2 }, k, 256)).then(d => cb(null, Buffer.from(d).toString('hex')), e => cb(null, e.message)));
+later('argon2 async', cb => crypto.argon2('argon2i', { message: Buffer.from('p'), nonce: Buffer.alloc(8), parallelism: 1, tagLength: 16, memory: 8, passes: 1 }, (e, k) => cb(e, k && k.toString('hex'))));
 function finish() { for (const line of out) console.log(JSON.stringify(line, (k, v) => typeof v === "bigint" ? `${v}n` : v)); }
