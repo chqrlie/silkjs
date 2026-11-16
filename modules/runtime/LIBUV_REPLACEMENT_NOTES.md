@@ -5,8 +5,8 @@ status and benchmark numbers.
 
 ## Status (2026-11-15)
 
-No libuv C is compiled or linked. `modules/native/libuv/silk.toml` has no `[native.archive]` and
-compiles only uvwasi, against a header of its own; no Silk file declares an `extern "C" fn uv_*`.
+No libuv C is compiled or linked. `modules/native/uvwasi/silk.toml` (formerly `modules/native/libuv`) has no `[native.archive]`
+and compiles only uvwasi, against a header of its own; no Silk file declares an `extern "C" fn uv_*`.
 
 The executable exports **libuv 1.51's whole public C API** (318 `uv_*` functions: every public
 function of libuv 1.51 on Unix, and 1.52's `uv_tcp_keepalive_ex` and `uv_udp_open_ex`) for Node-API
@@ -30,7 +30,7 @@ Verified on Linux x64 and on macOS arm64 (the CI runner): see "macOS arm64" belo
 | Timers | Not used by the runtime (its timers were already Silk); a timer handle exists for addons | `uv_loop.silk` |
 | OS queries (`uv_cpu_info`, `uv_interface_addresses`, memory, load, uptime, passwd, uname, rusage, priority, hostname, homedir, tmpdir, exepath, parallelism), `uv_hrtime`, `uv_translate_sys_error`, `uv_thread_setname` | Silk | `src/ext/uv_os.silk` |
 | `uv_ip4_addr`, `uv_ip6_addr`, `uv_ip4_name`, `uv_ip6_name` | Silk | `src/ext/uv_inet.silk` |
-| What uvwasi calls (63 functions) | Silk, under `silk_uvwasi_*` names | `src/ext/uvwasi_host.silk`, `modules/native/libuv/uvwasi/shim/uv.h` |
+| What uvwasi calls (63 functions) | Silk, under `silk_uvwasi_*` names | `src/ext/uvwasi_host.silk`, `modules/native/uvwasi/uvwasi/shim/uv.h` |
 | libuv's C API for addons: loops (the default loop included), handles, timers, idle/prepare/check, async, poll, signal, process (pipe and stream stdio), fs event and fs poll handles, `uv_walk`, `uv_print_*` | Silk, libuv's C symbols on the addon's libuv-sized records | `src/ext/uv_api_loop.silk`, `src/ext/uv_api_abi.silk` (record conventions) |
 | libuv's threads, locks, once, keys, errors, allocator, OS and address functions, process title, WTF-8 | Silk | `src/ext/uv_api_sys.silk`, `src/ext/uv_errno.silk` |
 | libuv's streams, TCP, pipes, TTY and UDP for addons | Silk, on the loop's descriptor handles | `src/ext/uv_api_stream.silk` |
@@ -208,7 +208,7 @@ None blocked the work, and no C was added. Reported for the compiler's owner:
 | Node's own suite under `tests/node-suite`, `main` and this branch built here | 4,639 tests, 364 skipped by the suite's list; 4,206 of 4,275 pass with each, and no test passes with one and fails with the other |
 | Fixtures added on this branch: `tests/spawn-smoke.cjs` (9 scenarios), `tests/fs-watch-darwin-smoke.cjs` (7 directory-watch scenarios), each compared with Node 24 | pass (Linux: fork and exec, inotify) |
 | **libuv 1.51's own test suite** (`tools/libuv_suite.py`: libuv's `test/*.c` linked with libuv built from source, and with `ext.uv_api_*`), run as `nobody` | libuv 438 of 442, Silk 438 of 442; the same four fail with both, for this container: `fs_copyfile`, `tcp_close_while_connecting` and `tcp_connect_timeout` (no outside network), `thread_priority` (unprivileged). The four `test-idna.c` tests exercise libuv's internal IDNA code, not its interface, and are left out. It found five differences on the way (a timer overflow, closed records, poll `EEXIST`, signal counts after `uv_loop_fork`, the thread pool after fork), all fixed |
-| Standalone harness of `uv_loop.silk` (async, signal, spawn, kill, missing program, fs event, stat poll, close order, pool, phases, timers, walk) | passes; outside the repository |
+| The loop driven directly, without the runtime (`tests/loop-harness`, run by `tools/loop_harness.py`: async, signals, spawn and kill, a missing program, fs events, stat polls, close order, the pool and cancellation, phases, timers, walk; 45 checks) | every check holds; it also runs in the Linux arm64 and macOS workflows |
 | OS queries against real libuv 1.51 (same program, both libraries): real machine, 23 substituted `/proc` and cgroup scenarios, synthetic `getifaddrs`, 89,118 address texts | identical output |
 | uvwasi driver against real libuv 1.51 and against the shim (about 140 lines: fs, `poll_oneoff`, sockets) | identical but for four expected lines |
 | libuv 1.51's own fs, thread-pool, cancel, getaddrinfo, getnameinfo, IDNA and random tests (80 on Linux), linked against `uv_api_fs.silk` and against real libuv, run as `nobody`; plus a differential program (about 170 lines of results, fields and cleanup) | all 80 pass on both; differential output identical. Harness outside the repository (`/home/user/dl/uvapi-tests/fs`) |
@@ -314,5 +314,3 @@ passed, 0 failed; fixtures 83 of 96 (main 81 of 94, every shared fixture the sam
 
 ## Next
 
-- Rename `modules/native/libuv` (it holds only uvwasi now).
-- Put the standalone loop harness in the repository as a test package.

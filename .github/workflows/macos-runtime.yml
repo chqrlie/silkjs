@@ -100,6 +100,10 @@ jobs:
           if [ -f tests/loop-behavior.mjs ]; then
             SILKJS_RUNTIME="$RUNNER_TEMP/silkjs" node tests/loop-behavior.mjs 2>&1 | tee "$RUNNER_TEMP/loop-behavior.log" | tail -60
           fi
+      - name: The loop driven directly (tests/loop-harness)
+        if: always() && matrix.source == 'branch'
+        working-directory: modules/runtime
+        run: python3 tools/loop_harness.py --work "$RUNNER_TEMP/loop-harness"
       - name: libuv's own test suite, real libuv against the Silk exports
         if: always()
         working-directory: modules/runtime
