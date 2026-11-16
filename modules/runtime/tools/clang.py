@@ -10,7 +10,9 @@ BUILD = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Another program of this package (tools/embed_smoke.py) keeps its link apart from the executable's.
 BUILD = os.environ.get('SILKJS_CLANG_BUILD', BUILD)
 arguments = sys.argv[1:]
-compiler = os.environ.get('SILK_CLANG', 'clang')
+# SILK_CLANG when silk passes it on, else Clang 22 by its versioned name (a runner's plain `clang`
+# can be older), else `clang`.
+compiler = os.environ.get('SILK_CLANG') or shutil.which('clang-22') or 'clang'
 # Compilation, inspection, preprocessing, and relocatable links do not produce
 # the executable whose Mach-O header the injector extends.
 non_final = {'-c', '-S', '-E', '-r', '--version', '-v', '-###', '-dumpmachine', '-dumpversion'}

@@ -47,6 +47,9 @@ pub effect fn tlsStdlib() -> ()
   let mut client = run Bytes.copy(Path.rawBytes(&target))
   run client.append(b"/silk/tls/client.silk")
   if !run command(b"/bin/rm", b"-rf", Path.rawBytes(&target), b"") { run Task.abort("could not remove the previous build/stdlib-tls") }
+  // A fresh checkout has no build directory yet.
+  let parent = run Path.resolveBytes(&package, b"../../build")
+  if !run command(b"/bin/mkdir", b"-p", Path.rawBytes(&parent), b"") { run Task.abort("could not make the build directory") }
   if !run command(b"/bin/cp", b"-R", source.asSlice(), Path.rawBytes(&target)) { run Task.abort("could not copy the toolchain's standard library: is the pinned toolchain installed (silk use)?") }
   if !run command(b"/usr/bin/patch", b"-s", client.asSlice(), Path.rawBytes(&patch)) { run Task.abort("silktls/silk-tls-deferred.patch does not apply to the toolchain's silk/tls/client.silk") }
 }
