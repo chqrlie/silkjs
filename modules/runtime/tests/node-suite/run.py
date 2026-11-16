@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run Node's test/parallel (or other dirs) against a binary. usage: run.py BIN OUT.json [dir] [jobs] [filter-regex]"""
+"""Run Node's test/parallel (or other dirs) against a binary. usage: [RETRY=n] run.py BIN OUT.json [dir] [jobs] [filter-regex]"""
 import json, os, re, subprocess, sys, time, shutil
 from concurrent.futures import ThreadPoolExecutor
 BIN, OUT = sys.argv[1], sys.argv[2]
@@ -7,6 +7,7 @@ DIR = sys.argv[3] if len(sys.argv) > 3 else 'parallel'
 JOBS = int(sys.argv[4]) if len(sys.argv) > 4 else 4
 FILT = re.compile(sys.argv[5]) if len(sys.argv) > 5 else None
 PRE = os.environ.get('PRE','').split()
+RETRY = int(os.environ.get('RETRY', '0'))
 ROOT = os.path.expanduser(os.environ.get('NODE_SRC', '~/setup/node-src'))
 TD = os.path.join(ROOT, 'test', DIR)
 files = sorted(f for f in os.listdir(TD) if f.startswith('test-') and (f.endswith('.js') or f.endswith('.mjs') or f.endswith('.cjs')))
@@ -53,6 +54,16 @@ with ThreadPoolExecutor(JOBS) as ex:
     for i, (f, r) in enumerate(ex.map(run, todo)):
         res[f] = r; jl.write(json.dumps([f, r]) + '\n'); jl.flush()
         if i % 200 == 0: print(i, len(todo), flush=True)
+# RETRY=n reruns each failing test up to n times, one at a time, for the tests that fail only
+# under parallel load (test-http2-pipe, whose server stream can close before its piped file
+# write finishes, fails so with every build); a test that then passes keeps its first failure
+# in 'retried'.
+for f in [f for f, r in res.items() if r['code'] != 0 and not r.get('retried')][:50] if RETRY else []:
+    first = res[f]
+    for _ in range(RETRY):
+        g, r = run(f)
+        if r['code'] == 0:
+            r['retried'] = first['out'][-500:]; res[f] = r; break
 json.dump(res, open(OUT, 'w'), indent=0)
 ok = sum(1 for r in res.values() if r['code'] == 0 and not r['skip'])
 print('pass', ok, 'skip', sum(r['skip'] for r in res.values()), 'total', len(res))

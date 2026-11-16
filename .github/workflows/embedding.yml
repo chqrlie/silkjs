@@ -99,16 +99,17 @@ jobs:
           git config core.sparseCheckout true && printf 'test/\n' > .git/info/sparse-checkout
           git fetch -q --depth 1 origin tag v24.22.1 && git checkout -q FETCH_HEAD
           cd "$GITHUB_WORKSPACE/modules/runtime/tests/node-suite"
-          python3 run.py "$GITHUB_WORKSPACE/modules/runtime/build/native/silkjsruntime" native.json parallel 4 '^test-http2-'
-          python3 run.py "$GITHUB_WORKSPACE/modules/runtime/build/silk/silkjsruntime" silk.json parallel 4 '^test-http2-'
+          # A test that fails only under parallel load gets a second, lone run (run.py's RETRY).
+          RETRY=1 python3 run.py "$GITHUB_WORKSPACE/modules/runtime/build/native/silkjsruntime" native.json parallel 4 '^test-http2-'
+          RETRY=1 python3 run.py "$GITHUB_WORKSPACE/modules/runtime/build/silk/silkjsruntime" silk.json parallel 4 '^test-http2-'
           # Every test that passes with nghttp2 must pass with SilkHttp2.
           python3 report.py native.json silk.json fails.json | tee report.txt
           grep -q '^eligible [0-9]* pass [0-9]* fail 0 ' report.txt
       - name: Node's TLS and HTTPS tests with SilkTls
         working-directory: modules/runtime/tests/node-suite
         run: |
-          python3 run.py "$(command -v node)" tls-node.json parallel 4 '^test-(tls|https)-'
-          python3 run.py "$GITHUB_WORKSPACE/modules/runtime/build/silk/silkjsruntime" tls-silk.json parallel 4 '^test-(tls|https)-'
+          RETRY=1 python3 run.py "$(command -v node)" tls-node.json parallel 4 '^test-(tls|https)-'
+          RETRY=1 python3 run.py "$GITHUB_WORKSPACE/modules/runtime/build/silk/silkjsruntime" tls-silk.json parallel 4 '^test-(tls|https)-'
           python3 report.py tls-node.json tls-silk.json tls-fails.json | tee tls-report.txt
           # No fewer than docs/composable-runtime.md reports (231 of 283), less a margin for the
           # machine's environment.
