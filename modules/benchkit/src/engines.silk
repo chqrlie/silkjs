@@ -10,7 +10,7 @@
 //! script path and `--dir /`.
 
 import kit as Kit
-import kit { Captured, Job, Stream, Table }
+import kit { Job, Stream, Table }
 import silk.cli.task { TaskError }
 import silk.collections.bytes { Bytes }
 import silk.collections.list { List }
