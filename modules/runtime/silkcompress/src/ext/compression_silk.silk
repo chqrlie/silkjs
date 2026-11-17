@@ -12,6 +12,7 @@ import silkjs.js_realm { lendRealm }
 import silkjs.js_std_support as text
 import silk.core.effect { Effect }
 import silk.core.result { Result }
+import silk.core.option { Option }
 import silk.mem.pointer { Pointer }
 import silk.mem.layout { Layout }
 import silk.compress.checksum { CompressionChecksum }
@@ -42,6 +43,7 @@ import silk.compress.zstd_encode { ZstdEncodeError, ZstdEncodeProgress, ZstdEnco
 unsafe extern "C" fn calloc(count: usize, size: usize) -> ?*mut u8
 unsafe extern "C" fn free(pointer: ?*mut u8) -> ()
 import silkjsruntime.ext.resource_snapshot as resources
+import silkjs.js_proxy_core as core
 
 pub struct State { first: ?*mut Handle, jobs: ?*mut Job, next: i32, closing: bool }
 struct Handle {
@@ -71,7 +73,13 @@ struct Job {
   output: ?*mut u8, capacity: usize, written: usize, consumed: usize,
   status: i32, finished: bool, again: bool, pledgedSize: u64,
   // The codec failure's text, as zlib's msg or ZSTD_getErrorName names it; empty for none.
-  message: &'static [u8]
+  message: &'static [u8],
+  // What one codec call reads and writes: process() takes these, whichever op set them.
+  flush: i32, source: ?*mut u8, sourceLength: usize, target: ?*mut u8,
+  // The write op: the caller's input and output ArrayBuffers (retained while a worker runs),
+  // their leases when the worker writes in place, and the staging copies otherwise.
+  views: [ValueBits; 2], leaseIn: Option<buffers.BufferReadLease>, leaseOut: Option<buffers.BufferReadLease>,
+  stagedOut: bool, direct: bool, words: ValueBits
 }
 unsafe fn nonnull<T>(p: ?*mut T) -> *mut T { return unsafe Intrinsic.pointerRequalify<?*mut T, *mut T>(p) }
 unsafe fn raw<T>(p: *mut T) -> *mut u8 { return unsafe Intrinsic.pointerReinterpret<*mut T, *mut u8>(p) }
@@ -390,7 +398,7 @@ unsafe effect fn renewZstdDecoder(h: &mut CodecState) -> i32 ? &mut Allocator {
   return 0
 }
 unsafe fn deflateStep(j: &mut Job, h: &mut CodecState, input: ?*mut u8, length: usize, output: ?*mut u8, capacity: usize) -> () {
-  let flush = j.numbers[2]
+  let flush = j.flush
   let mut a = () let e = unsafe Pointer.borrowMut<(), Encoder>(&mut a, unsafe nonnull(h.deflater))
   if j.op == 4 {
     // deflateParams: the new level and strategy take effect from the next block.
@@ -414,7 +422,7 @@ unsafe fn deflateStep(j: &mut Job, h: &mut CodecState, input: ?*mut u8, length: 
   }
 }
 unsafe fn inflateStep(j: &mut Job, h: &mut CodecState, input: ?*mut u8, length: usize, output: ?*mut u8, capacity: usize) -> () {
-  let flush = j.numbers[2] let kind = h.kind
+  let flush = j.flush let kind = h.kind
   if h.ended {
     if h.strict && length != 0 { j.status = -3000 return () }
     if !h.gzip || length == 0 { j.finished = true return () }
@@ -492,7 +500,7 @@ unsafe fn inflateStep(j: &mut Job, h: &mut CodecState, input: ?*mut u8, length: 
   }
 }
 unsafe fn brotliStep(j: &mut Job, h: &mut CodecState, input: ?*mut u8, length: usize, output: ?*mut u8, capacity: usize) -> () {
-  let flush = j.numbers[2]
+  let flush = j.flush
   let inAnchor = () let source = unsafe view(&inAnchor, input, 0, length)
   let mut outAnchor = () let destination = unsafe viewMut(&mut outAnchor, output, 0, capacity)
   if h.kind == 8 {
@@ -521,7 +529,7 @@ unsafe fn brotliStep(j: &mut Job, h: &mut CodecState, input: ?*mut u8, length: u
   j.finished = h.ended
 }
 unsafe fn zstdStep(j: &mut Job, h: &mut CodecState, input: ?*mut u8, length: usize, output: ?*mut u8, capacity: usize) -> () {
-  let flush = j.numbers[2]
+  let flush = j.flush
   if h.kind == 10 && flush == 2 && h.pledged && h.frameInput + usize.toU64(length) != h.pledgedSize {
     j.status = -2000 - 72 j.message = b"Src size is incorrect" return ()
   }
@@ -566,8 +574,8 @@ unsafe fn zstdStep(j: &mut Job, h: &mut CodecState, input: ?*mut u8, length: usi
   j.finished = h.ended
 }
 unsafe fn process(j: &mut Job, h: &mut CodecState) -> () {
-  let kind = h.kind let input = j.data[1] let length = j.lengths[1]
-  let output = unsafe Intrinsic.pointerRequalify<*mut u8, ?*mut u8>(unsafe at(j.output, 20)) let capacity = j.capacity
+  let kind = h.kind let input = j.source let length = j.sourceLength
+  let output = j.target let capacity = j.capacity
   if h.ignoring { j.finished = true return () }
   if kind == 1 || kind == 3 || kind == 5 { unsafe deflateStep(&mut j, &mut h, input, length, output, capacity) return () }
   if kind <= 7 { unsafe inflateStep(&mut j, &mut h, input, length, output, capacity) return () }
@@ -575,8 +583,29 @@ unsafe fn process(j: &mut Job, h: &mut CodecState) -> () {
   if kind == 8 || kind == 9 { unsafe brotliStep(&mut j, &mut h, input, length, output, capacity) return () }
   unsafe zstdStep(&mut j, &mut h, input, length, output, capacity)
 }
+// The write op: codec calls from the caller's input into its output, while the codec asks to go
+// on and the output has room. The input and output are the caller's bytes or their staging
+// copies; nothing here copies them.
+unsafe fn runWrite(j: &mut Job, h: &mut CodecState) -> () {
+  let base = j.source let total = j.sourceLength let out = j.target let room = j.capacity
+  let mut consumed: usize = 0 let mut written: usize = 0
+  while true {
+    if Pointer.isNull<u8>(base) { j.source = nil() } else { j.source = unsafe Intrinsic.pointerRequalify<*mut u8, ?*mut u8>(unsafe at(base, consumed)) }
+    j.sourceLength = total - consumed
+    j.target = unsafe Intrinsic.pointerRequalify<*mut u8, ?*mut u8>(unsafe at(out, written)) j.capacity = room - written
+    j.consumed = 0 j.written = 0 j.again = false
+    unsafe process(&mut j, &mut h)
+    consumed = consumed + j.consumed written = written + j.written
+    if j.status != 0 { break }
+    let progressed = j.consumed != 0 || j.written != 0
+    if !(j.again && progressed && written < room) { break }
+  }
+  j.source = base j.sourceLength = total j.target = out j.capacity = room
+  j.consumed = consumed j.written = written
+}
 unsafe fn execute(j: &mut Job) -> () {
   let mut anchor = () let h = unsafe Pointer.borrowMut<(), CodecState>(&mut anchor, unsafe nonnull(j.stream))
+  if j.op == 8 { unsafe runWrite(&mut j, &mut h) return () }
   if j.op == 3 {
     h.ended = false h.header = 0 h.headerLength = 0 h.gzip = h.kind == 4 h.ignoring = false h.frameSeen = false
     h.pledged = false h.frameInput = 0
@@ -608,8 +637,9 @@ unsafe fn execute(j: &mut Job) -> () {
     }
     if !Pointer.isNull<u8>(h.input) { j.data[1] = unsafe Intrinsic.pointerRequalify<*mut u8, ?*mut u8>(unsafe at(h.input, h.inputOffset)) }
     j.lengths[1] = h.inputLength - h.inputOffset
+    j.flush = j.numbers[2] j.source = j.data[1] j.sourceLength = j.lengths[1] j.target = unsafe Intrinsic.pointerRequalify<*mut u8, ?*mut u8>(unsafe at(j.output, 20))
     unsafe process(&mut j, &mut h)
-    j.data[1] = nil() h.inputOffset = h.inputOffset + j.consumed
+    j.data[1] = nil() j.source = nil() h.inputOffset = h.inputOffset + j.consumed
     if h.inputOffset == h.inputLength || j.finished && !j.again || j.status != 0 {
       unsafe free(h.input) h.input = nil() h.inputLength = 0 h.inputOffset = 0
     }
@@ -617,21 +647,156 @@ unsafe fn execute(j: &mut Job) -> () {
 }
 effect fn newJob() -> *mut Job ! OutOfMemoryError {
   let j = unsafe Intrinsic.pointerReinterpret<*mut u8, *mut Job>(run allocate(Layout.of<Job>().bytes))
-  unsafe Pointer.put<Job>(j, Job { next: Pointer.null<Job>(), work: pool.job(silkCompressionSilkWork, silkCompressionSilkAfterWork, unsafe raw(j), pool.KIND_ZLIB), callback: ValueBits.Undefined, done: false, handle: Pointer.null<Handle>(), stream: Pointer.null<CodecState>(), op: 0, numbers: [0; 8], data: [nil(); 8], lengths: [0; 8], output: nil(), capacity: 0, written: 0, consumed: 0, status: 0, finished: false, again: false, pledgedSize: 0, message: b"" }) return j
+  unsafe Pointer.put<Job>(j, Job { next: Pointer.null<Job>(), work: pool.job(silkCompressionSilkWork, silkCompressionSilkAfterWork, unsafe raw(j), pool.KIND_ZLIB), callback: ValueBits.Undefined, done: false, handle: Pointer.null<Handle>(), stream: Pointer.null<CodecState>(), op: 0, numbers: [0; 8], data: [nil(); 8], lengths: [0; 8], output: nil(), capacity: 0, written: 0, consumed: 0, status: 0, finished: false, again: false, pledgedSize: 0, message: b"", flush: 0, source: nil(), sourceLength: 0, target: nil(), views: [ValueBits.Undefined; 2], leaseIn: Option<buffers.BufferReadLease>.none(), leaseOut: Option<buffers.BufferReadLease>.none(), stagedOut: false, direct: false, words: ValueBits.Undefined }) return j
+}
+// Destroys a job on the loop thread, after it lets go of the write op's buffers.
+unsafe fn dropJob<'m, S: EngineServices>(engine: &mut Engine<'m, S>, context: *mut HeapHeader, p: *mut Job) -> () {
+  let mut anchor = () let j = unsafe Pointer.borrowMut<(), Job>(&mut anchor, p) unsafe unbind(&mut engine, context, &mut j) drop j
+  unsafe destroyJob(p)
 }
 unsafe fn destroyJob(p: *mut Job) -> () { let j = unsafe Pointer.take<Job>(p) let mut i: usize = 0 while i < 8 { unsafe free(j.data[i]) i = i + 1 } unsafe free(j.output) unsafe free(unsafe raw(p)) }
+unsafe extern "C" fn memcpy(destination: *mut u8, source: *mut u8, count: usize) -> ?*mut u8
+// Copies `count` bytes of `backing` from `offset` to `destination`: one copy for private bytes,
+// relaxed loads for shared memory.
+unsafe fn copyIn(destination: ?*mut u8, backing: buffers.BufferState, offset: usize, count: usize) -> () {
+  if count == 0 { return () }
+  if backing.physicalCapacity == 0 {
+    let _copied = unsafe memcpy(unsafe nonnull(destination), unsafe buffers.dataAt(backing.data, usize.toU64(offset)), count)
+    return ()
+  }
+  let mut n: usize = 0
+  while n < count { unsafe Pointer.put<u8>(unsafe at(destination, n), u64.toU8(unsafe buffers.loadScalar(backing, usize.toU64(offset + n), 0))) n = n + 1 }
+}
+// Copies `count` bytes from `source` into `backing` at `offset`.
+unsafe fn copyOut(backing: buffers.BufferState, offset: usize, source: *mut u8, count: usize) -> () {
+  if count == 0 { return () }
+  if backing.physicalCapacity == 0 {
+    let _copied = unsafe memcpy(unsafe buffers.dataAt(backing.data, usize.toU64(offset)), source, count)
+    return ()
+  }
+  let mut n: usize = 0
+  while n < count { unsafe buffers.storeScalar(backing, usize.toU64(offset + n), 0, u8.toU64(unsafe Pointer.read<u8>(unsafe at(unsafe Intrinsic.pointerRequalify<*mut u8, ?*mut u8>(source), n)))) n = n + 1 }
+}
+// The write op's buffer `index` (0 input, 1 output) as an ArrayBuffer, with its range checked.
+unsafe effect fn writeBuffer<'m, S: EngineServices>(engine: &mut Engine<'m, S>, context: *mut HeapHeader, j: &Job, index: usize) -> buffers.BufferState ! OutOfMemoryError | JsException ? &mut Allocator {
+  let offset = j.lengths[3 + index * 3] let length = j.lengths[4 + index * 3]
+  let value = j.views[index]
+  let empty = match value { ValueBits.Undefined => true ValueBits.Null => true _ => false }
+  if empty {
+    if length != 0 { let _ignored = run engine.throwError(unsafe lendRealm(&context, context), NativeErrorKind.Range, b"Invalid compression buffer range") }
+    return buffers.BufferState { data: nil(), byteLength: 0, maxByteLength: 0, detached: false, shared: false, external: false, physicalCapacity: 0 }
+  }
+  let backing = run buffers.getArrayBuffer(&mut engine, unsafe lendRealm(&context, context), unsafe lendFor(value))
+  if backing.detached || usize.toU64(offset) > backing.byteLength || usize.toU64(length) > backing.byteLength - usize.toU64(offset) {
+    let _ignored = run engine.throwError(unsafe lendRealm(&context, context), NativeErrorKind.Range, b"Invalid compression buffer range")
+  }
+  return backing
+}
+// Sets up the write op for a codec call on this thread: the caller's bytes when they are
+// private, else staging copies.
+unsafe effect fn bindNow<'m, S: EngineServices>(engine: &mut Engine<'m, S>, context: *mut HeapHeader, j: &mut Job) -> () ! OutOfMemoryError | JsException ? &mut Allocator {
+  let input = run unsafe writeBuffer(&mut engine, context, &j.*, 0)
+  let output = run unsafe writeBuffer(&mut engine, context, &j.*, 1)
+  j.sourceLength = j.lengths[4] j.capacity = j.lengths[7]
+  if input.physicalCapacity == 0 || j.sourceLength == 0 {
+    if j.sourceLength == 0 { j.source = nil() } else { j.source = unsafe Intrinsic.pointerRequalify<*mut u8, ?*mut u8>(unsafe buffers.dataAt(input.data, usize.toU64(j.lengths[3]))) }
+  } else {
+    j.data[2] = run allocate(j.sourceLength) unsafe copyIn(j.data[2], input, j.lengths[3], j.sourceLength) j.source = j.data[2]
+  }
+  if output.physicalCapacity == 0 {
+    j.target = unsafe Intrinsic.pointerRequalify<*mut u8, ?*mut u8>(unsafe buffers.dataAt(output.data, usize.toU64(j.lengths[6])))
+  } else {
+    j.data[5] = run allocate(j.capacity) j.target = j.data[5] j.stagedOut = true
+  }
+}
+// A range at least this long is leased for a worker; a shorter one is copied. Starting and ending a
+// lease visits every view of the buffer, and a stream's buffers can have thousands of small views
+// (pieces of one input, Buffer.allocUnsafe's pool), while copying 64 KiB takes microseconds.
+const LEASE_MINIMUM: usize = 65536
+
+// Sets up the write op for a worker: leases of the caller's buffers, which the worker reads and
+// writes in place, or staging copies of short ranges and of buffers that cannot be leased.
+unsafe effect fn bindLater<'m, S: EngineServices>(engine: &mut Engine<'m, S>, context: *mut HeapHeader, j: &mut Job) -> () ! OutOfMemoryError | JsException ? &mut Allocator {
+  let input = run unsafe writeBuffer(&mut engine, context, &j.*, 0)
+  let _output = run unsafe writeBuffer(&mut engine, context, &j.*, 1)
+  j.sourceLength = j.lengths[4] j.capacity = j.lengths[7]
+  if j.sourceLength == 0 { j.source = nil() }
+  else {
+    let object = core.reference(j.views[0])
+    if j.sourceLength >= LEASE_MINIMUM && unsafe buffers.canLeaseReadBacking(object) {
+      let lease = run unsafe buffers.leaseReadBacking(object)
+      j.source = unsafe Intrinsic.pointerRequalify<*mut u8, ?*mut u8>(unsafe buffers.dataAt(lease.data(), usize.toU64(j.lengths[3])))
+      j.leaseIn = Option<buffers.BufferReadLease>.some(move lease)
+    } else {
+      j.data[2] = run allocate(j.sourceLength) unsafe copyIn(j.data[2], input, j.lengths[3], j.sourceLength) j.source = j.data[2]
+    }
+  }
+  let object = core.reference(j.views[1])
+  if j.capacity >= LEASE_MINIMUM && unsafe buffers.canLeaseReadBacking(object) {
+    let lease = run unsafe buffers.leaseReadBacking(object)
+    j.target = unsafe Intrinsic.pointerRequalify<*mut u8, ?*mut u8>(unsafe buffers.dataAt(lease.data(), usize.toU64(j.lengths[6])))
+    j.leaseOut = Option<buffers.BufferReadLease>.some(move lease)
+  } else {
+    j.data[5] = run allocate(j.capacity) j.target = j.data[5] j.stagedOut = true
+  }
+}
+// Ends the write op on this thread: copies a staged output into the caller's buffer, ends the
+// leases, and lets go of the buffers, which prepare took from the arguments.
+unsafe fn unbind<'m, S: EngineServices>(engine: &mut Engine<'m, S>, context: *mut HeapHeader, j: &mut Job) -> () {
+  if j.stagedOut && j.status == 0 && j.written != 0 {
+    let output = unsafe buffers.snapshot(core.reference(j.views[1]))
+    if !output.detached && usize.toU64(j.lengths[6]) <= output.byteLength && usize.toU64(j.written) <= output.byteLength - usize.toU64(j.lengths[6]) {
+      unsafe copyOut(output, j.lengths[6], unsafe nonnull(j.data[5]), j.written)
+    }
+  }
+  j.stagedOut = false
+  let leaseIn = Intrinsic.replace(j.leaseIn, Option<buffers.BufferReadLease>.none())
+  if let Option<buffers.BufferReadLease>.Some { value } = move leaseIn { unsafe buffers.releaseReadBacking(core.reference(j.views[0]), move value) }
+  let leaseOut = Intrinsic.replace(j.leaseOut, Option<buffers.BufferReadLease>.none())
+  if let Option<buffers.BufferReadLease>.Some { value } = move leaseOut { unsafe buffers.releaseReadBacking(core.reference(j.views[1]), move value) }
+  j.source = nil() j.target = nil()
+  unsafe owners.release(&mut engine, context, j.views[0])
+  unsafe owners.release(&mut engine, context, j.views[1])
+  unsafe owners.release(&mut engine, context, j.words)
+  j.views[0] = ValueBits.Undefined j.views[1] = ValueBits.Undefined j.words = ValueBits.Undefined
+}
 unsafe effect fn prepare<'m, S: EngineServices>(engine: &mut Engine<'m, S>, context: *mut HeapHeader, state: *mut State, j: &mut Job, argv: &FrameSlots) -> () ! OutOfMemoryError | JsException ? &mut Allocator {
-  let name = run unsafe host.text(&mut engine, context, unsafe common.argument(argv, 0)) let op = name.asSlice()
-  if equal(op, b"create") { j.op = 1 } if equal(op, b"process") { j.op = 2 } if equal(op, b"reset") { j.op = 3 } if equal(op, b"params") { j.op = 4 } if equal(op, b"close") { j.op = 5 } if equal(op, b"crc32") { j.op = 6 }
-  if equal(op, b"pledge") { j.op = 7 }
+  let named = unsafe common.argument(argv, 0)
+  if named.isNumber() {
+    // The write op by number, so that a write does not make a string of its name.
+    if f64.toI32(named.numericValue()) == 8 { j.op = 8 }
+  }
+  if j.op == 0 {
+    let name = run unsafe host.text(&mut engine, context, named) let op = name.asSlice()
+    if equal(op, b"create") { j.op = 1 } if equal(op, b"process") { j.op = 2 } if equal(op, b"reset") { j.op = 3 } if equal(op, b"params") { j.op = 4 } if equal(op, b"close") { j.op = 5 } if equal(op, b"crc32") { j.op = 6 }
+    if equal(op, b"pledge") { j.op = 7 } if equal(op, b"write") { j.op = 8 } if equal(op, b"checksum") { j.op = 9 }
+  }
   if j.op == 0 { let _ignored = run engine.throwError(unsafe lendRealm(&context, context), NativeErrorKind.Type, b"Unknown compression operation") return () }
   let args = unsafe common.argument(argv, 1) let mut index: u32 = 0
-  while index < 8 {
+  let mut count: u32 = 8 if j.op == 8 { count = 9 }
+  while index < count {
     let value = run unsafe owners.getIndex(&mut engine, context, args, index) let i = u32.toUsize(index)
+    if j.op == 8 && i == 8 {
+      // Where a synchronous write puts its words: an Int32Array's ArrayBuffer of the handle.
+      j.words = value
+      index = index + 1
+      continue
+    }
+    if (j.op == 8 && (i == 2 || i == 5)) || (j.op == 9 && i == 2) {
+      // The write op keeps the buffers themselves; dispatch or submit decide how to reach them.
+      j.views[(i - 2) / 3] = value
+      index = index + 1
+      continue
+    }
     if value.isNumber() {
-      if j.op == 7 && i == 1 { j.pledgedSize = f64.toU64(value.numericValue()) }
+      if (j.op == 8 && (i == 3 || i == 4 || i == 6 || i == 7)) || (j.op == 9 && (i == 3 || i == 4)) {
+        let number = value.numericValue()
+        if !(number >= 0.0) || number > 9007199254740991.0 { unsafe owners.release(&mut engine, context, value) let _ignored = run engine.throwError(unsafe lendRealm(&context, context), NativeErrorKind.Range, b"Invalid compression buffer range") return () }
+        j.lengths[i] = u64.toUsize(f64.toU64(number))
+      }
+      else if j.op == 7 && i == 1 { j.pledgedSize = f64.toU64(value.numericValue()) }
       else {
-        if j.op == 6 && i == 1 { j.numbers[i] = u32.wrappingToI32(f64.toU32(value.numericValue())) }
+        if (j.op == 6 || j.op == 9) && i == 1 { j.numbers[i] = u32.wrappingToI32(f64.toU32(value.numericValue())) }
         else { j.numbers[i] = f64.toI32(value.numericValue()) }
       }
       unsafe owners.release(&mut engine, context, value)
@@ -644,12 +809,12 @@ unsafe effect fn prepare<'m, S: EngineServices>(engine: &mut Engine<'m, S>, cont
         if backing.byteLength > usize.toU64(usize.MAX - 1) { fail OutOfMemoryError {} }
         if (j.op == 2 || j.op == 4) && i == 1 && backing.byteLength > 2147483647 { let _ignored = run engine.throwError(unsafe lendRealm(&context, context), NativeErrorKind.Range, b"Compression input exceeds INT_MAX result count") return () }
         j.lengths[i] = u64.toUsize(backing.byteLength) j.data[i] = run allocate(j.lengths[i] + 1)
-        let mut n: u64 = 0 while n < backing.byteLength { unsafe Pointer.put<u8>(unsafe buffers.dataAt(j.data[i], n), u64.toU8(unsafe buffers.loadScalar(backing, n, 0))) n = n + 1 }
+        unsafe copyIn(j.data[i], backing, 0, j.lengths[i])
       } }
     }
     index = index + 1
   }
-  if j.op >= 2 && j.op <= 4 || j.op == 7 {
+  if j.op >= 2 && j.op <= 4 || j.op == 7 || j.op == 8 {
     j.handle = unsafe locate(state, j.numbers[0])
     if Pointer.isNull<Handle>(j.handle) { let _ignored = run engine.throwError(unsafe lendRealm(&context, context), NativeErrorKind.Type, b"ERR_ZLIB_INITIALIZATION_FAILED: closed compression handle") return () }
     let anchor = () let h = unsafe Pointer.borrow<(), Handle>(&anchor, unsafe nonnull(j.handle)) let busy = h.busy j.stream = h.stream drop h
@@ -658,12 +823,22 @@ unsafe effect fn prepare<'m, S: EngineServices>(engine: &mut Engine<'m, S>, cont
   let mut capacity: usize = 0
   if j.op == 2 { if j.numbers[3] < 1 { let _ignored = run engine.throwError(unsafe lendRealm(&context, context), NativeErrorKind.Range, b"Invalid compression output size") return () } capacity = i32.toUsize(j.numbers[3]) }
   if j.op == 4 { capacity = 65536 }
+  if j.op == 8 {
+    j.flush = j.numbers[1]
+    if j.lengths[7] < 1 || j.lengths[4] > 2147483647 || j.lengths[7] > 2147483647 { let _ignored = run engine.throwError(unsafe lendRealm(&context, context), NativeErrorKind.Range, b"Invalid compression buffer range") return () }
+    // The output goes to the caller's buffer, so the result holds only the words and a message.
+    j.direct = true
+  }
   // The result also carries up to 255 bytes of failure message after the output.
   j.capacity = capacity j.output = run allocate(capacity + 20 + 256)
 }
+// Where the output ends in the result: after the words, and after the output when the result
+// carries it.
+fn resultEnd(j: &Job) -> usize { if j.direct { return 20 } return 20 + j.written }
 unsafe fn appendMessage(j: &Job) -> usize {
+  let end = resultEnd(&j.*)
   let mut n: usize = 0
-  while n < 255 && n < j.message.length { unsafe Pointer.put<u8>(unsafe at(j.output, 20 + j.written + n), j.message[n]) n = n + 1 }
+  while n < 255 && n < j.message.length { unsafe Pointer.put<u8>(unsafe at(j.output, end + n), j.message[n]) n = n + 1 }
   return n
 }
 unsafe effect fn result<'m, S: EngineServices>(engine: &mut Engine<'m, S>, context: *mut HeapHeader, j: &Job) -> ValueBits ! OutOfMemoryError | JsException ? &mut Allocator {
@@ -671,7 +846,7 @@ unsafe effect fn result<'m, S: EngineServices>(engine: &mut Engine<'m, S>, conte
   unsafe putWord(j.output, 0, j.status) unsafe putWord(j.output, 4, usize.toI32(j.consumed)) unsafe putWord(j.output, 8, usize.toI32(j.written))
   let mut finished: i32 = 0 let mut again: i32 = 0 if j.finished { finished = 1 } if j.again { again = 1 }
   unsafe putWord(j.output, 12, finished) unsafe putWord(j.output, 16, again)
-  let memory = engine.memory return run unsafe buffers.newArrayBufferCopy(&mut engine, memory, unsafe lendRealm(&context, context), j.output, usize.toU64(j.written + 20 + messageLength))
+  let memory = engine.memory return run unsafe buffers.newArrayBufferCopy(&mut engine, memory, unsafe lendRealm(&context, context), j.output, usize.toU64(resultEnd(&j.*) + messageLength))
 }
 unsafe effect fn synchronous<'m, S: EngineServices>(engine: &mut Engine<'m, S>, context: *mut HeapHeader, state: *mut State, j: &mut Job) -> ValueBits ! OutOfMemoryError | JsException ? &mut Allocator {
   if j.op == 5 { unsafe releaseHandle(state, j.numbers[0]) return ValueBits.Undefined }
@@ -679,6 +854,20 @@ unsafe effect fn synchronous<'m, S: EngineServices>(engine: &mut Engine<'m, S>, 
     let mut crc = i32.wrappingToU32(j.numbers[1])
     if j.lengths[0] > 0 {
       let anchor = () let bytes = unsafe Pointer.borrowMany<(), u8>(&anchor, unsafe Pointer.assumeMany<u8>(unsafe at(j.data[0], 0)), j.lengths[0])
+      crc = CompressionChecksum.crc32Update(crc, bytes)
+    }
+    return ValueBits.Float64 { value: u32.toF64(crc) }
+  }
+  if j.op == 9 {
+    // The CRC-32 of the caller's bytes, read in place when they are private.
+    let input = run unsafe writeBuffer(&mut engine, context, &j.*, 0)
+    let mut crc = i32.wrappingToU32(j.numbers[1])
+    let length = j.lengths[4]
+    if length > 0 {
+      if input.physicalCapacity != 0 { j.data[2] = run allocate(length) unsafe copyIn(j.data[2], input, j.lengths[3], length) }
+      let mut from = j.data[2]
+      if input.physicalCapacity == 0 { from = unsafe Intrinsic.pointerRequalify<*mut u8, ?*mut u8>(unsafe buffers.dataAt(input.data, usize.toU64(j.lengths[3]))) }
+      let anchor = () let bytes = unsafe Pointer.borrowMany<(), u8>(&anchor, unsafe Pointer.assumeMany<u8>(unsafe at(from, 0)), length)
       crc = CompressionChecksum.crc32Update(crc, bytes)
     }
     return ValueBits.Float64 { value: u32.toF64(crc) }
@@ -713,6 +902,23 @@ unsafe effect fn synchronous<'m, S: EngineServices>(engine: &mut Engine<'m, S>, 
     drop h
     return run unsafe result(&mut engine, context, &j.*)
   }
+  if j.op == 8 {
+    run unsafe bindNow(&mut engine, context, &mut j)
+    unsafe execute(&mut j)
+    let words = j.words
+    let fast = j.status == 0 && !(match words { ValueBits.Undefined => true _ => false })
+    if fast {
+      // A write that went well puts the input it consumed and the output it wrote in the
+      // caller's words, and returns 0; one that failed returns the result with its message.
+      let state = run buffers.getArrayBuffer(&mut engine, unsafe lendRealm(&context, context), unsafe lendFor(words))
+      if state.detached || state.byteLength < 8 { let _ignored = run engine.throwError(unsafe lendRealm(&context, context), NativeErrorKind.Range, b"Invalid compression result words") }
+      unsafe buffers.storeScalar(state, 0, 2, usize.toU64(j.consumed))
+      unsafe buffers.storeScalar(state, 4, 2, usize.toU64(j.written))
+    }
+    unsafe unbind(&mut engine, context, &mut j)
+    if fast { return ValueBits.Int { value: 0 } }
+    return run unsafe result(&mut engine, context, &j.*)
+  }
   if j.op == 3 {
     let mut anchor = ()
     let h = unsafe Pointer.borrowMut<(), CodecState>(&mut anchor, unsafe nonnull(j.stream))
@@ -739,8 +945,8 @@ pub unsafe effect fn dispatch<'m, S: EngineServices>(engine: &mut Engine<'m, S>,
   if argc == 0 { return run unsafe versions(&mut engine, context) }
   let p = run newJob() let mut anchor = () let j = unsafe Pointer.borrowMut<(), Job>(&mut anchor, p)
   let prepared = run Effect.result(unsafe prepare(&mut engine, context, state, &mut j, argv)) drop j
-  match move prepared { Result<(), OutOfMemoryError | JsException>.Success { .. } => () Result<(), OutOfMemoryError | JsException>.Failure { error } => { unsafe destroyJob(p) fail move error } }
-  let j2 = unsafe Pointer.borrowMut<(), Job>(&mut anchor, p) let converted = run Effect.result(unsafe synchronous(&mut engine, context, state, &mut j2)) drop j2 unsafe destroyJob(p)
+  match move prepared { Result<(), OutOfMemoryError | JsException>.Success { .. } => () Result<(), OutOfMemoryError | JsException>.Failure { error } => { unsafe dropJob(&mut engine, context, p) fail move error } }
+  let j2 = unsafe Pointer.borrowMut<(), Job>(&mut anchor, p) let converted = run Effect.result(unsafe synchronous(&mut engine, context, state, &mut j2)) drop j2 unsafe dropJob(&mut engine, context, p)
   return match move converted { Result<ValueBits, OutOfMemoryError | JsException>.Success { value } => value Result<ValueBits, OutOfMemoryError | JsException>.Failure { error } => { fail move error } }
 }
 // Runs on a blocking worker.
@@ -753,11 +959,15 @@ export "C" fn silkCompressionSilkAfterWork(data: ?*mut u8) -> () {
 pub unsafe effect fn submit<'m, S: EngineServices>(engine: &mut Engine<'m, S>, context: *mut HeapHeader, state: *mut State, io: *mut fs_async.State, argc: i32, argv: &FrameSlots) -> ValueBits ! OutOfMemoryError | JsException ? &mut Allocator {
   let p = run newJob() let mut anchor = () let j = unsafe Pointer.borrowMut<(), Job>(&mut anchor, p)
   let prepared = run Effect.result(unsafe prepare(&mut engine, context, state, &mut j, argv)) drop j
-  match move prepared { Result<(), OutOfMemoryError | JsException>.Success { .. } => () Result<(), OutOfMemoryError | JsException>.Failure { error } => { unsafe destroyJob(p) fail move error } }
+  match move prepared { Result<(), OutOfMemoryError | JsException>.Success { .. } => () Result<(), OutOfMemoryError | JsException>.Failure { error } => { unsafe dropJob(&mut engine, context, p) fail move error } }
   let j2 = unsafe Pointer.borrowMut<(), Job>(&mut anchor, p)
-  if j2.op < 2 || j2.op > 4 { drop j2 unsafe destroyJob(p) return run engine.throwError(unsafe lendRealm(&context, context), NativeErrorKind.Type, b"Invalid asynchronous compression operation") }
+  if (j2.op < 2 || j2.op > 4) && j2.op != 8 { drop j2 unsafe dropJob(&mut engine, context, p) return run engine.throwError(unsafe lendRealm(&context, context), NativeErrorKind.Type, b"Invalid asynchronous compression operation") }
+  if j2.op == 8 {
+    let bound = run Effect.result(unsafe bindLater(&mut engine, context, &mut j2))
+    match move bound { Result<(), OutOfMemoryError | JsException>.Success { .. } => () Result<(), OutOfMemoryError | JsException>.Failure { error } => { drop j2 unsafe dropJob(&mut engine, context, p) fail move error } }
+  }
   let mut other = () let s = unsafe Pointer.borrowMut<(), State>(&mut other, state)
-  if s.closing { drop s drop j2 unsafe destroyJob(p) return run engine.throwError(unsafe lendRealm(&context, context), NativeErrorKind.Type, b"Compression executor is closed") }
+  if s.closing { drop s drop j2 unsafe dropJob(&mut engine, context, p) return run engine.throwError(unsafe lendRealm(&context, context), NativeErrorKind.Type, b"Compression executor is closed") }
   j2.next = s.jobs s.jobs = p drop s
   let h = unsafe Pointer.borrowMut<(), Handle>(&mut other, unsafe nonnull(j2.handle)) h.busy = true drop h
   j2.callback = unsafe (unsafe common.argument(argv, 2)).retained()
@@ -774,7 +984,9 @@ unsafe fn takeCompleted(state: *mut State) -> ?*mut Job {
 unsafe fn unlock(state: *mut State, p: ?*mut Handle) -> () {
   let mut anchor = () let h = unsafe Pointer.borrowMut<(), Handle>(&mut anchor, unsafe nonnull(p)) h.busy = false let disposed = h.disposed let id = h.id drop h if disposed { unsafe releaseHandle(state, id) }
 }
-unsafe effect fn deliver<'m, S: EngineServices>(engine: &mut Engine<'m, S>, context: *mut HeapHeader, j: &Job) -> () ! OutOfMemoryError | JsException ? &mut Allocator {
+unsafe effect fn deliver<'m, S: EngineServices>(engine: &mut Engine<'m, S>, context: *mut HeapHeader, j: &mut Job) -> () ! OutOfMemoryError | JsException ? &mut Allocator {
+  // The output is in the caller's buffer, and the leases end, before the callback runs.
+  unsafe unbind(&mut engine, context, &mut j)
   let value = run unsafe result(&mut engine, context, &j.*)
   let called = run Effect.result(promise.call(&mut engine, unsafe lendRealm(&context, context), unsafe lendFor(j.callback), unsafe lendFor(ValueBits.Undefined), &[ValueBits.Null, value])) unsafe owners.release(&mut engine, context, value)
   match move called { Result<Value, JsException>.Success { value: returned } => { unsafe owners.release(&mut engine, context, returned.intoBits()) } Result<Value, JsException>.Failure { error } => { fail move error } }
@@ -784,9 +996,9 @@ pub unsafe effect fn poll<'m, S: EngineServices>(engine: &mut Engine<'m, S>, con
   let mut ran = false
   while true {
     let optional = unsafe takeCompleted(state) if Pointer.isNull<Job>(optional) { return ran } let p = unsafe nonnull(optional)
-    let anchor = () let j = unsafe Pointer.borrow<(), Job>(&anchor, p) let callback = j.callback unsafe unlock(state, j.handle)
+    let mut anchor = () let j = unsafe Pointer.borrowMut<(), Job>(&mut anchor, p) let callback = j.callback unsafe unlock(state, j.handle)
     ran = true
-    let delivered = run Effect.result(unsafe deliver(&mut engine, context, &j.*)) drop j unsafe owners.release(&mut engine, context, callback) unsafe destroyJob(p)
+    let delivered = run Effect.result(unsafe deliver(&mut engine, context, &mut j)) drop j unsafe owners.release(&mut engine, context, callback) unsafe dropJob(&mut engine, context, p)
     match move delivered { Result<(), OutOfMemoryError | JsException>.Success { .. } => () Result<(), OutOfMemoryError | JsException>.Failure { error } => { fail move error } }
   }
 }
@@ -795,7 +1007,7 @@ pub unsafe fn close<'m, S: EngineServices>(engine: &mut Engine<'m, S>, context: 
   while true {
     let s2 = unsafe Pointer.borrow<(), State>(&anchor, state) let empty = Pointer.isNull<Job>(s2.jobs) drop s2 if empty { break }
     run unsafe fs_async.waitWork(io)
-    while true { let optional = unsafe takeCompleted(state) if Pointer.isNull<Job>(optional) { break } let p = unsafe nonnull(optional) let j = unsafe Pointer.borrow<(), Job>(&anchor, p) let callback = j.callback unsafe unlock(state, j.handle) drop j unsafe owners.release(&mut engine, context, callback) unsafe destroyJob(p) }
+    while true { let optional = unsafe takeCompleted(state) if Pointer.isNull<Job>(optional) { break } let p = unsafe nonnull(optional) let j = unsafe Pointer.borrow<(), Job>(&anchor, p) let callback = j.callback unsafe unlock(state, j.handle) drop j unsafe owners.release(&mut engine, context, callback) unsafe dropJob(&mut engine, context, p) }
   }
   while true { let s3 = unsafe Pointer.borrow<(), State>(&anchor, state) let first = s3.first drop s3 if Pointer.isNull<Handle>(first) { break } let h = unsafe Pointer.borrow<(), Handle>(&anchor, unsafe nonnull(first)) let id = h.id drop h unsafe releaseHandle(state, id) }
   let owned = unsafe Pointer.take<State>(state) drop owned unsafe free(unsafe raw(state))
