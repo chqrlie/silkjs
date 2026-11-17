@@ -14,7 +14,7 @@ import silk.io.writer { Writer, WriterError }
 import silk.io.writer_native { StderrWriter, StdoutWriter }
 import silk.mem.allocator { Allocator, OutOfMemoryError }
 import silk.mem.pointer { Pointer }
-import silk.system.child_process { ChildProcess, ProcessRequest }
+import silk.system.child_process { ChildProcess }
 import silk.system.filesystem { DirectoryEntry, DirectoryInfo, FileError, FileInfo, FileSystem, Path }
 import silk.system.host_input { HostInput, HostInputError }
 import silk.system.subprocess { SpawnOptions, Stdio, Subprocess, SubprocessError }

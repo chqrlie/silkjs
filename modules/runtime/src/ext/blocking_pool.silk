@@ -25,54 +25,122 @@ import ext.trace_abi as trace
 /// `work` runs on a worker; `finish` runs on the loop thread once the loop takes the job back.
 /// `kind` names the work for Node's threadpoolwork trace events (the KIND_ constants); for a traced kind the
 /// worker records when `work` started and ended (monotonic ns) and on which thread.
-pub struct Job { next: ?*mut Job, work: extern "C" fn(?*mut u8) -> (), pub finish: extern "C" fn(?*mut u8) -> (), pub data: ?*mut u8,
-  pub kind: u8, pub started: u64, pub ended: u64, pub thread: u64 }
+pub struct Job {
+  next: ?*mut Job,
+  work: extern "C" fn(?*mut u8) -> (),
+  pub finish: extern "C" fn(?*mut u8) -> (),
+  pub data: ?*mut u8,
+  pub kind: u8,
+  pub started: u64,
+  pub ended: u64,
+  pub thread: u64
+}
 
 /// The work kinds Node traces as ThreadPoolWork, by their type names; untraced work is KIND_NONE.
 pub const KIND_NONE: u8 = 0
+
 pub const KIND_CRYPTO: u8 = 1
+
 pub const KIND_ZLIB: u8 = 2
+
 pub const KIND_NODE_API: u8 = 3
 
-pub fn job(work: extern "C" fn(?*mut u8) -> (), finish: extern "C" fn(?*mut u8) -> (), data: ?*mut u8, kind: u8) -> Job {
-  return Job { next: Pointer.null<Job>(), work: work, finish: finish, data: data, kind: kind, started: 0, ended: 0, thread: 0 }
+pub fn job(
+  work: extern "C" fn(?*mut u8) -> (),
+  finish: extern "C" fn(?*mut u8) -> (),
+  data: ?*mut u8,
+  kind: u8,
+) -> Job {
+  return Job {
+    next: Pointer.null<Job>(),
+    work: work,
+    finish: finish,
+    data: data,
+    kind: kind,
+    started: 0,
+    ended: 0,
+    thread: 0,
+  }
 }
 
 fn threadId() -> u64 {
   let mut tid: u64 = 0
-  static if Intrinsic.targetOperatingSystem() == "darwin" { let _ignored = unsafe trace.pthread_threadid_np(Pointer.null<u8>(), Pointer.fromMutRef<u64>(&mut tid)) }
-  else { tid = i32.toU64(unsafe trace.gettid()) }
+  static if Intrinsic.targetOperatingSystem() == "darwin" {
+    let _ignored = unsafe trace.pthread_threadid_np(
+      Pointer.null<u8>(),
+      Pointer.fromMutRef<u64>(&mut tid),
+    )
+  } else {
+    tid = i32.toU64(unsafe trace.gettid())
+  }
   return tid
 }
 
-struct Chain { head: ?*mut Job, tail: ?*mut Job }
-struct Queue { work: Chain, done: Chain, stopping: bool }
+struct Chain {
+  head: ?*mut Job,
+  tail: ?*mut Job
+}
+
+struct Queue {
+  work: Chain,
+  done: Chain,
+  stopping: bool
+}
+
 // The queue's job pointers are only read or written under its mutex, and a job belongs to
 // exactly one thread at a time: the submitter, one worker, or the loop after takeDone.
 impl Transferable for Queue {}
-struct Shared { queue: Mutex<Queue>, ready: Condition, waker: Waker }
 
-pub struct Pool { shared: Arc<Shared>, threads: List<JoinHandle<()>>, size: usize }
+struct Shared {
+  queue: Mutex<Queue>,
+  ready: Condition,
+  waker: Waker
+}
+
+pub struct Pool {
+  shared: Arc<Shared>,
+  threads: List<JoinHandle<()>>,
+  size: usize
+}
 
 // How many threads run blocking work, as libuv's default UV_THREADPOOL_SIZE.
 const THREADS: usize = 4
 
-pub unsafe fn nonnull(pointer: ?*mut Job) -> *mut Job { return unsafe Intrinsic.pointerRequalify<?*mut Job, *mut Job>(pointer) }
-fn empty() -> Chain { return Chain { head: Pointer.null<Job>(), tail: Pointer.null<Job>() } }
+pub unsafe fn nonnull(pointer: ?*mut Job) -> *mut Job {
+  return unsafe Intrinsic.pointerRequalify<?*mut Job, *mut Job>(pointer)
+}
+
+fn empty() -> Chain {
+  return Chain { head: Pointer.null<Job>(), tail: Pointer.null<Job>() }
+}
+
 unsafe fn push(chain: &mut Chain, job: *mut Job) -> () {
-  let mut anchor = () let entry = unsafe Pointer.borrowMut<(), Job>(&mut anchor, job)
-  entry.next = Pointer.null<Job>() drop entry
-  if Pointer.isNull<Job>(chain.tail) { chain.head = job } else {
-    let last = unsafe Pointer.borrowMut<(), Job>(&mut anchor, unsafe nonnull(chain.tail)) last.next = job drop last
+  let mut anchor = ()
+  let entry = unsafe Pointer.borrowMut<(), Job>(&mut anchor, job)
+  entry.next = Pointer.null<Job>()
+  drop entry
+  if Pointer.isNull<Job>(chain.tail) {
+    chain.head = job
+  } else {
+    let last = unsafe Pointer.borrowMut<(), Job>(&mut anchor, unsafe nonnull(chain.tail))
+    last.next = job
+    drop last
   }
   chain.tail = job
 }
+
 unsafe fn pop(chain: &mut Chain) -> ?*mut Job {
   let job = chain.head
-  if Pointer.isNull<Job>(job) { return job }
-  let anchor = () let entry = unsafe Pointer.borrow<(), Job>(&anchor, unsafe nonnull(job))
-  chain.head = entry.next drop entry
-  if Pointer.isNull<Job>(chain.head) { chain.tail = Pointer.null<Job>() }
+  if Pointer.isNull<Job>(job) {
+    return job
+  }
+  let anchor = ()
+  let entry = unsafe Pointer.borrow<(), Job>(&anchor, unsafe nonnull(job))
+  chain.head = entry.next
+  drop entry
+  if Pointer.isNull<Job>(chain.head) {
+    chain.tail = Pointer.null<Job>()
+  }
   return job
 }
 
@@ -81,20 +149,35 @@ fn workerMain(shared: Arc<Shared>) -> () {
     let mut job = Pointer.null<Job>()
     let mut guard = shared.get().queue.lock()
     while true {
-      if guard.get().stopping { return () }
+      if guard.get().stopping {
+        return ()
+      }
       job = unsafe pop(&mut guard.getMut().work)
-      if !Pointer.isNull<Job>(job) { break }
+      if !Pointer.isNull<Job>(job) {
+        break
+      }
       shared.get().ready.wait(&mut guard)
     }
     drop guard
-    let mut anchor = () let entry = unsafe Pointer.borrow<(), Job>(&anchor, unsafe nonnull(job))
-    let work = entry.work let data = entry.data let traced = entry.kind != KIND_NONE drop entry
-    let started = if traced { i64.toU64(clock.nowNanoseconds()) } else { 0 }
+    let mut anchor = ()
+    let entry = unsafe Pointer.borrow<(), Job>(&anchor, unsafe nonnull(job))
+    let work = entry.work
+    let data = entry.data
+    let traced = entry.kind != KIND_NONE
+    drop entry
+    let started = if traced {
+      i64.toU64(clock.nowNanoseconds())
+    } else {
+      0
+    }
     unsafe work(data)
     if traced {
       let ended = i64.toU64(clock.nowNanoseconds())
       let header = unsafe Pointer.borrowMut<(), Job>(&mut anchor, unsafe nonnull(job))
-      header.started = started header.ended = ended header.thread = threadId() drop header
+      header.started = started
+      header.ended = ended
+      header.thread = threadId()
+      drop header
     }
     let mut finished = shared.get().queue.lock()
     let wake = Pointer.isNull<Job>(finished.get().done.head)
@@ -102,7 +185,9 @@ fn workerMain(shared: Arc<Shared>) -> () {
     drop finished
     if wake {
       let woke = run Effect.result(shared.get().waker.wake())
-      if let Result<(), ReactorError>.Failure { .. } = move woke { Intrinsic.trap("a blocking worker cannot wake the runtime loop") }
+      if let Result<(), ReactorError>.Failure { .. } = move woke {
+        Intrinsic.trap("a blocking worker cannot wake the runtime loop")
+      }
     }
   }
   return ()
@@ -110,28 +195,42 @@ fn workerMain(shared: Arc<Shared>) -> () {
 
 impl Pool {
   /// Makes a pool that wakes `waker` when a job finishes. It starts no thread.
-  pub effect fn make(waker: Waker) -> Pool ! OutOfMemoryError {
+  pub effect fn make(waker: Waker) -> Pool
+    ! OutOfMemoryError {
     let mut allocator = Allocator.systemAllocatorProvider()
-    let queue = run Mutex<Queue>.make(Queue { work: empty(), done: empty(), stopping: false }) |> Effect.provideMut<Allocator>(&mut allocator)
+    let queue = run Mutex<Queue>.make(Queue { work: empty(), done: empty(), stopping: false })
+      |> Effect.provideMut<Allocator>(&mut allocator)
     let ready = run Condition.make() |> Effect.provideMut<Allocator>(&mut allocator)
-    let shared = run Arc<Shared>.make(Shared { queue: move queue, ready: move ready, waker: move waker }) |> Effect.provideMut<Allocator>(&mut allocator)
+    let shared = run Arc<Shared>.make(
+      Shared { queue: move queue, ready: move ready, waker: move waker },
+    )
+      |> Effect.provideMut<Allocator>(&mut allocator)
     return Pool { shared: move shared, threads: List<JoinHandle<()>>.make(), size: THREADS }
   }
 
   /// Queues the job at `job`, which must stay valid until [`Pool.takeDone`] returns it.
-  pub unsafe effect fn submit(self: &mut Self, job: *mut Job) -> () ! OutOfMemoryError | SpawnError {
-    if self.threads.length() < self.size { run self.start() }
+  pub unsafe effect fn submit(self: &mut Self, job: *mut Job) -> ()
+    ! OutOfMemoryError | SpawnError {
+    if self.threads.length() < self.size {
+      run self.start()
+    }
     let mut guard = self.shared.get().queue.lock()
     unsafe push(&mut guard.getMut().work, job)
     drop guard
     self.shared.get().ready.notifyOne()
   }
 
-  effect fn start(self: &mut Self) -> () ! OutOfMemoryError | SpawnError {
+  effect fn start(self: &mut Self) -> ()
+    ! OutOfMemoryError | SpawnError {
     let mut allocator = Allocator.systemAllocatorProvider()
     while self.threads.length() < self.size {
       let shared = self.shared.clone()
-      let thread = run NativeThread.spawn(fn() -> () { return workerMain(move shared) }) |> Effect.provideMut<Allocator>(&mut allocator)
+      let thread = run NativeThread.spawn(
+        || -> () {
+          return workerMain(move shared)
+        },
+      )
+        |> Effect.provideMut<Allocator>(&mut allocator)
       run self.threads.append(move thread) |> Effect.provideMut<Allocator>(&mut allocator)
     }
   }
@@ -156,11 +255,18 @@ impl Pool {
       let entry = unsafe Pointer.borrowMut<(), Job>(&mut anchor, unsafe nonnull(current))
       let next = entry.next
       if Pointer.address(unsafe nonnull(current)) == Pointer.address(job) {
-        entry.next = Pointer.null<Job>() drop entry
-        if Pointer.isNull<Job>(previous) { chain.head = next } else {
-          let before = unsafe Pointer.borrowMut<(), Job>(&mut anchor, unsafe nonnull(previous)) before.next = next drop before
+        entry.next = Pointer.null<Job>()
+        drop entry
+        if Pointer.isNull<Job>(previous) {
+          chain.head = next
+        } else {
+          let before = unsafe Pointer.borrowMut<(), Job>(&mut anchor, unsafe nonnull(previous))
+          before.next = next
+          drop before
         }
-        if Pointer.isNull<Job>(next) { chain.tail = previous }
+        if Pointer.isNull<Job>(next) {
+          chain.tail = previous
+        }
         return true
       }
       drop entry
@@ -184,7 +290,9 @@ impl Drop for Pool {
   // Stops each worker after its current job and waits for it. Queued jobs stay queued.
   fn drop(self: &mut Self) -> () {
     let mut guard = self.shared.get().queue.lock()
-    let queue = guard.getMut() queue.stopping = true drop queue
+    let queue = guard.getMut()
+    queue.stopping = true
+    drop queue
     drop guard
     self.shared.get().ready.notifyAll()
     while self.threads.length() > 0 {

@@ -73,22 +73,22 @@
 //!
 //! @category Data formats
 
-import silk.mem.allocator {Allocator, OutOfMemoryError}
-import silk.mem.layout {Layout}
-import silk.mem.pointer {Pointer}
-import silk.mem.raw_buffer {RawBuffer}
-import silk.text.format {Debug, Format as TextFormat, Formatter}
-import silk.collections.slice {Slice}
-import silk.compress.checksum {CompressionChecksum}
+import silk.mem.allocator { Allocator, OutOfMemoryError }
+import silk.mem.layout { Layout }
+import silk.mem.pointer { Pointer }
+import silk.mem.raw_buffer { RawBuffer }
+import silk.text.format { Debug, Format as TextFormat, Formatter }
+import silk.collections.slice { Slice }
+import silk.compress.checksum { CompressionChecksum }
 import silk.encoding.endian
-import silk.core.result {Result}
-import silk.core.target {Arch, Target}
+import silk.core.result { Result }
+import silk.core.target { Arch, Target }
 import silk.num.u8
 import silk.num.u32
 import silk.num.u64
 import silk.num.usize
-import silk.io.writer {Writer, WriterError}
-import silk.simd.cpu {CpuFeatures}
+import silk.io.writer { Writer, WriterError }
+import silk.simd.cpu { CpuFeatures }
 import silk.simd.u8x16
 
 /// The number of bytes of storage that a [`Decoder`] needs: 64 KiB.
@@ -192,7 +192,9 @@ pub enum ErrorKind {
 
 impl Debug for ErrorKind {
   /// Writes the name of the variant, such as `InvalidHeader`.
-  effect fn debug(self: &Self, formatter: &mut Formatter) -> () ! WriterError ? &mut Writer {
+  effect fn debug(self: &Self, formatter: &mut Formatter) -> ()
+    ! WriterError
+    ? &mut Writer {
     return match &self.* {
       ErrorKind.InvalidHeader => run TextFormat.write(&mut formatter, b"InvalidHeader")
       ErrorKind.UnsupportedMethod => run TextFormat.write(&mut formatter, b"UnsupportedMethod")
@@ -230,7 +232,9 @@ pub struct DecodeError {
 
 impl Debug for DecodeError {
   /// Writes the fields, as `DecodeError { kind: ..., consumed: ..., ... }`.
-  effect fn debug(self: &Self, formatter: &mut Formatter) -> () ! WriterError ? &mut Writer {
+  effect fn debug(self: &Self, formatter: &mut Formatter) -> ()
+    ! WriterError
+    ? &mut Writer {
     return run TextFormat.debugFields(self, "DecodeError", &mut formatter)
   }
 }
@@ -382,13 +386,13 @@ impl Decoder {
   ///   with `MemberLimit` if `maxMembers` is 0. These checks come before the allocation.
   /// - `OutOfMemoryError` if the `Allocator` fails.
   pub effect fn make(format: Format, limits: Limits) -> Decoder
-  ! OutOfMemoryError | DecodeError
-  ? &mut Allocator {
+    ! OutOfMemoryError | DecodeError
+    ? &mut Allocator {
     if limits.maxMemoryBytes < MEMORY_BOUND {
-      fail DecodeError {kind: ErrorKind.MemoryLimit, consumed: 0, written: 0}
+      fail DecodeError { kind: ErrorKind.MemoryLimit, consumed: 0, written: 0 }
     }
     if limits.maxMembers == 0 {
-      fail DecodeError {kind: ErrorKind.MemberLimit, consumed: 0, written: 0}
+      fail DecodeError { kind: ErrorKind.MemberLimit, consumed: 0, written: 0 }
     }
     let ring = run zeroedBytes(RING)
     let tables = run zeroedWords(TABLE_WORDS)
@@ -449,6 +453,7 @@ impl Decoder {
       matchLength: 0,
     }
   }
+
   /// Starts a new stream in `format` with new `limits`, and keeps the storage of the decoder.
   ///
   /// Use it after a stream finishes or fails, or to stop a stream. It does not allocate. All
@@ -464,14 +469,15 @@ impl Decoder {
   pub fn reset(self: &mut Self, format: Format, limits: Limits) -> Result<(), DecodeError> {
     if limits.maxMemoryBytes < MEMORY_BOUND {
       return Result<(), DecodeError>.failResult(
-        DecodeError {kind: ErrorKind.MemoryLimit, consumed: 0, written: 0},
+        DecodeError { kind: ErrorKind.MemoryLimit, consumed: 0, written: 0 },
       )
     }
     if limits.maxMembers == 0 {
       return Result<(), DecodeError>.failResult(
-        DecodeError {kind: ErrorKind.MemberLimit, consumed: 0, written: 0},
+        DecodeError { kind: ErrorKind.MemberLimit, consumed: 0, written: 0 },
       )
     }
+
     // The storage stays in place. An empty history hides the old bytes, and each block builds
     // its tables before it reads a code, except that the fixed tables stay valid while
     // `fixedLoaded` is set.
@@ -519,6 +525,7 @@ impl Decoder {
     self.matchLength = 0
     return Result<(), DecodeError>.succeed(())
   }
+
   /// Loads `dictionary` as the history that the stream can refer to, before the first step, as
   /// zlib's `inflateSetDictionary` does.
   ///
@@ -532,9 +539,11 @@ impl Decoder {
   /// stream. The decoder does not change.
   pub fn setDictionary(self: &mut Self, dictionary: &[u8]) -> Result<(), DecodeError> {
     if self.format == Format.Gzip || self.totalInput != 0 || self.finalSeen
-      || self.dictionaryLength != 0 || self.phase == PHASE_FAILED || self.phase == PHASE_DONE {
+      || self.dictionaryLength != 0
+      || self.phase == PHASE_FAILED
+      || self.phase == PHASE_DONE {
       return Result<(), DecodeError>.failResult(
-        DecodeError {kind: ErrorKind.InvalidUse, consumed: 0, written: 0},
+        DecodeError { kind: ErrorKind.InvalidUse, consumed: 0, written: 0 },
       )
     }
     let mut used = dictionary
@@ -548,6 +557,7 @@ impl Decoder {
     self.dictionaryLength = dictionary.length
     return Result<(), DecodeError>.succeed(())
   }
+
   /// Sets the window as zlib's `inflateInit2` does, before the first step.
   ///
   /// # Details
@@ -564,7 +574,7 @@ impl Decoder {
       || self.phase == PHASE_FAILED
       || self.phase == PHASE_DONE {
       return Result<(), DecodeError>.failResult(
-        DecodeError {kind: ErrorKind.InvalidUse, consumed: 0, written: 0},
+        DecodeError { kind: ErrorKind.InvalidUse, consumed: 0, written: 0 },
       )
     }
     self.windowBits = bits
@@ -574,6 +584,7 @@ impl Decoder {
     }
     return Result<(), DecodeError>.succeed(())
   }
+
   /// Sets whether a gzip decoder finishes at the end of the first member, as the other formats
   /// finish at the end of their stream, and leaves the bytes after it unconsumed.
   ///
@@ -582,6 +593,7 @@ impl Decoder {
   pub fn setMemberStop(self: &mut Self, stop: bool) -> () {
     self.memberStop = stop
   }
+
   /// Sets whether a step returns when it reaches the start of a block, as zlib's `inflate` does
   /// with `Z_BLOCK`.
   ///
@@ -591,10 +603,12 @@ impl Decoder {
   pub fn setBlockStop(self: &mut Self, stop: bool) -> () {
     self.blockStop = stop
   }
+
   /// Returns which rule of the format the data broke, after a step failed.
   pub fn failureDetail(self: &Self) -> ErrorDetail {
     return self.detail
   }
+
   /// Decodes from `input` into `output` and returns how much it consumed and wrote.
   ///
   /// On the next call, give only the input after the consumed prefix. You can give a new output
@@ -639,6 +653,7 @@ impl Decoder {
         self.finalRemaining = input.length
       }
     }
+
     // The limits become ends in the buffers of this call, so the loops below compare positions
     // only. A position that reaches a limit end before the buffer end means the limit is hit.
     self.inputEnd = input.length
@@ -699,40 +714,69 @@ impl Decoder {
 
 // What one call of `advance` asks `step` to do next.
 const GO: u32 = 0
+
 const NEED_INPUT: u32 = 1
+
 const NEED_OUTPUT: u32 = 2
+
 const DONE: u32 = 3
+
 const FAILED: u32 = 4
 
 // The phases are private continuations of the parser. Each one reads one unit, which it takes
 // only when all of its bits are on hand, so a step can stop between any two of them.
 const PHASE_GZIP: u32 = 0
+
 const PHASE_GZIP_EXTRA_LENGTH: u32 = 1
+
 const PHASE_GZIP_EXTRA: u32 = 2
+
 const PHASE_GZIP_NAME: u32 = 3
+
 const PHASE_GZIP_COMMENT: u32 = 4
+
 const PHASE_GZIP_HEADER_CRC: u32 = 5
+
 const PHASE_ZLIB_METHOD: u32 = 6
+
 const PHASE_ZLIB_FLAGS: u32 = 7
+
 const PHASE_ZLIB_DICTIONARY: u32 = 8
+
 const PHASE_BLOCK: u32 = 10
+
 const PHASE_STORED_LENGTH: u32 = 11
+
 const PHASE_STORED: u32 = 13
+
 const PHASE_COUNTS: u32 = 14
+
 const PHASE_CODE_LENGTHS: u32 = 15
+
 const PHASE_LENGTHS: u32 = 16
+
 const PHASE_SYMBOL: u32 = 20
+
 const PHASE_LITERAL: u32 = 21
+
 const PHASE_DISTANCE: u32 = 23
+
 const PHASE_COPY: u32 = 25
+
 const PHASE_ADLER: u32 = 30
+
 const PHASE_GZIP_CRC: u32 = 31
+
 const PHASE_GZIP_SIZE: u32 = 32
+
 const PHASE_MEMBER: u32 = 40
+
 const PHASE_DONE: u32 = 50
+
 const PHASE_FAILED: u32 = 60
 
 const RING: usize = 32768
+
 const RING_MASK: usize = 32767
 
 // The value of `windowBits` when the caller did not set them: the zlib header sets the window,
@@ -754,15 +798,25 @@ fn reachOf(bits: u32) -> usize {
 // these bounds). The build rejects a code that needs more than its capacity. The capacities are
 // powers of two, so that an index with its high bits cleared is in its table.
 const LITERAL_ROOT: u32 = 10
+
 const DISTANCE_ROOT: u32 = 8
+
 const CODE_ROOT: u32 = 7
+
 const LITERAL_BASE: usize = 0
+
 const LITERAL_CAPACITY: usize = 2048
+
 const DISTANCE_BASE: usize = 2048
+
 const DISTANCE_CAPACITY: usize = 1024
+
 const CODE_BASE: usize = 3072
+
 const CODE_CAPACITY: usize = 128
+
 const TABLE_WORDS: usize = 3200
+
 const LENGTH_COUNT: usize = 320
 
 // A table entry is `value << 16 | flags | skip << 8 | take`, in one word that the decode loops
@@ -780,32 +834,155 @@ const LENGTH_COUNT: usize = 320
 // the end of the block; with neither, a code that is not valid, whose `value` is a `BAD_` cause.
 // An entry with no flag is a length, a distance or a code-length symbol.
 const ENTRY_LITERAL: u32 = 0x80000000
+
 const ENTRY_SPECIAL: u32 = 0x8000
+
 const ENTRY_LINK: u32 = 0x4000
+
 const ENTRY_END: u32 = 0x2000
 
 const BAD_CODE: u32 = 0
+
 const BAD_LENGTH: u32 = 1
+
 const BAD_DISTANCE: u32 = 2
 
 const ALPHABET_LITERAL: u32 = 0
+
 const ALPHABET_DISTANCE: u32 = 1
+
 const ALPHABET_CODE: u32 = 2
 
 const LENGTH_BASE: [u32; 29] = [
-  3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131,
-  163, 195, 227, 258,
+  3,
+  4,
+  5,
+  6,
+  7,
+  8,
+  9,
+  10,
+  11,
+  13,
+  15,
+  17,
+  19,
+  23,
+  27,
+  31,
+  35,
+  43,
+  51,
+  59,
+  67,
+  83,
+  99,
+  115,
+  131,
+  163,
+  195,
+  227,
+  258,
 ]
+
 const LENGTH_EXTRA: [u32; 29] = [
-  0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  1,
+  1,
+  1,
+  1,
+  2,
+  2,
+  2,
+  2,
+  3,
+  3,
+  3,
+  3,
+  4,
+  4,
+  4,
+  4,
+  5,
+  5,
+  5,
+  5,
+  0,
 ]
+
 const DISTANCE_BASE_VALUES: [u32; 30] = [
-  1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025, 1537, 2049,
-  3073, 4097, 6145, 8193, 12289, 16385, 24577,
+  1,
+  2,
+  3,
+  4,
+  5,
+  7,
+  9,
+  13,
+  17,
+  25,
+  33,
+  49,
+  65,
+  97,
+  129,
+  193,
+  257,
+  385,
+  513,
+  769,
+  1025,
+  1537,
+  2049,
+  3073,
+  4097,
+  6145,
+  8193,
+  12289,
+  16385,
+  24577,
 ]
+
 const DISTANCE_EXTRA: [u32; 30] = [
-  0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13,
+  0,
+  0,
+  0,
+  0,
+  1,
+  1,
+  2,
+  2,
+  3,
+  3,
+  4,
+  4,
+  5,
+  5,
+  6,
+  6,
+  7,
+  7,
+  8,
+  8,
+  9,
+  9,
+  10,
+  10,
+  11,
+  11,
+  12,
+  12,
+  13,
+  13,
 ]
+
 const CODE_ORDER: [usize; 19] = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15]
 
 fn startPhase(format: Format) -> u32 {
@@ -820,15 +997,21 @@ fn startPhase(format: Format) -> u32 {
 
 // The storage comes from `Allocator.allocateZeroed`, so every slot starts initialized. The views
 // below cover the whole buffer, which is in bounds and initialized.
-effect fn zeroedBytes(count: usize) -> Intrinsic.RawBuffer<u8> ! OutOfMemoryError ? &mut Allocator {
+effect fn zeroedBytes(count: usize) -> Intrinsic.RawBuffer<u8>
+  ! OutOfMemoryError
+  ? &mut Allocator {
   let allocation = run Allocator.allocateZeroed(Layout { bytes: count, alignment: 1 })
+
   // The allocation holds `count` bytes.
   return unsafe RawBuffer.from<u8>(move allocation, count)
 }
 
 // `count` is at most `TABLE_WORDS`, so `count * 4` does not overflow.
-effect fn zeroedWords(count: usize) -> Intrinsic.RawBuffer<u32> ! OutOfMemoryError ? &mut Allocator {
+effect fn zeroedWords(count: usize) -> Intrinsic.RawBuffer<u32>
+  ! OutOfMemoryError
+  ? &mut Allocator {
   let allocation = run Allocator.allocateZeroed(Layout { bytes: count * 4, alignment: 4 })
+
   // The allocation holds `count` words with word alignment.
   return unsafe RawBuffer.from<u32>(move allocation, count)
 }
@@ -861,14 +1044,14 @@ fn success(state: &mut Decoder, status: Status) -> Result<Progress, DecodeError>
     state.finalRemaining = state.finalRemaining - state.inputPosition
   }
   return Result<Progress, DecodeError>.succeed(
-    Progress {consumed: state.inputPosition, written: state.outputPosition, status: status},
+    Progress { consumed: state.inputPosition, written: state.outputPosition, status: status },
   )
 }
 
 fn failure(state: &mut Decoder, kind: ErrorKind) -> Result<Progress, DecodeError> {
   state.phase = PHASE_FAILED
   return Result<Progress, DecodeError>.failResult(
-    DecodeError {kind: kind, consumed: state.inputPosition, written: state.outputPosition},
+    DecodeError { kind: kind, consumed: state.inputPosition, written: state.outputPosition },
   )
 }
 
@@ -1194,9 +1377,11 @@ fn advance(state: &mut Decoder, input: &[u8], output: &mut [u8]) -> u32 {
     if readBits(&mut state, input, 32) == false {
       return starve(&mut state, input)
     }
+
     // The Adler-32 is stored most significant byte first.
     let value = state.value
-    let expected = u32.shiftLeft(value & 255, 24) | u32.shiftLeft(u32.shiftRight(value, 8) & 255, 16)
+    let expected = u32.shiftLeft(value & 255, 24)
+      | u32.shiftLeft(u32.shiftRight(value, 8) & 255, 16)
       | u32.shiftLeft(u32.shiftRight(value, 16) & 255, 8)
       | u32.shiftRight(value, 24)
     if expected != state.adler {
@@ -1352,6 +1537,7 @@ fn header(state: &mut Decoder, input: &[u8]) -> u32 {
   }
   if phase == PHASE_ZLIB_FLAGS {
     state.early = false
+
     // The two bytes are checked together and in zlib's order.
     if u32.remainder(state.first * 256 + state.value, 31) != 0 {
       // zlib names the check first. The kind stays the more specific one when the method is
@@ -1387,6 +1573,7 @@ fn header(state: &mut Decoder, input: &[u8]) -> u32 {
       state.phase = PHASE_ZLIB_DICTIONARY
       return GO
     }
+
     // A loaded dictionary that the header does not name is not part of this stream.
     state.historyNext = 0
     state.historyCount = 0
@@ -1394,6 +1581,7 @@ fn header(state: &mut Decoder, input: &[u8]) -> u32 {
     state.boundary = true
     return GO
   }
+
   // PHASE_ZLIB_DICTIONARY
   state.trailer = u32.shiftLeft(state.trailer, 8) | state.value
   state.index = state.index + 1
@@ -1439,7 +1627,11 @@ fn stored(state: &mut Decoder, input: &[u8], output: &mut [u8]) -> u32 {
   if length > state.outputEnd - state.outputPosition {
     length = state.outputEnd - state.outputPosition
   }
-  Slice.copyInto<u8>(&mut output, state.outputPosition, Slice.view<u8>(input, state.inputPosition, length))
+  Slice.copyInto<u8>(
+    &mut output,
+    state.outputPosition,
+    Slice.view<u8>(input, state.inputPosition, length),
+  )
   state.inputPosition = state.inputPosition + length
   state.outputPosition = state.outputPosition + length
   state.remaining = state.remaining - length
@@ -1549,6 +1741,7 @@ fn symbol(state: &mut Decoder, input: &[u8], output: &mut [u8]) -> u32 {
   fill(&mut state, input)
   let mut entry = lookup(words(&state.tables), LITERAL_BASE, LITERAL_ROOT, state.acc)
   let mut take = entry & 255
+
   // A run of literals stays here, which is most of what the end of an output buffer holds.
   while entry & ENTRY_LITERAL != 0 {
     if take > state.count {
@@ -1620,6 +1813,7 @@ fn copy(state: &mut Decoder, output: &mut [u8]) -> u32 {
   if state.outputPosition == state.outputEnd {
     return full(&mut state, &output)
   }
+
   // The distance is checked when the copy has room, and again when a later step continues the
   // copy, as zlib checks it.
   if state.remaining > state.historyCount + (state.outputPosition - state.flushed)
@@ -1710,7 +1904,9 @@ fn copyBack(output: &mut [u8], at: usize, found: usize, length: usize) -> () {
 
 // What `fastBlock` stopped at.
 const FAST_MORE: u32 = 0
+
 const FAST_END: u32 = 1
+
 const FAST_DISTANCE: u32 = 2
 
 // The input the fast loop needs ahead of one pass, which is more than its refills read.
@@ -1721,6 +1917,7 @@ const FAST_INPUT: usize = 32
 const FAST_ROOM: usize = 320
 
 const LITERAL_ROOT_MASK: usize = 1023
+
 const DISTANCE_ROOT_MASK: usize = 255
 
 // The fast loop reads and writes through pointers, with no bounds checks. Before each pass, it
@@ -1733,7 +1930,7 @@ const DISTANCE_ROOT_MASK: usize = 255
 unsafe fn peek(base: [*]const u8, at: usize) -> u64 {
   unsafe {
     return Pointer.readUnaligned<u64>(
-      Intrinsic.pointerReinterpret<*const u8, *const align(1) u64>(Pointer.at<u8>(base, at)),
+      Intrinsic.pointerReinterpret<*const u8, *const align (1) u64>(Pointer.at<u8>(base, at)),
     )
   }
 }
@@ -1744,7 +1941,7 @@ unsafe fn peek(base: [*]const u8, at: usize) -> u64 {
 unsafe fn poke(base: [*]mut u8, at: usize, value: u64) -> () {
   unsafe {
     Pointer.writeUnaligned<u64>(
-      Intrinsic.pointerReinterpret<*mut u8, *mut align(1) u64>(Pointer.atMut<u8>(base, at)),
+      Intrinsic.pointerReinterpret<*mut u8, *mut align (1) u64>(Pointer.atMut<u8>(base, at)),
       value,
     )
   }
@@ -1753,7 +1950,9 @@ unsafe fn poke(base: [*]mut u8, at: usize, value: u64) -> () {
 // Writes `value` at `base[at]`. The caller proves that it is inside the buffer.
 @inlineAlways
 unsafe fn pokeByte(base: [*]mut u8, at: usize, value: u8) -> () {
-  unsafe { Pointer.write<u8>(Pointer.atMut<u8>(base, at), value) }
+  unsafe {
+    Pointer.write<u8>(Pointer.atMut<u8>(base, at), value)
+  }
 }
 
 // Returns the 16 bytes at `base[at..]`. The caller proves that they are inside the buffer.
@@ -1782,7 +1981,13 @@ unsafe fn pokeWide(base: [*]mut u8, at: usize, value: simd<u8, 16>) -> () {
 // ranges are at least 16 bytes apart or in different buffers. It can write up to 29 bytes after
 // the range. The caller proves that `length + 29` bytes are inside both buffers.
 @inlineAlways
-unsafe fn wideCopy(out: [*]mut u8, at: usize, from: [*]const u8, source: usize, length: usize) -> () {
+unsafe fn wideCopy(
+  out: [*]mut u8,
+  at: usize,
+  from: [*]const u8,
+  source: usize,
+  length: usize,
+) -> () {
   unsafe {
     // Most matches are short, so two pieces go without a test.
     pokeWide(out, at, peekWide(from, source))
@@ -1834,6 +2039,7 @@ unsafe fn fastCopy(out: [*]mut u8, at: usize, found: usize, length: usize) -> ()
       }
       return ()
     }
+
     // Each piece is 8 bytes of which the first `found` are right, and the next piece starts
     // after those.
     while target < end {
@@ -1916,15 +2122,24 @@ fn fastLoop(state: &mut Decoder, input: &[u8], output: &mut [u8]) -> u32 {
   if history.length != RING {
     return FAST_MORE
   }
+
   // The history holds `RING` bytes, so its pointer is not null.
-  let ring = unsafe Intrinsic.pointerRequalify<?[*]const u8, [*]const u8>(Pointer.fromSlice<u8>(history))
+  let ring = unsafe Intrinsic.pointerRequalify<?[*]const u8, [*]const u8>(
+    Pointer.fromSlice<u8>(history),
+  )
   let mut acc = state.acc
   let mut count = state.count & 63
   let mut result = FAST_MORE
   let mut pending: usize = 0
+
   // Both buffers hold bytes, so their pointers are not null.
-  let source = unsafe Intrinsic.pointerRequalify<?[*]const u8, [*]const u8>(Pointer.fromSlice<u8>(input))
-  let out = unsafe Intrinsic.pointerRequalify<?[*]mut u8, [*]mut u8>(Pointer.fromMutSlice<u8>(&mut output))
+  let source = unsafe Intrinsic.pointerRequalify<?[*]const u8, [*]const u8>(
+    Pointer.fromSlice<u8>(input),
+  )
+  let out = unsafe Intrinsic.pointerRequalify<?[*]mut u8, [*]mut u8>(
+    Pointer.fromMutSlice<u8>(&mut output),
+  )
+
   // Each pass starts with `position <= inputLimit`. It refills at most two times, the second at
   // most 7 bytes after the first, so every refill reads 8 bytes that end at most 15 bytes after
   // `position`, inside the `FAST_INPUT` bytes ahead.
@@ -1961,12 +2176,14 @@ fn fastLoop(state: &mut Decoder, input: &[u8], output: &mut [u8]) -> u32 {
           continue
         }
       }
+
       // A length and its distance can consume 48 bits, more than the 36 that two literals leave.
       // `entry` stays right, because a refill only adds bits above those it read.
       acc = acc | u64.shiftLeft(unsafe peek(source, position), u32.toU64(count & 63))
       position = usize.wrappingAdd(position, u32.toUsize(u32.shiftRight(count ^ 63, 3)))
       count = count | 56
     }
+
     // `entry` is not a literal, and at least 56 bits can be consumed: at most 20 for a length
     // and 28 for a distance.
     if entry & ENTRY_SPECIAL != 0 {
@@ -2006,6 +2223,7 @@ fn fastLoop(state: &mut Decoder, input: &[u8], output: &mut [u8]) -> u32 {
         break
       }
     }
+
     // A length.
     let length = u32.toUsize(u32.wrappingAdd(u32.shiftRight(entry, 16), extraBits(acc, entry)))
     acc = u64.shiftRight(acc, u32.toU64(entry & 63))
@@ -2035,6 +2253,7 @@ fn fastLoop(state: &mut Decoder, input: &[u8], output: &mut [u8]) -> u32 {
       }
     }
     let found = u32.toUsize(u32.wrappingAdd(u32.shiftRight(far, 16), extraBits(acc, far)))
+
     // `flushed <= at`, so `fresh` is how many bytes of this call's output a match can read.
     let fresh = usize.wrappingSubtract(at, flushed)
     if found <= fresh {
@@ -2047,6 +2266,7 @@ fn fastLoop(state: &mut Decoder, input: &[u8], output: &mut [u8]) -> u32 {
       }
       acc = u64.shiftRight(acc, u32.toU64(far & 63))
       count = u32.wrappingSubtract(count, far & 255)
+
       // A length is at most 258, so the copy stays inside the `FAST_ROOM` bytes ahead, and
       // `found` is at least 1 and at most `at`.
       unsafe fastCopy(out, at, found, length)
@@ -2062,6 +2282,7 @@ fn fastLoop(state: &mut Decoder, input: &[u8], output: &mut [u8]) -> u32 {
     }
     acc = u64.shiftRight(acc, u32.toU64(far & 63))
     count = u32.wrappingSubtract(count, far & 255)
+
     // The match starts `back` bytes before the end of the history, at `from` in the ring.
     let back = usize.wrappingSubtract(found, fresh)
     let from = usize.wrappingSubtract(usize.wrappingAdd(next, RING), back) & RING_MASK
@@ -2077,6 +2298,7 @@ fn fastLoop(state: &mut Decoder, input: &[u8], output: &mut [u8]) -> u32 {
   if result == FAST_DISTANCE {
     state.matchLength = pending
   }
+
   // The unit path needs zeros above the count.
   state.acc = acc & lowMask(count)
   state.count = count
@@ -2219,6 +2441,7 @@ fn buildCode(
     if single == false || maximum != 1 {
       return false
     }
+
     // One symbol of length 1: the pattern 0 is the symbol, and 1 is a bad code of length 1.
     let mut symbol: u32 = 0
     while lengths[start + u32.toUsize(symbol)] == 0 {
@@ -2234,6 +2457,7 @@ fn buildCode(
     }
     return true
   }
+
   // Sorts the symbols by code length, then by symbol.
   let mut offsets: [u32; 16] = [0; 16]
   length = 1
@@ -2255,6 +2479,7 @@ fn buildCode(
   let mut key: u32 = 0
   let mut used: usize = 0
   let mut size: u32 = 1
+
   // The root grows from 1 entry to `rootSize`. While it has 2^size entries, a code of `size`
   // bits is one entry, and each doubling repeats the codes that are there. The code is complete,
   // so every entry gets a code or a link before the end.

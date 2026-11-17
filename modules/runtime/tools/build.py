@@ -39,8 +39,8 @@ def main():
     identified = build_cache_object(environment, identity)
     named = ROOT / 'build/link-object'
     named.write_text(str(identified))
-    # Source-file compilation keeps the generic engine in one native object.
-    command = ['silk', '+' + version, 'build', 'src/main.silk', '-o', str(args.output.resolve()),
+    # The package build: build.silk's native plan and the dependencies come from the package.
+    command = ['silk', '+' + version, 'build',
                '--debug', str(not args.release).lower(),
                '--clang', str(ROOT / 'tools/clang.py')]
     if args.release:
@@ -49,8 +49,19 @@ def main():
         subprocess.run(command, cwd=ROOT, env=environment, check=True)
     finally:
         named.unlink(missing_ok=True)
+    shutil.copy2(built_executable(args.release), args.output.resolve())
     embed_builtin_cache(args.output.resolve(), environment, identity, identified)
     embed_heap_image(args.output.resolve())
+
+
+def built_executable(release):
+    """The executable the package build just wrote, named by the request it published."""
+    profile = 'release' if release else 'dev'
+    requests = sorted((ROOT.parent.parent / 'build/requests').glob(f'silkjs-runtime.*.{profile}.toml'),
+                      key=lambda path: path.stat().st_mtime)
+    if not requests:
+        raise SystemExit('the build published no request for silkjs-runtime')
+    return Path(tomllib.loads(requests[-1].read_text())['output'])
 
 
 def build_cache_object(environment, identity, cache=None):

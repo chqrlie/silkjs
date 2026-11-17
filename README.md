@@ -35,7 +35,7 @@ silk task check       # the correctness gate (needs `silk build --release`)
 silk task bench-octane   # Octane against other engines (modules/engine/bench/README.md)
 
 cd ../runtime
-silk task build       # the runtime executable, modules/runtime/build/silkjs
+silk task runtime     # the runtime executable, modules/runtime/build/silkjs
 silk task compat      # the differential cases against Node 24
 silk task bench-all   # the benchmarks against Bun (modules/runtime/bench/README.md)
 ```
