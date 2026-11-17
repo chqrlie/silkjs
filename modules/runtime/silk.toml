@@ -17,7 +17,7 @@ pm = { path = "../pm" }
 sqlite = { git = "https://github.com/silk-lang/lib-sqlite", rev = "8f6b73488be824d97ce1a1c02a9484a2209521e3", package = "db-sqlite" }
 # The C libraries Node builds with, each compiled by Silk from its pinned release (../native).
 # uvwasi only: it is compiled against a uv.h whose functions src/ext/uvwasi_host.silk defines. No libuv.
-libuv = { path = "../native/libuv", package = "silkjs-libuv" }
+uvwasi = { path = "../native/uvwasi", package = "silkjs-uvwasi" }
 openssl = { path = "../native/openssl", package = "silkjs-openssl" }
 nghttp2 = { path = "../native/nghttp2", package = "silkjs-nghttp2" }
 zstd = { path = "../native/zstd", package = "silkjs-zstd" }

@@ -1,5 +1,5 @@
 [package]
-name = "silkjs-libuv"
+name = "silkjs-uvwasi"
 description = "uvwasi, compiled against a uv.h that the SilkJS runtime implements in Silk; no libuv"
 version = "1.51.0"
 silk-version = "0.1.0-pipeline.1"
@@ -10,4 +10,4 @@ exports = ["lib"]
 # LICENSE. uvwasi is written against libuv, and no libuv is compiled here: uvwasi/shim/uv.h declares
 # the part of libuv 1.51's interface that uvwasi uses, with every function named silk_uvwasi_*, and
 # the runtime defines those functions in Silk (modules/runtime/src/ext/uvwasi_host.silk). The
-# package keeps its name, and as its version the libuv release whose behavior the functions follow.
+# version is the libuv release whose behavior those functions follow.
