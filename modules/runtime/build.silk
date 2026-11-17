@@ -4337,6 +4337,14 @@ static fn plan() -> Plan {
   if Intrinsic.targetOperatingSystem() == "linux" {
     plan = plan |> Plan.linkLibrary("m", Library.dynamicSearch())
   }
+  // The C libraries the runtime calls through its own extern declarations (src/ext): nothing
+  // imports these packages, so the plan names them to link.
+  plan = plan
+    |> Plan.linkDependency("uvwasi")
+    |> Plan.linkDependency("openssl")
+    |> Plan.linkDependency("nghttp2")
+    |> Plan.linkDependency("zstd")
+    |> Plan.linkDependency("brotli")
   return plan
 }
 

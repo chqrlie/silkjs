@@ -72,24 +72,43 @@ def main():
         path = 'generated/' + file if (GENERATED / file).is_file() else 'silkjs-openssl:' + file
         system = '"linux"' if file in LINUX_ONLY else '["linux", "macos"]'
         groups.setdefault((tuple(includes), tuple(flags), system), []).append(path)
-    entries = ['import silk.build.plan { Plan }\nimport silk.build.step { sourcePath }\n\nstatic fn plan() -> Plan {\n  let mut plan = Plan.empty()\n']
+    # Each group of at most 100 files is its own constant: a constant is evaluated within its own
+    # static step budget, which one plan of every file would exceed.
+    chunks = []
     for (includes, flags, system), files in groups.items():
+        for archived in (True, False):
+            kind = [file for file in files if file.startswith('silkjs-openssl:') == archived]
+            for start in range(0, len(kind), 100):
+                chunks.append((includes, flags, system, kind[start:start + 100]))
+    entries = ['import silk.build.plan { Library, Plan }\nimport silk.build.step { sourcePath }\n\n']
+    for number, (includes, flags, system, files) in enumerate(chunks):
         condition = 'Intrinsic.targetOperatingSystem() == "linux"'
         if system != '\"linux\"':
             condition += ' || Intrinsic.targetOperatingSystem() == "darwin"'
-        entries.append(f'  if {condition} {{\n')
-        for file in files:
-            entries.append('    plan = plan |> Plan.compileNative("c", ' + plan_path(file)
-                           + ', &[' + ', '.join(literal(f) for f in flags)
-                           + '], &[' + ', '.join(plan_path(i) for i in includes) + '])\n')
-        entries.append('  }\n')
-    entries.append('  if Intrinsic.targetOperatingSystem() == "linux" {\n'
-                   '    plan = plan |> Plan.linkLibrary("pthread", "dynamic", false, false)\n'
-                   '    plan = plan |> Plan.linkLibrary("dl", "dynamic", false, false)\n  }\n'
+        archive = files[0].startswith('silkjs-openssl:')
+        names = [file.split(':', 1)[1] if archive else file for file in files]
+        path = 'Plan.archivePath("silkjs-openssl", files[at])' if archive else 'sourcePath(files[at])'
+        entries.append('// Files that compile with the same flags and include directories.\n'
+                       f'static fn group{number}(start: Plan) -> Plan {{\n  if !({condition}) {{\n    return start\n  }}\n'
+                       f'  let files: [string; {len(names)}] = [\n' + ''.join(f'    {literal(name)},\n' for name in names)
+                       + '  ]\n  let mut plan = start\n  let mut at: usize = 0\n  while at < files.length {\n'
+                       + f'    plan = plan |> Plan.compileNative("c", {path}, &['
+                       + ', '.join(literal(f) for f in flags) + '], &['
+                       + ', '.join(plan_path(i) for i in includes) + '])\n    at = at + 1\n  }\n  return plan\n}\n\n')
+    entries.append('// Each group is its own constant, so each is evaluated within its own static step budget.\n')
+    previous = 'Plan.empty()'
+    for number in range(len(chunks)):
+        entries.append(f'const STEP_{number}: Plan = group{number}({previous})\n')
+        previous = f'STEP_{number}'
+    entries.append(f'\nstatic fn plan() -> Plan {{\n  let mut plan = {previous}\n'
+                   '  if Intrinsic.targetOperatingSystem() == "linux" {\n'
+                   '    plan = plan |> Plan.linkLibrary("pthread", Library.dynamicSearch())\n'
+                   '    plan = plan |> Plan.linkLibrary("dl", Library.dynamicSearch())\n  }\n'
                    '  return plan\n}\n\npub const PLAN: Plan = plan()\n')
     (PACKAGE / 'build.silk').write_text(''.join(entries))
     shutil.rmtree(PACKAGE / 'build', ignore_errors=True)
-    print(f'{len(objects)} objects in {len(entries)} groups')
+    print(f'{len(objects)} objects in {len(chunks)} groups')
+    subprocess.run(['silk', 'format', str(PACKAGE / 'build.silk')], check=True)
 
 
 def plan_path(text):

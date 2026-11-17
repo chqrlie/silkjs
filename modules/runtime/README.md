@@ -11,7 +11,7 @@ The verified build target is **macOS arm64**. Linux x64 builds and passes the di
 Requirements:
 
 - The Silk launcher; `silk.toml` pins the compiler version.
-- Clang 22 or newer, and Python 3.12 or newer for `silk task build`.
+- Clang 22 or newer, and Python 3.12 or newer for `silk task runtime`.
 - A macOS SDK supporting the compiler's macOS 11 deployment target. The build selects the installed macOS 15.5 SDK when `SDKROOT` is unset; otherwise set `SDKROOT` explicitly.
 - Network access on the first build: Silk downloads the pinned, checksum-verified source releases of the C libraries and compiles them itself.
 
@@ -21,13 +21,13 @@ Nothing needs installing besides. OpenSSL, nghttp2, Zstandard and Brotli are pac
 git clone https://github.com/silk-lang/lib-silkjs.git
 cd lib-silkjs/modules/runtime
 silk use
-silk task build
+silk task runtime
 ./build/silkjs -p 'process.versions'
 ```
 
-A plain `silk build` builds the executable too, and is how a program that embeds the runtime builds (see [Embed](#embed)). `silk task build` adds what only an executable that can run on the build machine gets: the built-ins' bytecode, compiled by the executable itself and linked into it, and a startup heap image, so a start does not run the bootstrap.
+A plain `silk build` builds the executable too, and is how a program that embeds the runtime builds (see [Embed](#embed)). `silk task runtime` adds what only an executable that can run on the build machine gets: the built-ins' bytecode, compiled by the executable itself and linked into it, and a startup heap image, so a start does not run the bootstrap.
 
-Use `SILK_CLANG` to select a particular Clang executable. `silk task build --release` builds with speed optimization; `--output PATH` selects the output executable. `silk task` lists the other tasks: `embed`, `compat` and `sea` run the Python tools in [`tools/`](tools/), which can still be run directly, and the benchmark tasks of [`bench/`](bench/README.md) are written in Silk. The first build compiles about 1,300 C files once (Silk compiles them one at a time), a few minutes; later builds reuse the objects.
+Use `SILK_CLANG` to select a particular Clang executable. `silk task runtime --release` builds with speed optimization; `--output PATH` selects the output executable. `silk task` lists the other tasks: `embed`, `compat` and `sea` run the Python tools in [`tools/`](tools/), which can still be run directly, and the benchmark tasks of [`bench/`](bench/README.md) are written in Silk. The first build compiles about 1,300 C files once (Silk compiles them one at a time), a few minutes; later builds reuse the objects.
 
 The engine is this repository's [`modules/engine`](../engine), a path dependency in `silk.toml`, so engine and runtime changes land together. An installed Node executable is not required to build or run it.
 

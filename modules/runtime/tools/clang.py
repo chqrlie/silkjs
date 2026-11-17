@@ -53,7 +53,8 @@ if arguments and not non_final.intersection(arguments):
     extra = os.path.join(BUILD, 'link-object')
     if os.path.isfile(extra):
         with open(extra) as named:
-            arguments.append(named.read().strip())
+            # After `-x none`: the arguments may end in IR inputs, which would claim the object.
+            arguments += ['-x', 'none', named.read().strip()]
     # A Silk that compiles the program to an object itself (one kept beside the output)
     # links that object: record every final link, not only one from IR.
     os.makedirs(BUILD, exist_ok=True)

@@ -1,6 +1,6 @@
 //! The runtime's tasks, run with `silk task <name>` from `modules/runtime`.
 //!
-//! `build` is how the runtime executable is made: a plain `silk build` with the Clang driver in
+//! `runtime` is how the runtime executable is made: a plain `silk build` with the Clang driver in
 //! `tools/clang.py`, then a second link with the built-ins' bytecode and a heap image appended,
 //! which only an executable that runs on the build machine can make. The work stays in the
 //! Python tools; this program is their entry point.
@@ -23,7 +23,7 @@ import silk.system.filesystem { FileError, FileSystem, Path }
 import silk.system.host_input { HostInput, HostInputError }
 
 union Tasks {
-  Build { pub release: bool, pub output: Option<Bytes> },
+  Runtime { pub release: bool, pub output: Option<Bytes> },
   Embed,
   Compat { pub pattern: Option<Bytes> },
   Sea { pub runtime: Bytes, pub blob: Bytes, pub executable: Bytes, pub sign: Option<Bytes> },
@@ -83,7 +83,7 @@ impl CommandLine for Measure {
 impl CommandLine for Tasks {
   static fn command() -> Command<Tasks> {
     return Command<Tasks>.make("tasks", "The SilkJS runtime's tasks")
-      |> Command.variant("Build", "Build the runtime executable, build/silkjs")
+      |> Command.variant("Runtime", "Build the runtime executable with its built-ins and heap image, build/silkjs")
       |> Command.option("release", Opt.about("Optimize for speed"))
       |> Command.option("output", Opt.about("Where to write the executable"))
       |> Command.variant(
@@ -194,7 +194,7 @@ impl TaskSet for Tasks {
         run Runtimes.offlineDeps(&asked, Bytes.asSlice(&from))
         return
       }
-      Tasks.Build { release, output } => {
+      Tasks.Runtime { release, output } => {
         run word(&mut argv, b"tools/build.py")
         if release {
           run word(&mut argv, b"--release")
