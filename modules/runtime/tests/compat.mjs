@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import assert from 'node:assert/strict';
+import { register as registerZstd } from './compat-zstd.mjs';
 
 const runtime = resolve(process.env.SILKJS_RUNTIME || 'build/silkjs');
 const reference = process.env.NODE_REFERENCE || process.execPath;
@@ -394,11 +395,12 @@ cases.push({ name: 'zlib-compressed-bytes-matrix', args: [join(directory, 'zlib/
 // still comes later, in the caller's async context, and in Node's order.
 add('zlib-small-async-write-context', `const z=require('zlib'),{AsyncLocalStorage}=require('async_hooks');const als=new AsyncLocalStorage(),out=[];als.run({id:1},()=>z.deflate(Buffer.from('hello'),(e,b)=>{out.push(['deflate',als.getStore()?.id,e,b.length]);als.run({id:2},()=>{const s=z.createGunzip();s.on('data',d=>out.push(['data',als.getStore()?.id,d.toString()]));s.on('end',()=>{out.push(['end',als.getStore()?.id]);console.log(JSON.stringify(out))});s.end(z.gzipSync('world'))})}));z.inflate(Buffer.from('bad'),e=>out.push(['err',e.code,e.errno,als.getStore()]));const s=z.createDeflate();let sync=true;s.write('x',()=>out.push(['write callback later',!sync]));sync=false;s.end();`);
 for (const seed of ['7', '99', '2026']) cases.push({ name: 'zlib-fuzz-roundtrips-and-damage-' + seed, args: [join(directory, 'zlib/fuzz.cjs'), seed] });
+registerZstd(file, cases, directory);
 let passed = 0, failed = 0;
 try {
   if (!cases.some(item => filter.test(item.name))) throw new Error('No compatibility scenarios match ' + filter);
   for (const scenario of cases.filter(item => filter.test(item.name))) {
-    const options = { cwd: directory, encoding: 'utf8', timeout: 15000, env: { ...process.env, NODE_REFERENCE: reference, NO_COLOR: '1', NODE_DEBUG: '' } };
+    const options = { cwd: directory, encoding: 'utf8', timeout: scenario.timeout || 15000, env: { ...process.env, NODE_REFERENCE: reference, NO_COLOR: '1', NODE_DEBUG: '' } };
     const expected = spawnSync(reference, scenario.args, options);
     const actual = spawnSync(runtime, scenario.args, options);
     try {
