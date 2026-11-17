@@ -14,7 +14,7 @@ silkjs = { path = "../engine", package = "silkjs-engine" }
 # The package manager, from this repository's modules/pm: `silkjs install` and the other commands.
 pm = { path = "../pm" }
 # SQLite 3 compiled from the amalgamation that silk-lang/lib-sqlite pins, with the features Node builds.
-sqlite = { git = "https://github.com/silk-lang/lib-sqlite", rev = "8f6b73488be824d97ce1a1c02a9484a2209521e3", package = "db-sqlite" }
+sqlite = { git = "https://github.com/silk-lang/lib-sqlite", rev = "a832919925afa6ac4dc6ba50fd6698b393703d70", package = "db-sqlite" }
 # The C libraries Node builds with, each compiled by Silk from its pinned release (../native).
 # uvwasi only: it is compiled against a uv.h whose functions src/ext/uvwasi_host.silk defines. No libuv.
 uvwasi = { path = "../native/uvwasi", package = "silkjs-uvwasi" }

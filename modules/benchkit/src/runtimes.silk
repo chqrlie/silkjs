@@ -10,7 +10,7 @@
 //! all runtimes alike. Nothing is measured while a build runs.
 
 import kit as Kit
-import kit { Captured, Ended, Job, Running, Shuffler, Stream, Table }
+import kit { Captured, Ended, Job, Shuffler, Stream, Table }
 import silk.cli.task { TaskError }
 import silk.collections.bytes { Bytes }
 import silk.collections.list { List }
