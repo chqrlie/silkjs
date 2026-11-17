@@ -83,7 +83,10 @@ impl CommandLine for Measure {
 impl CommandLine for Tasks {
   static fn command() -> Command<Tasks> {
     return Command<Tasks>.make("tasks", "The SilkJS runtime's tasks")
-      |> Command.variant("Runtime", "Build the runtime executable with its built-ins and heap image, build/silkjs")
+      |> Command.variant(
+        "Runtime",
+        "Build the runtime executable with its built-ins and heap image, build/silkjs",
+      )
       |> Command.option("release", Opt.about("Optimize for speed"))
       |> Command.option("output", Opt.about("Where to write the executable"))
       |> Command.variant(
