@@ -27,7 +27,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           export SILK_RELEASE="v$(sed -n 's/^silk-version = "\(.*\)"/\1/p' silk.toml)"
-          curl --fail --location https://raw.githubusercontent.com/silk-lang/silk/bf7450df2216/install.sh --output "$RUNNER_TEMP/install-silk.sh"
+          curl --fail --location https://raw.githubusercontent.com/silk-lang/silk/45b9e51824caef8cca871303c1ce19587da0533b/install.sh --output "$RUNNER_TEMP/install-silk.sh"
           sh "$RUNNER_TEMP/install-silk.sh"
           echo "$HOME/.silk/bin" >> "$GITHUB_PATH"
       - name: WAMR native call entry assembles for macOS

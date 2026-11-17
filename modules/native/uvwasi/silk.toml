@@ -2,7 +2,7 @@
 name = "silkjs-uvwasi"
 description = "uvwasi, compiled against a uv.h that the SilkJS runtime implements in Silk; no libuv"
 version = "1.51.0"
-silk-version = "0.1.0-pipeline.1"
+silk-version = "0.1.0-dev.85+45b9e51824ca"
 kind = "library"
 exports = ["lib"]
 
