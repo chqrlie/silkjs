@@ -2,7 +2,7 @@
 """Writes tools/builtin-order.txt: the built-in modules whose bytecode a start or a
 server reads, which tools/build.py places first in the linked bytecode cache.
 
-Usage: python3 tools/builtin_order.py path/to/silkjsruntime [touched.txt ...]
+Usage: python3 tools/builtin_order.py path/to/silkjs [touched.txt ...]
        python3 tools/builtin_order.py --shim
 
 The cache holds every built-in, about 22 MB; a server reads under 3 MB of it, a module's
@@ -115,7 +115,7 @@ def build_shim(directory):
 
 def cold_copy(executable, directory):
     """A copy of the executable with none of its pages in the page cache."""
-    copy = directory / 'silkjsruntime'
+    copy = directory / 'silkjs'
     shutil.copyfile(executable, copy)
     copy.chmod(0o755)
     descriptor = os.open(copy, os.O_RDONLY)
@@ -155,7 +155,7 @@ def main():
     if sys.argv[1] == '--shim':
         directory = pathlib.Path(tempfile.mkdtemp(prefix='silk-builtin-order-'))
         shim = build_shim(directory)
-        print(f'LD_PRELOAD={shim} SILK_BUILTIN_TOUCHED=touched.txt path/to/silkjsruntime server.js\n'
+        print(f'LD_PRELOAD={shim} SILK_BUILTIN_TOUCHED=touched.txt path/to/silkjs server.js\n'
               'Run a copy of the executable that is not in the page cache (see cold_copy), put it under load,\n'
               'and pass touched.txt, which the run rewrites ten times a second, to this tool after the executable.')
         return

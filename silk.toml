@@ -1,6 +1,6 @@
 # The engine, the runtime and the package manager are released together: this workspace pins the one Silk toolchain
 # they build with (it overrides the members' own pins). `silk set <version>` here moves them all.
 [workspace]
-members = ["modules/engine", "modules/runtime", "modules/runtime/wamr", "modules/runtime/cli", "modules/runtime/smoke",
-  "modules/pm", "modules/runtime/tools/capabilities"]
-silk-version = "0.1.0-dev.78+e02346fdb3aa"
+members = ["modules/engine", "modules/runtime", "modules/runtime/wamr", "modules/runtime/cli", "modules/runtime/cli/silkjs",
+  "modules/runtime/cli/silk", "modules/runtime/smoke", "modules/runtime/smoke-wamr", "modules/pm", "modules/runtime/tools/capabilities"]
+silk-version = "0.1.0-dev.86+c9d19330761b"

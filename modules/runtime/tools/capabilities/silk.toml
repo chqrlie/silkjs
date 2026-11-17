@@ -1,7 +1,7 @@
 [package]
-name = "silkjsruntime-capabilities"
+name = "silkjs-runtime-capabilities"
 description = "The composable runtime's capability graph: silk task graph"
 version = "0.1.0"
-silk-version = "0.1.0-dev.78+e02346fdb3aa"
+silk-version = "0.1.0-dev.86+c9d19330761b"
 kind = "library"
 exports = ["lib"]

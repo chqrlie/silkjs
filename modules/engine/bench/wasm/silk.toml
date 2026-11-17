@@ -3,7 +3,7 @@
 [package]
 name = "silkjs-wasm"
 version = "0.1.0"
-silk-version = "0.1.0-dev.78+e02346fdb3aa"
+silk-version = "0.1.0-dev.86+c9d19330761b"
 
 [dependencies]
-silkjs = { path = "../.." }
+silkjs = { path = "../..", package = "silkjs-engine" }

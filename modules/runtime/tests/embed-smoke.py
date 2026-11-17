@@ -9,18 +9,23 @@ src/runtime/embedded.silk: python3 tests/embed-smoke.py [--skip-build]
 """
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tomllib
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'tools'))
+from built import built  # noqa: E402
 # The same host (the core's src/embed_smoke.silk) twice: without WebAssembly (./smoke, EmptyWasm),
-# and with it (./cli, WamrWasm). Only the second program depends on WAMR.
+# and with it (./smoke-wamr, WamrWasm and every other capability's package). Only the second
+# program depends on WAMR.
 # The first has no file system either (EmptyFiles); the second's is in memory (MemoryFiles).
 # The libraries of capabilities in packages of their own are linked only into the second: these
 # are a symbol of each, which the first must not define.
-LIBRARIES = {'WAMR': 'wasm_runtime_full_init', 'zlib': 'deflate', 'brotli': 'BrotliEncoderCreateInstance',
-             'zstd': 'ZSTD_createCStream', 'nghttp2': 'nghttp2_session_client_new',
+# zlib and Zstandard are Silk code in ./compress, so the compression jobs' C entry stands for them.
+LIBRARIES = {'WAMR': 'wasm_runtime_full_init', 'compression': 'silkCompressionWork', 'brotli': 'BrotliEncoderCreateInstance',
+             'nghttp2': 'nghttp2_session_client_new',
              'llhttp': 'llhttp_init', 'SQLite': 'sqlite3_open_v2',
              'OpenSSL': 'SSL_CTX_new',
              'inspector server': 'silk_inspector_create',
@@ -29,8 +34,8 @@ LIBRARIES = {'WAMR': 'wasm_runtime_full_init', 'zlib': 'deflate', 'brotli': 'Bro
              # libuv is Node-API addons' (./napi), never the core's.
              'libuv': 'uv_loop_init'}
 PROGRAMS = [
-    ('embed-smoke', ROOT / 'smoke', 'src/main.silk', 'undefined', False),
-    ('embed-smoke-wamr', ROOT / 'cli', 'src/embed_smoke_wamr.silk', 'object', True),
+    ('embed-smoke', ROOT / 'smoke', 'silkjs-runtime-smoke', 'undefined', False),
+    ('embed-smoke-wamr', ROOT / 'smoke-wamr', 'silkjs-runtime-smoke-wamr', 'object', True),
 ]
 
 
@@ -64,14 +69,15 @@ def expected(wasm, files):
     ]
 
 
-def build(name, package, source):
+def build(name, package, manifest_name):
     version = tomllib.loads((ROOT / 'silk.toml').read_text())['package']['silk-version']
     directory = ROOT / 'build' / name
     directory.mkdir(parents=True, exist_ok=True)
     environment = {**os.environ, 'SILKJS_CLANG_BUILD': str(directory)}
-    subprocess.run(['silk', '+' + version, 'build', source, '-o', str(directory / name),
-                    '--debug', 'true', '--clang', str(ROOT / 'tools/clang.py')],
+    subprocess.run(['silk', '+' + version, 'build', '--debug', 'true', '--clang', str(ROOT / 'tools/clang.py')],
                    cwd=package, env=environment, check=True)
+    # The package build names its output in the request it publishes (tools/built.py).
+    shutil.copy2(built(manifest_name), directory / name)
 
 
 def main():

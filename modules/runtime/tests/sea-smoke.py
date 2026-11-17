@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Exercise signed SEA source/cache launch after removing every input asset.
-Run on macOS arm64: python3 tests/sea-smoke.py /absolute/path/to/silkjsruntime
+Run on macOS arm64: python3 tests/sea-smoke.py /absolute/path/to/silkjs
 """
 import json
 from pathlib import Path

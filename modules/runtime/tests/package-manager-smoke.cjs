@@ -160,7 +160,7 @@ server.listen(0, '127.0.0.1', async () => {
 
     const missing = await run(directory, ['add', 'nothing-by-this-name']);
     assert.strictEqual(missing.status, 1);
-    assert.match(missing.stderr, /^silkjsruntime: /);
+    assert.match(missing.stderr, /^silkjs: /);
     assert.strictEqual(fs.readFileSync(manifest, 'utf8'), '{\n  "name": "app",\n  "private": true\n}\n');
 
     // The install scripts of a package run only when allowBuilds of the project names it.

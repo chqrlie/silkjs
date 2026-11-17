@@ -1,5 +1,5 @@
 'use strict';
-// Node 24 / silkjsruntime differential probes. Requires openssl on PATH (or OPENSSL).
+// Node 24 / silkjs differential probes. Requires openssl on PATH (or OPENSSL).
 // Every certificate, revocation list and DH parameter is generated in a temporary directory.
 const assert = require('assert');
 const tls = require('tls');

@@ -139,23 +139,30 @@ WAMR (Apache-2.0 WITH LLVM-exception)
 uvwasi (MIT)
   https://github.com/nodejs/uvwasi
   Revision: e76edba54038e097aa58f55eef5ad34cb258b817.
-  ../native/libuv/uvwasi is its src/ and include/ with
-  ../native/libuv/uvwasi/ownership.patch applied.
+  No uvwasi C is compiled. wamr/src/ext/wasi_host.silk follows uvwasi 0.0.23's
+  behavior call by call, so its notice still applies to it.
   License: vendor/licenses/UVWASI-LICENSE.
 
 3. Downloaded at build time, not source-vendored
 ------------------------------------------------
+libuv 1.51.0 (MIT) is no longer downloaded or compiled. The Silk modules that
+give Node-API addons its C API (napi/src/ext/uv_loop.silk, uv_api_*.silk,
+uv_os.silk, uv_inet.silk) follow its behavior and adapt parts of its logic, so
+its license notice still applies to them (vendor/licenses/LIBUV-LICENSE).
+
 Silk downloads these source releases, checks their SHA-256 and compiles them
 into the executable ([native.archive] in each silk.toml):
 
-  SIMDe (MIT), header-only, for WAMR: this package's silk.toml.
+  SIMDe (MIT), header-only, for WAMR: ../native/wamr/silk.toml.
     vendor/licenses/SIMDe-LICENSE retains upstream COPYING.
-  libuv 1.51.0 (MIT): ../native/libuv
   OpenSSL 3.5.4 (Apache-2.0): ../native/openssl, with the files its Configure
     writes in ../native/openssl/generated
   nghttp2 1.66.0 (MIT): ../native/nghttp2
-  zlib 1.3.1 (zlib): ../native/zlib
-  Zstandard 1.5.7 (BSD-3-Clause OR GPL-2.0): ../native/zstd
+  zlib 1.3.1 (zlib): no zlib C is compiled or linked. compress/src/stdlib_copy/compress
+    and compress/src/ext/zlib_stream.silk are Silk code that follows zlib's deflate and inflate
+    (Jean-loup Gailly and Mark Adler) closely enough to write the same bytes.
+  Zstandard 1.5.7 (BSD-3-Clause OR GPL-2.0): no zstd C is compiled; ../../zstd
+    is a Silk port of it
   Brotli 1.2.0 (MIT): ../native/brotli
   SQLite: the db-sqlite package of silk-lang/lib-sqlite, pinned by commit in
     silk.toml, compiles the amalgamation that package pins by SHA-256.

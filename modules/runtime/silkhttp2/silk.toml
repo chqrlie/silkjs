@@ -1,12 +1,12 @@
 [package]
-name = "silkjsruntime-silkhttp2"
+name = "silkjs-runtime-silkhttp2"
 description = "HTTP/2 for the SilkJS runtime in Silk, with no C library: an implementation of its Http2 capability"
 version = "0.1.0"
-silk-version = "0.1.0-dev.78+e02346fdb3aa"
+silk-version = "0.1.0-dev.86+c9d19330761b"
 kind = "library"
 # `silk_http2` is SilkHttp2.
 exports = ["silk_http2"]
 
 [dependencies]
-silkjs = { path = "../../engine" }
-silkjsruntime = { path = ".." }
+silkjs = { path = "../../engine", package = "silkjs-engine" }
+silkjsruntime = { path = "..", package = "silkjs-runtime" }

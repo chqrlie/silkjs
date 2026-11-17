@@ -1,7 +1,7 @@
 //! Node-API and `process.dlopen`: the runtime's real `NativeAddons` capability.
 //!
 //! A program that provides `DlopenAddons` depends on this package, and so exports Node-API's C
-//! functions for addons to find by name; a program that provides `EmptyAddons` has none of them.
+//! functions and libuv 1.51's C API (in Silk, ext.uv_api_*) for addons to find by name; a program that provides `EmptyAddons` has none of them.
 //! The functions that take a callback cannot be taken as values, which is what makes a
 //! dependency's C export appear, so a program that loads addons exports those itself, as
 //! cli/src/napi_exports.silk does.
@@ -23,6 +23,12 @@ import ext.napi_native
 import ext.napi_async
 import ext.napi_core
 import ext.napi_values
+import ext.uv_api_abi
+import ext.uv_api_fs
+import ext.uv_api_loop
+import ext.uv_api_stream
+import ext.uv_api_sys
+import ext.uv_loop
 
 /// Addons loaded with dlopen, over Node-API.
 pub struct DlopenAddons {
@@ -45,6 +51,9 @@ impl NativeAddons for DlopenAddons {
   effect fn open(self: &mut Self, allocator: *mut RuntimeHeap, workers: *mut u8, io: *mut fs_async.State) -> () ! OutOfMemoryError {
     // Node-API's C functions are emitted, for addons to find by name, when something takes them.
     napi_native.keepExports() napi_async.keepExports() napi_core.keepExports() napi_values.keepExports()
+    // So is libuv's C API, which addons call on the loop napi_get_uv_event_loop gives them.
+    uv_api_abi.keepExports() uv_api_fs.keepExports() uv_api_loop.keepExports() uv_api_stream.keepExports()
+    uv_api_sys.keepExports() uv_loop.keepExports()
     self.state = run napi_native.open(allocator, workers, worker_native.silkNodeFatalReport, io)
   }
   unsafe effect fn call<'m, C: Composition>(self: &Self, engine: &mut Engine<'m, Services<C>>, context: *mut HeapHeader, argc: i32, argv: &FrameSlots) -> ValueBits

@@ -207,17 +207,17 @@ pub service Binding {
 | Package | Holds | Native code it brings |
 | --- | --- | --- |
 | `silkjs` (engine) | Unchanged. The runtime stops importing its `js_std` and `js_os` libc modules | None |
-| `silkjsruntime-core` | `Runtime`, the loop and immediates, bootstrap, loader, every service contract and every empty implementation, the registry of id blocks, the Node surface over the resource services (`fs`, `net`, `dgram`, `dns`, `child_process`, `os`, `worker_threads`, fetch, WebSocket), and the JavaScript with no outside dependency: `events`, `buffer`, `util`, `path`, `url`, `stream`, `timers`, `assert`, `console`, `string_decoder`, `querystring`, `async_hooks`, `diagnostics_channel`, `vm`, `module`, `process` | None |
-| `silkjsruntime-os` | `OsPlatform`, `OsFiles`, `OsNetwork`, `OsProcesses`, `OsSystemInfo`, `ThreadWorkers`, the reactor and blocking pool | libc (libuv left with the loop plan) |
-| `silkjsruntime-memory` | `MemoryFiles`, `FixedPlatform`, `FixedSystemInfo`, bundle module storage | None |
-| `silkjsruntime-openssl` | `OpenSslCrypto`, `OpenSslTls` | OpenSSL |
-| `silkjsruntime-compress` | `NativeCompression` | zlib, zstd, brotli |
-| `silkjsruntime-llhttp`, `-nghttp2` | `Llhttp`, `Nghttp2` | llhttp, nghttp2 |
-| `silkjsruntime-wamr` | `WamrWasm`, with WASI | WAMR, SIMDe |
-| `silkjsruntime-sqlite` | `Sqlite` | SQLite |
-| `silkjsruntime-amaro` | `Amaro` | None (3.8 MB of JavaScript) |
-| `silkjsruntime-inspector`, `-napi` | `NodeInspector` with profiler, coverage and tracing; `DlopenAddons` | `inspector_transport.c` until ported; `dlopen` |
-| `silkjsruntime` | The executable: the real implementation of every service, the command line, REPL, test runner, SEA, package manager | Everything |
+| `silkjs-runtime-core` | `Runtime`, the loop and immediates, bootstrap, loader, every service contract and every empty implementation, the registry of id blocks, the Node surface over the resource services (`fs`, `net`, `dgram`, `dns`, `child_process`, `os`, `worker_threads`, fetch, WebSocket), and the JavaScript with no outside dependency: `events`, `buffer`, `util`, `path`, `url`, `stream`, `timers`, `assert`, `console`, `string_decoder`, `querystring`, `async_hooks`, `diagnostics_channel`, `vm`, `module`, `process` | None |
+| `silkjs-runtime-os` | `OsPlatform`, `OsFiles`, `OsNetwork`, `OsProcesses`, `OsSystemInfo`, `ThreadWorkers`, the reactor and blocking pool | libc (libuv left with the loop plan) |
+| `silkjs-runtime-memory` | `MemoryFiles`, `FixedPlatform`, `FixedSystemInfo`, bundle module storage | None |
+| `silkjs-runtime-openssl` | `OpenSslCrypto`, `OpenSslTls` | OpenSSL |
+| `silkjs-runtime-compress` | `NativeCompression` | zlib, zstd, brotli |
+| `silkjs-runtime-llhttp`, `-nghttp2` | `Llhttp`, `Nghttp2` | llhttp, nghttp2 |
+| `silkjs-runtime-wamr` | `WamrWasm`, with WASI | WAMR, SIMDe |
+| `silkjs-runtime-sqlite` | `Sqlite` | SQLite |
+| `silkjs-runtime-amaro` | `Amaro` | None (3.8 MB of JavaScript) |
+| `silkjs-runtime-inspector`, `-napi` | `NodeInspector` with profiler, coverage and tracing; `DlopenAddons` | `inspector_transport.c` until ported; `dlopen` |
+| `silkjs` | The executable: the real implementation of every service, the command line, REPL, test runner, SEA, package manager | Everything |
 
 **Run time is values.** Which directory, which environment variables, which hosts, which standard streams: all are values of the implementations the embedder constructs. One rule keeps this simple: presence never varies at run time, because `present` is a constant of the type. A host that serves tenants with different surfaces calls `embed.start` with different implementation types in one binary, and each combination is its own specialization with its own image.
 
@@ -261,8 +261,8 @@ The smallest embedder is a manifest with two dependencies and one file. It runs 
 name = "hello-embed"
 
 [dependencies]
-silkjsruntime-core = { git = "https://github.com/silk-lang/lib-silkjs", package = "silkjsruntime-core" }
-silkjsruntime-os   = { git = "https://github.com/silk-lang/lib-silkjs", package = "silkjsruntime-os" }
+silkjs-runtime-core = { git = "https://github.com/silk-lang/lib-silkjs", package = "silkjs-runtime-core" }
+silkjs-runtime-os   = { git = "https://github.com/silk-lang/lib-silkjs", package = "silkjs-runtime-os" }
 ```
 
 ```silk
@@ -336,7 +336,7 @@ let mut files = run OsFiles.make("/srv/hello/data")   // JavaScript sees this di
   |> Effect.provideMut<Files>(&mut files)
 ```
 
-Deleting a line is a compile error, since `embed.start` requires every service. Replacing `OsFiles` with `MemoryFiles`, or with a type of the embedder's own that implements `Files`, changes nothing else. WebAssembly is the same step with a dependency: add `silkjsruntime-wamr` to the manifest and provide `WamrWasm` in place of `Wasm.empty`. If the step 1 measurement rules out requirement rows through the engine, the same choices are written as fields of one `Capabilities` struct, and the rest reads the same.
+Deleting a line is a compile error, since `embed.start` requires every service. Replacing `OsFiles` with `MemoryFiles`, or with a type of the embedder's own that implements `Files`, changes nothing else. WebAssembly is the same step with a dependency: add `silkjs-runtime-wamr` to the manifest and provide `WamrWasm` in place of `Wasm.empty`. If the step 1 measurement rules out requirement rows through the engine, the same choices are written as fields of one `Capabilities` struct, and the rest reads the same.
 
 ### One product: the runtime re-exports the engine
 
@@ -454,14 +454,14 @@ A runtime with the profile-guided image layout (page packing from pagemap data, 
 Eight steps, each merged to main with the executable's behaviour unchanged. The standing gates apply to every step: the Node suite and the 72 differential cases do not regress, Octane and HTTP instruction counts stay equal, and cold start does not get slower.
 
 0. **Measure and draw the lines.** Produce the size table from the linker map, and a dependency graph of built-in JavaScript (every `require` and `import` string, marked load-time or lazy) plus which `host.*` natives each file uses. Fix the service boundaries and which services need each other from that data. Output: a report in project files. No code changes.
-1. **Services through the engine, proven on Wasm.** First the spike: thread a generic requirement row through the engine's host hooks and compare Octane instruction counts. That decides whether services arrive as Effect requirements or as fields of one `Capabilities` struct. Then add the `Wasm` service with `WamrWasm` and `Wasm.empty`, move WAMR out of the runtime manifest into `modules/native/wamr` and a `silkjsruntime-wamr` package, and put the Wasm parts of `host.silk`, `worker.silk` and the bootstrap under `present`. Everything else stays wired as it is. The embedding smoke test gains a second build with `Wasm.empty`, and CI checks with `nm` that it has no WAMR symbol and that `typeof WebAssembly` is `'undefined'`. The `Embedder` function pointer becomes the `HostApi` service in the same step.
+1. **Services through the engine, proven on Wasm.** First the spike: thread a generic requirement row through the engine's host hooks and compare Octane instruction counts. That decides whether services arrive as Effect requirements or as fields of one `Capabilities` struct. Then add the `Wasm` service with `WamrWasm` and `Wasm.empty`, move WAMR out of the runtime manifest into `modules/native/wamr` and a `silkjs-runtime-wamr` package, and put the Wasm parts of `host.silk`, `worker.silk` and the bootstrap under `present`. Everything else stays wired as it is. The embedding smoke test gains a second build with `Wasm.empty`, and CI checks with `nm` that it has no WAMR symbol and that `typeof WebAssembly` is `'undefined'`. The `Embedder` function pointer becomes the `HostApi` service in the same step.
 2. **Built-in JavaScript per service.** `tools/embed.py` writes one index per service. The bootstrap registers the built-ins of services that are present, and `builtinModules`, `process.features`, the loader's errors and the command line options follow it. The cross-service `require` check goes into CI. Amaro moves behind `TypeStripping`.
 3. **`Platform` and `ModuleResolver`.** Time, entropy, waiting, standard streams, arguments, environment, working directory and exit go through `Platform`. The bootstrap stops spreading `silk:host/std` and `silk:host/os` into `host`, and the loader resolves and reads through `ModuleResolver`. Output: an embedding smoke test with `Files.empty` that runs a bundled module graph from memory.
 4. **`Files`.** `fs_native`, `fs_async`, `fs_ops` and `uv_fs` are rewritten over the `Files` service, with `OsFiles`, `MemoryFiles` and `Files.empty`. WASI preopens, SQLite's VFS, the compile cache, reports, snapshots, the DNS resolver configuration and TLS root loading route through it. Output: smoke tests for a rooted directory and for an embedder-defined file system.
 5. **`Network` and what stands on it.** `Network`, then `Tls`, `Crypto`, `Http`, `Http2` and `Compression`, each with its empty implementation. Fetch and WebSocket follow `Network`. The core gets the small hashes it needs from `silk.crypto` so it does not reach OpenSSL.
 6. **The rest.** `Workers`, `Processes`, `SystemInfo`, `Database`, `Inspector` with profiling, coverage and tracing, `NativeAddons`. When the last one moves, `Services` has no state pointer per extension left, and `host.silk` only routes id blocks to services.
 7. **Packages, image, enforcement.** Split the module into the packages of the table above. Move the image and bytecode pipeline into a build step embedders can run, with the implementation types in the image identity. Turn on the rule that only packages of real implementations touch libc. CI builds a matrix: everything real, everything empty, `Wasm.empty`, `MemoryFiles`, each with its absence assertions and its own cold start number.
-8. **Replace vendored libraries behind stable seams.** With each library private to one implementation package, the standing goal of removing vendored code becomes a series of local swaps: llhttp for `silk.http`, zlib, zstd and brotli for `silk.compress`, OpenSSL for `silk.crypto` and `silk.tls`, libuv out of `silkjsruntime-os` as the loop plan finishes. Each swap is a new implementation of the same service, and it is when a library service narrows from a binding to operations.
+8. **Replace vendored libraries behind stable seams.** With each library private to one implementation package, the standing goal of removing vendored code becomes a series of local swaps: llhttp for `silk.http`, zlib, zstd and brotli for `silk.compress`, OpenSSL for `silk.crypto` and `silk.tls`, libuv out of `silkjs-runtime-os` as the loop plan finishes. Each swap is a new implementation of the same service, and it is when a library service narrows from a binding to operations.
 
 Steps 1 to 3 are sequential. After step 3, steps 4, 5 and 6 can run as parallel streams, since each service owns different files and code that has not moved compiles unchanged. Step 7's package split is last on purpose: boundaries are cheap to move inside one package and expensive across several.
 
@@ -694,15 +694,15 @@ that depends on the core, as `WamrWasm` does in ./wamr:
 
 | Package | Implementation | Brings |
 | --- | --- | --- |
-| ./compress (`silkjsruntime-compress`) | `NativeCompression` | zlib, zstd, brotli |
-| ./http2 (`silkjsruntime-nghttp2`) | `Nghttp2` | nghttp2 |
-| ./llhttp (`silkjsruntime-llhttp`) | `Llhttp` | llhttp and its bridge |
-| ./sqlite (`silkjsruntime-sqlite`) | `SqliteDatabase` | SQLite (lib-sqlite) |
-| ./openssl (`silkjsruntime-openssl`) | `OpenSslCrypto`, `OpenSslTls` | OpenSSL |
-| ./inspector (`silkjsruntime-inspector`) | `NodeInspector` | the inspector's WebSocket server (its own sockets and thread) |
-| ./amaro (`silkjsruntime-amaro`) | `Amaro` | amaro's JavaScript (3.8 MB) |
-| ./napi (`silkjsruntime-napi`) | `DlopenAddons` | Node-API's C functions |
-| ./wamr (`silkjsruntime-wamr`) | `WamrWasm` | WAMR, SIMDe |
+| ./compress (`silkjs-runtime-compress`) | `NativeCompression` | brotli (zlib and Zstandard are its own Silk) |
+| ./http2 (`silkjs-runtime-nghttp2`) | `Nghttp2` | nghttp2 |
+| ./llhttp (`silkjs-runtime-llhttp`) | `Llhttp` | llhttp and its bridge |
+| ./sqlite (`silkjs-runtime-sqlite`) | `SqliteDatabase` | SQLite (lib-sqlite) |
+| ./openssl (`silkjs-runtime-openssl`) | `OpenSslCrypto`, `OpenSslTls` | OpenSSL |
+| ./inspector (`silkjs-runtime-inspector`) | `NodeInspector` | the inspector's WebSocket server (its own sockets and thread) |
+| ./amaro (`silkjs-runtime-amaro`) | `Amaro` | amaro's JavaScript (3.8 MB) |
+| ./napi (`silkjs-runtime-napi`) | `DlopenAddons` | Node-API's C functions |
+| ./wamr (`silkjs-runtime-wamr`) | `WamrWasm` | WAMR, SIMDe |
 
 The core's manifest no longer lists those libraries. The embedding smoke test checks with `nm`
 that the program of the core alone defines no symbol of any of them, and that the program with
@@ -735,13 +735,13 @@ expected output and its symbol checks (`silk task symbols`). The executable is t
 
 **What is left of step 7.**
 
-- `DlopenAddons` is ./napi (`silkjsruntime-napi`): Node-API's C functions, which addons find by
+- `DlopenAddons` is ./napi (`silkjs-runtime-napi`): Node-API's C functions, which addons find by
   name, are emitted because `DlopenAddons.open` takes them as values (`keepExports`), as the other
   packages do. The 15 that take a callback cannot be taken as values, so a program that loads
-  addons exports those itself (`cli/src/napi_exports.silk`); the compiler change that makes every
-  loaded dependency's exports roots, done in Silk and waiting for a release, removes that file.
+  addons exports those itself (`cli/src/napi_exports.silk`, in the executable's program). Silk
+  0.1.0-dev.86 emits every loaded dependency's exports, so that file can now go.
 - The loop plan took libuv out of the core; `OsFiles`, `OsNetwork`, `OsProcesses`,
-  `OsSystemInfo` and `ThreadWorkers` stay in it for now (a `silkjsruntime-os` package next, so
+  `OsSystemInfo` and `ThreadWorkers` stay in it for now (a `silkjs-runtime-os` package next, so
   that the core touches no libc).
 - The heap image is now an embedder's too. An embedder whose process ends with the runtime says
   so (`Options.ownsProcess`), and gets the executable's image modes: it starts from an image
@@ -756,6 +756,12 @@ expected output and its symbol checks (`silk task symbols`). The executable is t
   profile-guided extras: the page layout from its startup profiles and the built-ins' bytecode
   cache, which needs a second link.
 
+**Step 8, the real compression.** `NativeCompression` (./compress) now has no zlib or zstd C
+either: its zlib streams are Silk that write Node 24's bytes (`compress/src/ext/zlib_stream.silk`,
+../ZLIB_NOTES.md) and its Zstandard is the port in ../../zstd (../ZSTD_NOTES.md), so brotli is its
+only C library. `SilkCompression` below is the alternative with brotli in Silk too, over
+`silk.compress`.
+
 **Step 8, first swap: compression.** `SilkCompression` (./silkcompress) is `Compression` over
 `silk.compress`, with no C library: the same handle and job protocol as `NativeCompression`, and
 the encoders and decoders of the standard library in place of zlib, brotli and zstd. It has
@@ -766,7 +772,7 @@ at creation for what `silk.compress` lacks (brotli and Zstandard dictionaries, b
 window, Zstandard's worker threads). Its errors are zlib's, brotli's and zstd's codes and
 messages, in zlib's order of checks.
 
-`cli/src/main_silk.silk` is the executable with it in place of `NativeCompression` (and `SilkHttp`, below), and
+`cli/silk` is the executable with it in place of `NativeCompression` (and `SilkHttp`, below), and
 `tests/compression-differential.mjs` runs the same cases (`tests/compression-cases.cjs`: one-shot
 and streamed, every format, levels, strategies, windows, flushes, `params`, reset, dictionaries,
 corrupt, truncated and trailing input, async work, `CompressionStream`) under Node and a runtime.
@@ -880,7 +886,7 @@ answers each handshake step as `SSL_do_handshake` does:
 change on silk-lang/silk's `tls-client-deferred-verification` branch); everything else is the
 toolchain's `silk.tls`, and the executable builds with the released toolchain alone. Once a
 release has the change, `SilkTls` imports `silk.tls.client` again and the copy goes.
-`cli/src/main_silk.silk` is the executable with all five Silk libraries, `SilkTls` among them.
+`cli/silk` is the executable with all five Silk libraries, `SilkTls` among them.
 
 Of Node's TLS and HTTPS tests (`test-tls-*`, `test-https-*`, through `tests/node-suite`), 231 of the
 283 that pass under Node pass with it, against 279 with OpenSSL, and the compatibility suite
@@ -895,7 +901,7 @@ client picks AES-256-GCM); the hybrid ML-KEM group; PSK, keylog, `getFinished`,
 (`newSession`, `resumeSession`) or resuming a session with a client certificate; SNI names
 outside the HTTPS profile, such as `sni.0`; PKCS #12 (`pfx`, as in `SilkCrypto`) and CRLs.
 
-The CI job `silk-libraries` (`.github/workflows/embedding.yml`) builds `cli/src/main_silk.silk`
+The CI job `silk-libraries` (`.github/workflows/embedding.yml`) builds `cli/silk`
 and the executable with the C libraries, runs the compression and crypto differentials against
 Node, the parser differential against llhttp, Node's HTTP/2, TLS and HTTPS tests and the
 compatibility suite.
@@ -950,10 +956,12 @@ All seven steps are done: the core links no libuv, and its loop is `silk.io.reac
   is a stat timer with libuv `fs_poll`'s rules (a change when the status differs, an error once).
   Liveness is each executor's own references (`fs_async.hold`), `process.getActiveResourcesInfo`
   and the report's handle list read the runtime's records, and idle time is the reactor's.
-  An N-API addon that asks `napi_get_uv_event_loop` gets a libuv loop from `silkjsruntime-napi`,
-  which runs it as the reactor's guest (`fs_async.Guest`). `process.versions.uv` is 1.51.0, the
+  An N-API addon that asks `napi_get_uv_event_loop` gets a libuv loop from `silkjs-runtime-napi`,
+  which runs it as the reactor's guest (`fs_async.Guest`). That loop and the rest of libuv 1.51's
+  C API are Silk (`napi/src/ext/uv_loop.silk`, `uv_api_*`; main's libuv replacement,
+  ../LIBUV_REPLACEMENT_NOTES.md), so no build compiles libuv's C. `process.versions.uv` is 1.51.0, the
   libuv of the Node release the runtime follows.
-- WASI. uvwasi is gone: `silkjsruntime-wamr`'s WASI Preview 1 is Silk (`wamr/src/ext/wasi_host`),
+- WASI. uvwasi is gone: `silkjs-runtime-wamr`'s WASI Preview 1 is Silk (`wamr/src/ext/wasi_host`),
   uvwasi 0.0.23's semantics call by call (its descriptor table and rights, its path resolver with
   the sandbox check and up to 32 symbolic links, whole-second times, `poll_oneoff` waiting for
   every descriptor), over `silk.platform.native.file` and POSIX. Each of Node's 27 WASI programs
@@ -971,12 +979,14 @@ program of `tests/embed-smoke.py` defines no libuv symbol.
 Gaps. Darwin's `fs.watch` is kqueue's, without FSEvents' recursive watching of a directory tree. On
 Linux, a worker thread's `vm` `breakOnSigint` does not stop the process's SIGINT: the watch blocks
 SIGINT in the thread that registers, and a worker's is the only one, so the main thread takes
-it with its default action (Node interrupts the worker). `modules/native/libuv` stays for
-Node-API addons alone: their ABI includes libuv (`napi_get_uv_event_loop`, and the `uv_*`
-functions an addon calls, as the runtime's own fixture `tests/fixtures/napi/async.c` does), so only
-`silkjsruntime-napi` depends on it, and a program without addons links none of it. WASI's preopens
+it with its default action (Node interrupts the worker). libuv's C API stays for Node-API addons
+alone: their ABI includes libuv (`napi_get_uv_event_loop`, and the `uv_*` functions an addon
+calls, as the runtime's own fixture `tests/fixtures/napi/async.c` does), so only
+`silkjs-runtime-napi` has it, and a program without addons links none of it. That loop has
+FSEvents for an addon's `uv_fs_event` on Darwin (`napi/src/ext/uv_fsevents.silk`), which the
+core's `ext/file_watch` could take over to close the gap above. WASI's preopens
 are host directories still; the `Files` service in their place is step 4 of the migration plan.
-The Os* implementations move to `silkjsruntime-os` next, so that the core touches no libc.
+The Os* implementations move to `silkjs-runtime-os` next, so that the core touches no libc.
 
 ## Risks and decisions taken
 

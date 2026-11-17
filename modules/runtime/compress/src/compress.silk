@@ -1,7 +1,8 @@
-//! Compression over zlib, zstd and brotli: the runtime's real `Compression` capability.
+//! Compression with zlib's and Zstandard's formats in Silk and brotli in C: the runtime's real
+//! `Compression` capability. zlib's streams write Node 24's bytes (ZLIB_NOTES.md).
 //!
-//! A program that provides `NativeCompression` depends on this package, and so compiles zlib, zstd
-//! and brotli; a program that provides `EmptyCompression` does none of them.
+//! A program that provides `NativeCompression` depends on this package, and so compiles brotli;
+//! a program that provides `EmptyCompression` has none of it.
 import silk.mem.allocator { Allocator, OutOfMemoryError }
 import silk.mem.pointer { Pointer }
 import silk.core.ownership { Copy }
@@ -16,7 +17,7 @@ import silkjsruntime.libs.core.host { Services }
 import silkjsruntime.ext.fs_async as fs_async
 import ext.compression_native
 
-/// zlib, zstd and brotli behind `node:zlib`, `CompressionStream` and `DecompressionStream`.
+/// zlib, Zstandard and brotli behind `node:zlib`, `CompressionStream` and `DecompressionStream`.
 pub struct NativeCompression {
   state: ?*mut compression_native.State,
 }

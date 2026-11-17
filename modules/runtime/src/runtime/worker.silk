@@ -233,11 +233,11 @@ fn imageLayout(arguments: &List<Bytes>) -> ImageLayout {
   if arguments.length() != 5 { return layout }
   let mode = arguments.asSlice()[4].asSlice()
   if !same(mode, b"probe") && !same(mode, b"pack") {
-    let _reported = platform.writeAll(2, b"silkjsruntime: the heap image layout mode is probe or pack\n")
+    let _reported = platform.writeAll(2, b"silkjs: the heap image layout mode is probe or pack\n")
     unsafe leave(1)
   }
   if !unsafe heap_image.mapWords(arguments.asSlice()[3].asSlice(), Pointer.fromMutRef<?*mut u64>(&mut layout.hot), Pointer.fromMutRef<usize>(&mut layout.count)) {
-    let _reported = platform.writeAll(2, b"silkjsruntime: unable to read the heap image layout\n")
+    let _reported = platform.writeAll(2, b"silkjs: unable to read the heap image layout\n")
     unsafe leave(1)
   }
   layout.placed = true
@@ -268,7 +268,7 @@ unsafe fn profileImage(memory: &AllocationObserver, image: ?*mut u8) -> () {
   let base = unsafe Intrinsic.pointerRequalify<?*mut u8, *mut u8>(image)
   let pagemap = unsafe heap_image.openPageMap()
   let out = unsafe heap_image.create(unsafe Intrinsic.pointerRequalify<?*mut u8, *mut u8>(path))
-  if pagemap < 0 || out < 0 { let _reported = platform.writeAll(2, b"silkjsruntime: unable to profile the heap image\n") return () }
+  if pagemap < 0 || out < 0 { let _reported = platform.writeAll(2, b"silkjs: unable to profile the heap image\n") return () }
   let length = unsafe heap_image.length(base)
   let mut ids: [u64; 256] = [0; 256]
   let mut offset: usize = 0
@@ -276,7 +276,7 @@ unsafe fn profileImage(memory: &AllocationObserver, image: ?*mut u8) -> () {
     if unsafe heap_image.written(pagemap, offset) {
       let start = Pointer.address<u8>(base) + offset
       let count = unsafe memory.imageIds(start, start + 4096, Pointer.fromMutRef<u64>(&mut ids[0]), 256)
-      if !unsafe heap_image.writeWords(out, Pointer.fromMutRef<u64>(&mut ids[0]), count) { let _reported = platform.writeAll(2, b"silkjsruntime: unable to write the heap image profile\n") return () }
+      if !unsafe heap_image.writeWords(out, Pointer.fromMutRef<u64>(&mut ids[0]), count) { let _reported = platform.writeAll(2, b"silkjs: unable to write the heap image profile\n") return () }
     }
     offset = offset + 4096
   }
@@ -287,13 +287,13 @@ unsafe fn profilePages(image: ?*mut u8) -> () {
   let base = unsafe Intrinsic.pointerRequalify<?*mut u8, *mut u8>(image)
   let pagemap = unsafe heap_image.openPageMap()
   let out = unsafe heap_image.create(unsafe Intrinsic.pointerRequalify<?*mut u8, *mut u8>(path))
-  if pagemap < 0 || out < 0 { let _reported = platform.writeAll(2, b"silkjsruntime: unable to profile the heap image\n") return () }
+  if pagemap < 0 || out < 0 { let _reported = platform.writeAll(2, b"silkjs: unable to profile the heap image\n") return () }
   let length = unsafe heap_image.length(base)
   let mut offset: usize = 0
   while offset < length {
     if unsafe heap_image.written(pagemap, offset) {
       let mut page = usize.toU64(offset / 4096)
-      if !unsafe heap_image.writeWords(out, Pointer.fromMutRef<u64>(&mut page), 1) { let _reported = platform.writeAll(2, b"silkjsruntime: unable to write the heap image profile\n") return () }
+      if !unsafe heap_image.writeWords(out, Pointer.fromMutRef<u64>(&mut page), 1) { let _reported = platform.writeAll(2, b"silkjs: unable to write the heap image profile\n") return () }
     }
     offset = offset + 4096
   }
@@ -385,7 +385,7 @@ unsafe effect fn saveImage<'m, C: Composition>(engine: &mut Engine<'m, Services<
     let _rest = platform.writeAll(2, b" for writing a snapshot.\n")
     unsafe leave(14)
   }
-  let _reported = platform.writeAll(2, b"silkjsruntime: unable to write the heap image\n")
+  let _reported = platform.writeAll(2, b"silkjs: unable to write the heap image\n")
   unsafe leave(1)
 }
 unsafe fn global(context: *mut HeapHeader) -> ValueBits {
@@ -777,7 +777,7 @@ unsafe effect fn realm<'m, D: Driver, C: Composition>(engine: &mut Engine<'m, Se
         }
       } else {
         let printed = run Effect.result(printing.printValue(&mut engine, memory, unsafe lendRealm(&context, context), unsafe lendFor(exception), Options.defaults()))
-        match move printed { Result<List<u8>, OutOfMemoryError | JsException>.Success { value: bytes } => { let _written = platform.writeAll(2, bytes.asSlice()) } _ => { let _written = platform.writeAll(2, b"silkjsruntime: unable to report exception") } }
+        match move printed { Result<List<u8>, OutOfMemoryError | JsException>.Success { value: bytes } => { let _written = platform.writeAll(2, bytes.asSlice()) } _ => { let _written = platform.writeAll(2, b"silkjs: unable to report exception") } }
         let _written = platform.writeAll(2, b"\n")
       }
       unsafe gc.release(&mut engine, rt, exception)

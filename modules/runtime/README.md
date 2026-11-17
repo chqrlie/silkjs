@@ -1,8 +1,8 @@
-# silkjsruntime
+# SilkJS
 
-A Node-compatible JavaScript runtime written in [Silk](https://github.com/silk-lang/silk), using [SilkJS](../engine), the native Silk port of QuickJS, instead of V8.
+SilkJS is a Node-compatible JavaScript runtime written in [Silk](https://github.com/silk-lang/silk). It runs on the [SilkJS Engine](../engine), the native Silk port of QuickJS, instead of V8. The package is `silkjs-runtime` and the command is `silkjs`.
 
-Node 24 is the compatibility reference. [Deno](https://github.com/denoland/deno) is an organizational reference for the core/extension split—not a runtime dependency or a source of Deno-specific APIs. JavaScript executes in SilkJS; there is no Node or V8 execution fallback.
+Node 24 is the compatibility reference. [Deno](https://github.com/denoland/deno) is an organizational reference for the core/extension split—not a runtime dependency or a source of Deno-specific APIs. JavaScript executes in the SilkJS Engine; there is no Node or V8 execution fallback.
 
 ## Build
 
@@ -11,49 +11,49 @@ The verified build target is **macOS arm64**. Linux x64 builds and passes the di
 Requirements:
 
 - The Silk launcher; `silk.toml` pins the compiler version.
-- Clang 22 or newer, and Python 3.12 or newer for `silk task build`.
+- Clang 22 or newer, and Python 3.12 or newer for `silk task runtime`.
 - A macOS SDK supporting the compiler's macOS 11 deployment target. The build selects the installed macOS 15.5 SDK when `SDKROOT` is unset; otherwise set `SDKROOT` explicitly.
 - Network access on the first build: Silk downloads the pinned, checksum-verified source releases of the C libraries and compiles them itself.
 
-Nothing needs installing besides. libuv, OpenSSL, nghttp2, zlib, Zstandard and Brotli are packages of [`../native`](../native), each compiled from its pinned release (`[native.archive]` in its `silk.toml`). The core's event loop is `silk.io.reactor` alone; libuv is linked only for Node-API addons (`./napi`), whose ABI includes it; WASI is Silk (`./wamr`). WAMR, with this runtime's patches, is vendored in [`../native/wamr`](../native/wamr), with the runtime's C over it. The built-in JavaScript is embedded from its files by [`builtin_sources.c`](builtin_sources.c), so an edit to a built-in needs nothing run first; adding or removing one does (`silk generate`, which runs [`tools/embed.py`](tools/embed.py)), and so does moving one to another service in [`tools/capabilities.toml`](tools/capabilities.toml). SQLite comes from the `db-sqlite` package of [silk-lang/lib-sqlite](https://github.com/silk-lang/lib-sqlite).
+Nothing needs installing besides. OpenSSL, nghttp2 and Brotli are packages of [`../native`](../native), each compiled from its pinned release (`[native.archive]` in its `silk.toml`, with the build in its `build.silk`). zlib and Zstandard are not among them: `node:zlib` runs on Silk's own DEFLATE code and writes the bytes of Node 24's zlib, which is Chromium's ([`ZLIB_NOTES.md`](ZLIB_NOTES.md)), and Zstandard is the Silk port in [`../zstd`](../zstd) ([`ZSTD_NOTES.md`](ZSTD_NOTES.md)); both are `./compress`'s. There is no libuv: the core's event loop is `silk.io.reactor` alone, and libuv 1.51's C API, which Node-API addons call, is Silk in `./napi` ([`napi/src/ext/uv_loop.silk`](napi/src/ext/uv_loop.silk) and `uv_api_*`; [`LIBUV_REPLACEMENT_NOTES.md`](LIBUV_REPLACEMENT_NOTES.md)). WASI is Silk too (`./wamr`). WAMR, with this runtime's patches, is vendored in [`../native/wamr`](../native/wamr), with the runtime's C over it. The built-in JavaScript is embedded from its files by [`builtin_sources.c`](builtin_sources.c), so an edit to a built-in needs nothing run first; adding or removing one does ([`tools/embed.py`](tools/embed.py)), and so does moving one to another service in [`tools/capabilities.toml`](tools/capabilities.toml). SQLite comes from the `db-sqlite` package of [silk-lang/lib-sqlite](https://github.com/silk-lang/lib-sqlite).
 
 ```sh
 git clone https://github.com/silk-lang/lib-silkjs.git
 cd lib-silkjs/modules/runtime
 silk use
-silk task build
-./build/silkjsruntime -p 'process.versions'
+silk task runtime
+./build/silkjs -p 'process.versions'
 ```
 
-A plain `silk build` in [`cli`](cli) builds the executable too, and is how a program that embeds the runtime builds (see [Embed](#embed)). `silk task build` adds what only an executable that can run on the build machine gets: the built-ins' bytecode, compiled by the executable itself and linked into it, and a startup heap image, so a start does not run the bootstrap.
+A plain `silk build` in [`cli`](cli) builds the executable too, and is how a program that embeds the runtime builds (see [Embed](#embed)). `silk task runtime` adds what only an executable that can run on the build machine gets: the built-ins' bytecode, compiled by the executable itself and linked into it, and a startup heap image, so a start does not run the bootstrap.
 
-Use `SILK_CLANG` to select a particular Clang executable. `silk task build --release` builds with speed optimization; `--output PATH` selects the output executable. `silk task` lists the other tasks (`embed`, `compat`, `sea`); they run the Python tools in [`tools/`](tools/), which can still be run directly. The first build compiles about 1,300 C files once (Silk compiles them one at a time), a few minutes; later builds reuse the objects.
+Use `SILK_CLANG` to select a particular Clang executable. `silk task runtime --release` builds with speed optimization; `--output PATH` selects the output executable. `silk task` lists the other tasks: `embed`, `compat` and `sea` run the Python tools in [`tools/`](tools/), which can still be run directly, and the benchmark tasks of [`bench/`](bench/README.md) are written in Silk. The first build compiles about 1,300 C files once (Silk compiles them one at a time), a few minutes; later builds reuse the objects.
 
 The engine is this repository's [`modules/engine`](../engine), a path dependency in `silk.toml`, so engine and runtime changes land together. An installed Node executable is not required to build or run it.
 
 ## Run
 
 ```sh
-./build/silkjsruntime app.js
-./build/silkjsruntime app.mjs
-./build/silkjsruntime app.ts
-./build/silkjsruntime -e 'console.log(require("node:path").join("a", "b"))'
-./build/silkjsruntime --test
-./build/silkjsruntime -i
+./build/silkjs app.js
+./build/silkjs app.mjs
+./build/silkjs app.ts
+./build/silkjs -e 'console.log(require("node:path").join("a", "b"))'
+./build/silkjs --test
+./build/silkjs -i
 ```
 
 The package manager of [`modules/pm`](../pm) is in the executable. Its commands come where a script would, and run without starting the engine:
 
 ```sh
-./build/silkjsruntime install            # what package.json lists; the lockfile is sjs.lock
-./build/silkjsruntime add left-pad       # also: add -D, add name@range, add name@tag
-./build/silkjsruntime remove left-pad
-./build/silkjsruntime update
-./build/silkjsruntime ci                 # install, and fail when the lockfile is out of date
-./build/silkjsruntime run build          # a script of package.json; arguments follow the name
-./build/silkjsruntime run -r build       # in every package of the workspace that has the script
-./build/silkjsruntime exec tsc --noEmit  # a command of the dependencies
-./build/silkjsruntime dlx cowsay hello   # a command of a package the project does not have
+./build/silkjs install            # what package.json lists; the lockfile is sjs.lock
+./build/silkjs add left-pad       # also: add -D, add name@range, add name@tag
+./build/silkjs remove left-pad
+./build/silkjs update
+./build/silkjs ci                 # install, and fail when the lockfile is out of date
+./build/silkjs run build          # a script of package.json; arguments follow the name
+./build/silkjs run -r build       # in every package of the workspace that has the script
+./build/silkjs exec tsc --noEmit  # a command of the dependencies
+./build/silkjs dlx cowsay hello   # a command of a package the project does not have
 ```
 
 In a workspace, a `package.json` with `workspaces`, the commands install for every package from any of their directories, and `add --filter <name>` or `add -w` choose the package to change.
@@ -64,13 +64,13 @@ The install scripts of a dependency run only when `allowBuilds` in the `package.
 
 A dependency can also be a tarball (`https://…/pad.tgz`, `file:vendor/pad.tgz`), a directory (`file:../pad` copies it, `link:../pad` links it) or a repository on GitHub, GitLab or Bitbucket (`github:owner/repo#v1.0.0`, `owner/repo`, `git+https://…`), which is installed without git. [`modules/pm`](../pm) has the details.
 
-A script file named like one of the commands (`install`, `i`, `ci`, `add`, `remove`, `rm`, `uninstall`, `un`, `update`, `up`, `upgrade`, `run`, `run-script`, `exec`, `dlx`) is run with its path: `./build/silkjsruntime ./install`.
+A script file named like one of the commands (`install`, `i`, `ci`, `add`, `remove`, `rm`, `uninstall`, `un`, `update`, `up`, `upgrade`, `run`, `run-script`, `exec`, `dlx`) is run with its path: `./build/silkjs ./install`.
 
 The implementation includes CommonJS and ESM package loading, TypeScript execution, filesystem and process APIs, streams, networking and TLS/HTTP2, crypto and WebCrypto, workers and cluster, SQLite, Intl (SilkJS's ECMA-402 implementation in Silk, with its own CLDR-derived locale data; no ICU), Web APIs, WebAssembly/WASI, Node-API addons, the test runner, REPL, inspector, and native profiling. Feature-specific fixtures in [`tests/`](tests/) exercise these contracts, including cross-process and cross-realm ownership and failure paths.
 
 ## Embed
 
-Another Silk program can run the runtime inside itself with [`runtime.embed`](src/runtime/embed.silk) (`silkjsruntime` exports it). The executable owns its process; an embedded runtime does not. Its host passes the arguments it would have had, turns the loop from its own loop, and `process.exit()` ends the runtime instead of the process:
+Another Silk program can run the runtime inside itself with [`runtime.embed`](src/runtime/embed.silk) (the `silkjs-runtime` package exports it). The executable owns its process; an embedded runtime does not. Its host passes the arguments it would have had, turns the loop from its own loop, and `process.exit()` ends the runtime instead of the process:
 
 ```silk
 struct App {}
@@ -126,6 +126,7 @@ This is a Node compatibility implementation, not an official Node distribution o
 | [`ext/web/`](ext/web/) | Web-platform JavaScript APIs and vendored standards data |
 | [`tools/`](tools/) | Dependency preparation, native builds, embedding, executable tooling; [`tools/capabilities`](tools/capabilities) is the capability graph |
 | [`tests/`](tests/) | Differential and real-runtime consumers |
+| [`bench/`](bench/) | The benchmarks against Bun: the programs measured, and how to run them |
 
 The engine lives beside the runtime in [`modules/engine`](../engine); the runtime does not maintain a second engine implementation.
 
@@ -142,6 +143,10 @@ silk task compat          # or: node tests/compat.mjs
 `SILKJS_RUNTIME` selects the runtime executable and `NODE_REFERENCE` selects a different Node reference executable. An optional positional regular expression selects cases. Node is a test oracle or debugger client here, not a production execution backend.
 
 Additional integration consumers cover native addons, permissions, workers, network peers, SQLite, VM caches, inspector transport, profiling, REPL interaction, and standalone executables. Their executable inputs and platform requirements are defined in the individual fixtures. Engine-side native consumers additionally check allocator ownership and compatibility with the pinned QuickJS C reference.
+
+## Benchmarks
+
+`silk task bench-setup` once, then `silk task bench`, `bench-mem`, `bench-cold` or `bench-all` compare a release build with Bun running without its JIT. [`bench/README.md`](bench/README.md) has the options, what the tasks hold fixed, and `silk task offline-deps` for a network that blocks the build's downloads.
 
 ## Upstream candidates and licensing
 

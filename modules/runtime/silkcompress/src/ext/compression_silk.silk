@@ -34,7 +34,7 @@ import silkjs.js_buffer_storage as buffers
 import silkjs.js_promise as promise
 import silkjsruntime.libs.core.host as host
 import silk.compress.inflate { Decoder, DecodeError, ErrorKind, Format, Limits, Progress, Status }
-import silk.compress.deflate { EncodeError, EncodeProgress, EncodeStatus, Encoder, Flush, Options, Strategy }
+import silk.compress.deflate { EncodeError, EncodeProgress, EncodeStatus, Encoder, Flush, Hash, Options, Strategy }
 import silk.compress.brotli { Brotli, BrotliError, BrotliLimits, BrotliProgress, BrotliReason, BrotliStatus }
 import silk.compress.brotli_encode { BrotliEncodeError, BrotliEncodeProgress, BrotliEncodeStatus, BrotliEncoder, BrotliFlush, BrotliOptions }
 import silk.compress.zstd { Zstd, ZstdError, ZstdLimits, ZstdProgress, ZstdReason, ZstdStatus }
@@ -319,7 +319,7 @@ unsafe effect fn initialize(h: &mut CodecState, numbers: &[i32; 8]) -> i32 ? &mu
   let kind = h.kind
   if kind == 1 || kind == 3 || kind == 5 {
     let level = if numbers[2] < 0 { 6 } else { numbers[2] }
-    let options = Options { level: i32.toU32(level), windowBits: i32.toU32(numbers[1]), memoryLevel: i32.toU32(numbers[3]), strategy: strategy(numbers[4]) }
+    let options = Options { level: i32.toU32(level), windowBits: i32.toU32(numbers[1]), memoryLevel: i32.toU32(numbers[3]), strategy: strategy(numbers[4]), hash: Hash.Multiplicative }
     if numbers[1] < 8 || numbers[1] > 15 || level > 9 || numbers[3] < 1 || numbers[3] > 9 { return -2 }
     match run Effect.result(Encoder.make(deflateFormat(kind), move options)) {
       Result<Encoder, OutOfMemoryError | EncodeError>.Success { value } => {

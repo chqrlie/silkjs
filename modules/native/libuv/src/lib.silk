@@ -1,3 +1,0 @@
-//! libuv 1.51, compiled into every executable that depends on this package: silkjsruntime-napi,
-//! for Node-API addons. The package's users declare the functions they call themselves; this
-//! module only gives the package a module to export.

@@ -1,14 +1,13 @@
 [package]
-name = "silkjsruntime-napi"
+name = "silkjs-runtime-napi"
 description = "Node-API and process.dlopen for the SilkJS runtime: the real implementation of its NativeAddons capability"
 version = "0.1.0"
-silk-version = "0.1.0-dev.78+e02346fdb3aa"
+silk-version = "0.1.0-dev.86+c9d19330761b"
 kind = "library"
 # `dlopen_addons` is DlopenAddons; the Node-API modules are the executable's too (cli/src/napi_exports.silk).
-exports = ["dlopen_addons", "ext.napi_async", "ext.napi_core", "ext.napi_loop", "ext.napi_values"]
+# libuv 1.51's C API, which addons call, is Silk here (ext/uv_loop, ext/uv_api_*): no C library.
+exports = ["dlopen_addons", "ext.napi_async", "ext.napi_core", "ext.napi_loop", "ext.napi_values", "ext.uv_loop", "ext.uv_api_loop", "ext.uv_api_abi", "ext.uv_shapes"]
 
 [dependencies]
-silkjs = { path = "../../engine" }
-silkjsruntime = { path = ".." }
-# libuv, for the loop napi_get_uv_event_loop gives addons (ext/napi_loop).
-libuv = { path = "../../native/libuv", package = "silkjs-libuv" }
+silkjs = { path = "../../engine", package = "silkjs-engine" }
+silkjsruntime = { path = "..", package = "silkjs-runtime" }

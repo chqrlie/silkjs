@@ -23,7 +23,7 @@ HEADER = """# Functions the CLI runs to create a runtime and realm and tear them
 
 
 def main():
-    binary = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, 'build', 'silkjs')
+    binary = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, 'build', 'silkjs-engine')
     binary = os.path.abspath(binary)
     with tempfile.TemporaryDirectory() as scratch:
         script = os.path.join(scratch, 'empty.js')

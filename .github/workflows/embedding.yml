@@ -43,8 +43,9 @@ jobs:
       - name: The program of the core alone links no capability library
         working-directory: modules/runtime/tools/capabilities
         run: |
-          # libuv (uv_loop_init) comes only with Node-API (./napi), never with the core.
-          for prefix in wasm_runtime_ uv_loop_init BrotliEncoder ZSTD_ nghttp2_ llhttp_ sqlite3_ SSL_CTX_ silk_inspector_ silk_type_stripping_sources_linked napi_create_object; do
+          # libuv's C API (uv_loop_init) comes only with Node-API (./napi), never with the core.
+          # zlib and Zstandard are Silk in ./compress: its jobs' entry stands for them.
+          for prefix in wasm_runtime_ uv_loop_init BrotliEncoder silkCompressionWork nghttp2_ llhttp_ sqlite3_ SSL_CTX_ silk_inspector_ silk_type_stripping_sources_linked napi_create_object; do
             silk task symbols --binary ../../build/embed-smoke/embed-smoke --prefix "$prefix" --absent
             silk task symbols --binary ../../build/embed-smoke-wamr/embed-smoke-wamr --prefix "$prefix"
           done
@@ -52,7 +53,7 @@ jobs:
     # Step 8's swaps: the executable with SilkCompression (over silk.compress), SilkHttp,
     # SilkHttp2, SilkCrypto and SilkTls (HTTP/1, HTTP/2, crypto and TLS in Silk, no C library) in
     # place of NativeCompression, Llhttp, Nghttp2, OpenSslCrypto and OpenSslTls
-    # (cli/src/main_silk.silk) must behave as Node, llhttp and nghttp2 do.
+    # (cli/silk) must behave as Node, llhttp and nghttp2 do.
     runs-on: ubuntu-26.04
     timeout-minutes: 180
     steps:
@@ -73,24 +74,26 @@ jobs:
           sh "$RUNNER_TEMP/install-silk.sh"
           echo "$HOME/.silk/bin" >> "$GITHUB_PATH"
       - name: Build the executable with the Silk libraries
-        working-directory: modules/runtime/cli
+        working-directory: modules/runtime/cli/silk
         run: |
-          mkdir -p ../build/silk
-          SILKJS_CLANG_BUILD=../build/silk silk build src/main_silk.silk -o ../build/silk/silkjsruntime --debug true --clang ../tools/clang.py
+          mkdir -p ../../build/silk
+          SILKJS_CLANG_BUILD=../../build/silk silk build --debug true --clang ../../tools/clang.py
+          cp "$(python3 ../../tools/built.py silkjs-silk)" ../../build/silk/silkjs
       - name: Build the executable with the C libraries (the parser differential's reference)
-        working-directory: modules/runtime/cli
+        working-directory: modules/runtime/cli/silkjs
         run: |
-          mkdir -p ../build/native
-          SILKJS_CLANG_BUILD=../build/native silk build src/main.silk -o ../build/native/silkjsruntime --debug true --clang ../tools/clang.py
+          mkdir -p ../../build/native
+          SILKJS_CLANG_BUILD=../../build/native silk build --debug true --clang ../../tools/clang.py
+          cp "$(python3 ../../tools/built.py silkjs)" ../../build/native/silkjs
       - name: Compression differential against Node
         working-directory: modules/runtime
-        run: node tests/compression-differential.mjs build/silk/silkjsruntime
+        run: node tests/compression-differential.mjs build/silk/silkjs
       - name: Crypto differential against Node
         working-directory: modules/runtime
-        run: node tests/crypto-differential.mjs build/silk/silkjsruntime
+        run: node tests/crypto-differential.mjs build/silk/silkjs
       - name: HTTP/1 parser differential against llhttp
         working-directory: modules/runtime
-        run: node tests/http-parser-differential.mjs build/silk/silkjsruntime build/native/silkjsruntime
+        run: node tests/http-parser-differential.mjs build/silk/silkjs build/native/silkjs
       - name: Node's HTTP/2 tests with SilkHttp2 and with nghttp2
         working-directory: modules/runtime/tests/node-suite
         run: |
@@ -100,8 +103,8 @@ jobs:
           git fetch -q --depth 1 origin tag v24.22.1 && git checkout -q FETCH_HEAD
           cd "$GITHUB_WORKSPACE/modules/runtime/tests/node-suite"
           # A test that fails only under parallel load gets a second, lone run (run.py's RETRY).
-          RETRY=1 python3 run.py "$GITHUB_WORKSPACE/modules/runtime/build/native/silkjsruntime" native.json parallel 4 '^test-http2-'
-          RETRY=1 python3 run.py "$GITHUB_WORKSPACE/modules/runtime/build/silk/silkjsruntime" silk.json parallel 4 '^test-http2-'
+          RETRY=1 python3 run.py "$GITHUB_WORKSPACE/modules/runtime/build/native/silkjs" native.json parallel 4 '^test-http2-'
+          RETRY=1 python3 run.py "$GITHUB_WORKSPACE/modules/runtime/build/silk/silkjs" silk.json parallel 4 '^test-http2-'
           # Every test that passes with nghttp2 must pass with SilkHttp2.
           python3 report.py native.json silk.json fails.json | tee report.txt
           grep -q '^eligible [0-9]* pass [0-9]* fail 0 ' report.txt
@@ -109,7 +112,7 @@ jobs:
         working-directory: modules/runtime/tests/node-suite
         run: |
           RETRY=1 python3 run.py "$(command -v node)" tls-node.json parallel 4 '^test-(tls|https)-'
-          RETRY=1 python3 run.py "$GITHUB_WORKSPACE/modules/runtime/build/silk/silkjsruntime" tls-silk.json parallel 4 '^test-(tls|https)-'
+          RETRY=1 python3 run.py "$GITHUB_WORKSPACE/modules/runtime/build/silk/silkjs" tls-silk.json parallel 4 '^test-(tls|https)-'
           python3 report.py tls-node.json tls-silk.json tls-fails.json | tee tls-report.txt
           # No fewer than docs/composable-runtime.md reports (231 of 283), less a margin for the
           # machine's environment.
@@ -117,5 +120,5 @@ jobs:
       - name: Node compatibility with the Silk libraries
         working-directory: modules/runtime
         env:
-          SILKJS_RUNTIME: build/silk/silkjsruntime
+          SILKJS_RUNTIME: build/silk/silkjs
         run: node tests/compat.mjs

@@ -62,9 +62,9 @@ The trace sink (`src/ext/trace_native.silk`, `trace_abi.silk`) is another positi
 
 ## 5. System/process records and native ownership
 
-**Sources:** `src/ext/os_abi.silk`, `src/ext/os_native.silk`.
+**Sources:** `src/ext/os_abi.silk`, `src/ext/os_native.silk`, `src/ext/uv_os.silk`, `src/ext/uv_inet.silk`.
 
-The runtime now reads CPU information, network interfaces, user records, resource usage, and memory through native APIs. The integrated executable passed the exercised OS/process identity, usage-shape, and umask comparisons against Node 24.22.2; this is not exhaustive platform verification.
+The runtime now reads CPU information, network interfaces, user records, resource usage, and memory through native APIs. The queries themselves (`uv_os.silk`) and the socket address conversions (`uv_inet.silk`) are Silk that keeps libuv 1.51's names, structures, statuses and results; on Linux they were compared with libuv 1.51.0 itself over real and substituted `/proc` and cgroup files. The integrated executable passed the exercised OS/process identity, usage-shape, and umask comparisons against Node 24.22.2; this is not exhaustive platform verification.
 
 **Potential stdlib contribution:** owned CPU/interface/passwd results, growable native string queries, credential/group operations, and normalized resource counters. Preserve Darwin/Linux LP64 layout differences, unsigned IDs, allocator cleanup, and platform errno semantics. Exclude the JS property/encoding adapters.
 
@@ -95,6 +95,8 @@ The integrated runtime passed real synchronous and asynchronous `/bin/sh` scenar
 **Observed gaps in the pinned implementation:** deflate exposes complete-buffer fixed-Huffman encoding rather than configurable levels and incremental flush; inflate does not accept preset dictionaries; Zstd is decoder-only and rejects dictionary-backed frames. The pinned module manifest has no Brotli implementation. The runtime therefore uses native zlib, Brotli, and Zstd adapters. The integrated executable passed gzip/raw-deflate/Brotli/Zstd round trips, a preset-dictionary deflate round trip, and a chunked 120 KB gzip-to-gunzip pipeline against Node 24.22.2. Flush/reset, Zstd malformed-input cases, and output-limit boundaries still need separate checks.
 
 Web stream checks additionally matched Node for truncated input and strict rejection of trailing junk, padding, and concatenated members across gzip, deflate, raw deflate, and Brotli. Cancellation preserved the original reason in both directions; a 1 MiB incompressible input exercised writable pressure and decoded byte-for-byte. A negative-status serialization trap was fixed with the stdlib's existing wrapping integer conversions; that was an adapter bug, not a missing numeric primitive.
+
+**Update, November 2026 (Silk 0.1.0-dev.74):** the pinned `silk.compress.deflate` and `silk.compress.inflate` now have levels, strategies, flushes, dictionaries and incremental steps, and the zlib kinds no longer use the C library: see [`ZLIB_NOTES.md`](ZLIB_NOTES.md) for what the standard library had, what was changed in a local copy, and what goes upstream. Brotli and Zstandard still use their C libraries.
 
 **Potential stdlib contribution:** incremental encoder/decoder owners with bounded output, explicit progress/end status, dictionary handling, flush/reset semantics, and cancellation-safe asynchronous execution. A bulk seeded CRC32 operation may avoid per-byte adapter overhead; compare the existing checksum API before proposing it.
 

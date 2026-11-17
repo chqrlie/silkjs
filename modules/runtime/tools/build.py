@@ -8,6 +8,7 @@ import platform
 import shutil
 import struct
 import subprocess
+from built import built
 import sys
 import tempfile
 import tomllib
@@ -17,7 +18,7 @@ from embed import ROOT, cache_build_identity, sources
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--release', action='store_true')
-    parser.add_argument('--output', type=Path, default=ROOT / 'build/silkjsruntime')
+    parser.add_argument('--output', type=Path, default=ROOT / 'build/silkjs')
     args = parser.parse_args()
     manifest = tomllib.loads((ROOT / 'silk.toml').read_text())
     version = manifest['package']['silk-version']
@@ -39,19 +40,24 @@ def main():
     identified = build_cache_object(environment, identity)
     named = ROOT / 'build/link-object'
     named.write_text(str(identified))
-    # Source-file compilation keeps the generic engine in one native object.
-    # The executable is ./cli: the runtime with the real implementation of every capability.
-    command = ['silk', '+' + version, 'build', 'src/main.silk', '-o', str(args.output.resolve()),
+    # The package build: build.silk's native plan and the dependencies come from the package.
+    command = ['silk', '+' + version, 'build',
                '--debug', str(not args.release).lower(),
                '--clang', str(ROOT / 'tools/clang.py')]
     if args.release:
         command += ['--optimization', 'speed']
     try:
-        subprocess.run(command, cwd=ROOT / 'cli', env=environment, check=True)
+        subprocess.run(command, cwd=ROOT / "cli/silkjs", env=environment, check=True)
     finally:
         named.unlink(missing_ok=True)
+    shutil.copy2(built_executable(args.release), args.output.resolve())
     embed_builtin_cache(args.output.resolve(), environment, identity, identified)
     embed_heap_image(args.output.resolve())
+
+
+def built_executable(release):
+    """The executable the package build just wrote (tools/built.py)."""
+    return built('silkjs', release)
 
 
 def build_cache_object(environment, identity, cache=None):
@@ -138,12 +144,21 @@ def startup_order(arguments):
     many pages as they fill: each page is a fault, and the kernel maps file pages 64 KB
     at a time, so a server's resident text was 22 MB. tools/startup-order.txt lists a
     start's functions and tools/server-order.txt the rest a server runs (tools/startup_order.py
-    writes both); a name that no longer exists is skipped. Only lld takes the list.
+    writes both); a name that no longer exists is skipped. lld takes the list on Linux; on macOS
+    the Mach-O linker takes it as an order file.
     """
+    names = (ROOT / 'tools/startup-order.txt').read_text() + (ROOT / 'tools/server-order.txt').read_text()
+    if platform.system() == 'Darwin':
+        # The Mach-O linkers (ld64, ld64.lld) take the same list as an order file, each C-level name
+        # with Mach-O's leading underscore; objects are laid out by symbol (subsections via symbols),
+        # so no per-function sections are needed. A name the executable lacks is skipped.
+        order = ROOT / 'build/function-order-macho.txt'
+        order.write_text(''.join('_' + name + '\n' for name in names.split()))
+        return ['-Wl,-order_file,' + str(order)]
     if platform.system() != 'Linux' or not any(a.startswith('--ld-path=') and 'lld' in a for a in arguments):
         return []
     order = ROOT / 'build/function-order.txt'
-    order.write_text((ROOT / 'tools/startup-order.txt').read_text() + (ROOT / 'tools/server-order.txt').read_text())
+    order.write_text(names)
     return ['-Wl,--symbol-ordering-file=' + str(order), '-Wl,--no-warn-symbol-ordering']
 
 

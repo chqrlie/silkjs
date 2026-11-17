@@ -1,6 +1,6 @@
 'use strict';
 // Run with an oracle Node 24 client, not Silk:
-//   node tests/inspector-websocket-smoke.cjs build/silkjsruntime
+//   node tests/inspector-websocket-smoke.cjs build/silkjs
 // The subprocess is always Silk; no oracle executes guest source.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -27,7 +27,7 @@ const source = [
   'setInterval(() => {}, 1000);',
 ].join('\n');
 fs.writeFileSync(entry, source);
-const executable = path.resolve(process.argv[2] || 'build/silkjsruntime');
+const executable = path.resolve(process.argv[2] || 'build/silkjs');
 const child = spawn(executable, ['--inspect-brk=127.0.0.1:0', entry], { env: { ...process.env, NODE_OPTIONS: '' }, stdio: ['ignore', 'pipe', 'pipe'] });
 let output = '', exited = false, spawnError;
 const started = Date.now(), recentPackets = [];

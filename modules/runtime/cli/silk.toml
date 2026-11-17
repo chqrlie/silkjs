@@ -1,28 +1,24 @@
 [package]
-name = "silkjsruntime-cli"
-description = "The silkjsruntime executable: the runtime with the real implementation of every capability"
+name = "silkjs-runtime-cli"
+description = "The silkjs executable's program: the runtime with the real implementation of every capability"
 version = "0.1.0"
-silk-version = "0.1.0-dev.78+e02346fdb3aa"
+silk-version = "0.1.0-dev.86+c9d19330761b"
+kind = "library"
+# `executable` is the program (./silkjs runs it, ./silk with the Silk libraries); `napi_exports`
+# the Node-API functions that take a callback.
+exports = ["executable", "napi_exports"]
 
 [dependencies]
-silkjs = { path = "../../engine" }
-silkjsruntime = { path = ".." }
-wasm = { path = "../wamr", package = "silkjsruntime-wamr" }
-compress = { path = "../compress", package = "silkjsruntime-compress" }
-# Compression over silk.compress, for src/main_silk.silk.
-silkcompress = { path = "../silkcompress", package = "silkjsruntime-silkcompress" }
-# The HTTP/1 parser in Silk, for src/main_silk.silk.
-silkhttp = { path = "../silkhttp", package = "silkjsruntime-silkhttp" }
-http2 = { path = "../http2", package = "silkjsruntime-nghttp2" }
-silkhttp2 = { path = "../silkhttp2", package = "silkjsruntime-silkhttp2" }
-silkcrypto = { path = "../silkcrypto", package = "silkjsruntime-silkcrypto" }
-# TLS over silk.tls, for src/main_silk.silk.
-silktls = { path = "../silktls", package = "silkjsruntime-silktls" }
-http = { path = "../llhttp", package = "silkjsruntime-llhttp" }
-database = { path = "../sqlite", package = "silkjsruntime-sqlite" }
-openssl = { path = "../openssl", package = "silkjsruntime-openssl" }
-inspector = { path = "../inspector", package = "silkjsruntime-inspector" }
-amaro = { path = "../amaro", package = "silkjsruntime-amaro" }
-addons = { path = "../napi", package = "silkjsruntime-napi" }
-# The package manager: `silkjsruntime install` and the other commands.
+silkjs = { path = "../../engine", package = "silkjs-engine" }
+silkjsruntime = { path = "..", package = "silkjs-runtime" }
+wasm = { path = "../wamr", package = "silkjs-runtime-wamr" }
+compress = { path = "../compress", package = "silkjs-runtime-compress" }
+http2 = { path = "../http2", package = "silkjs-runtime-nghttp2" }
+http = { path = "../llhttp", package = "silkjs-runtime-llhttp" }
+database = { path = "../sqlite", package = "silkjs-runtime-sqlite" }
+openssl = { path = "../openssl", package = "silkjs-runtime-openssl" }
+inspector = { path = "../inspector", package = "silkjs-runtime-inspector" }
+amaro = { path = "../amaro", package = "silkjs-runtime-amaro" }
+addons = { path = "../napi", package = "silkjs-runtime-napi" }
+# The package manager: `silkjs install` and the other commands.
 pm = { path = "../../pm" }
