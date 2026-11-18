@@ -6,7 +6,7 @@ symbol. Zstandard and Brotli are as they were.
 
 | Layer | File | What it holds |
 | --- | --- | --- |
-| Codecs | `src/stdlib_copy/compress/deflate.silk`, `inflate.silk` | Local copies of the standard library's `silk.compress.deflate` and `silk.compress.inflate` (Silk 0.1.0-dev.74+205aea3f5b2e) with the changes listed below. Nothing in them is specific to Node or SilkJS. |
+| Codecs | `src/stdlib_copy/compress/deflate.silk`, `inflate.silk` | Local copies of the standard library's `silk.compress.deflate` and `silk.compress.inflate` (Silk 0.1.0-dev.87+37fa5f8857de) with the changes listed below. Nothing in them is specific to Node or SilkJS. |
 | Adapter | `src/ext/zlib_stream.silk` | zlib's calling convention over the codecs: window bits that choose a format, gzip or zlib by the first two bytes, zlib's status codes and message texts, the gzip operating system byte. |
 | Binding | `src/ext/compression_native.silk`, `ext/node/internal/compression/handle.js` | The zlib kinds call the adapter where they called C, and write in place (see "The binding"). |
 

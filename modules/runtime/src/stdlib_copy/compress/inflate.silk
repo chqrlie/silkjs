@@ -1,5 +1,5 @@
 // LOCAL COPY of the Silk standard library's silk/compress/inflate.silk, from Silk
-// 0.1.0-dev.74+205aea3f5b2e, with the changes that ../../../ZLIB_NOTES.md lists (it is also where
+// 0.1.0-dev.87+37fa5f8857de, with the changes that ../../../ZLIB_NOTES.md lists (it is also where
 // the upstream pull request is linked). The runtime's zlib (src/ext/zlib_stream.silk) builds on
 // this copy until a Silk release has the changes; then this file is deleted and the imports go
 // back to silk.compress.inflate. Nothing here is specific to Node or SilkJS.
