@@ -24,7 +24,7 @@ Status of each part is in "State" below; it is updated as the work lands.
 
 So the C library goes when `compression_native.silk` and `os_native.silk` stop naming it.
 
-## What the pinned standard library has (0.1.0-dev.74+205aea3f5b2e)
+## What the pinned standard library has (0.1.0-dev.87+37fa5f8857de)
 
 | Module | What it is | Finding |
 | --- | --- | --- |
