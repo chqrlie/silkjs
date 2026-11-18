@@ -146,6 +146,9 @@ unsafe effect fn measure<'m>(session: &mut Session<'m>, source: &[u8], bytecode:
   // What the process keeps once the tree is gone: the peak's memory should go back.
   let _gone = run unsafe script(&mut session, b"reactBench.unmount(); 0")
   run unsafe gc.collect(&mut session.engine, session.runtime, true)
+  // As a host does when its app goes idle; the engine also does after a full
+  // collection of its own.
+  line(b"unmounted_released_bytes", observer.releaseIdle(0))
   line(b"unmounted_used_bytes", observer.usedBytes())
   line(b"unmounted_resident_bytes", resident())
 }
