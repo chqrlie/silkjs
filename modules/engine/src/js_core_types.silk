@@ -650,6 +650,9 @@ pub struct RuntimeState {
   pub gcHeapLimit: usize,
   /// Usage after the last full collection: how far the heap has grown without one.
   pub gcFullBase: usize,
+  /// The allocator's idle pooled bytes at the last full collection: memory idle
+  /// at two in a row is released to the system (js_runtime.collectOverThreshold).
+  pub gcIdleBytes: usize,
   /// A full collection is due and a probe is deciding whether it is worth running:
   /// everything allocated before it is old, and the young collection at the next
   /// threshold looks only at what was allocated since (js_runtime.collectOverThreshold).

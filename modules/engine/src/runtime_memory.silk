@@ -653,6 +653,19 @@ impl AllocationObserver {
     records.truncate(index)
     return move records
   }
+  /// The bytes of pooled blocks the owner thread has freed and not reused: what
+  /// releaseIdle looks through. Owner thread only.
+  pub fn idleBytes(self: &Self) -> usize {
+    let anchor = ()
+    let pool = unsafe Pointer.borrow<(), Pool>(&anchor, unsafe poolOf(self.ledger))
+    let mut idle: usize = 0
+    let mut class: usize = 0
+    while class < POOL_CLASSES {
+      idle = idle + (pool.ownerCounts[class] + pool.spillCounts[class]) * classBytes(class)
+      class = class + 1
+    }
+    return idle
+  }
   /// Gives the memory of wholly idle arenas back to the system after a peak,
   /// keeping reserve bytes of them for the next allocations, and returns the
   /// bytes released; 0 when under RELEASE_MIN_BYTES are idle, and on systems

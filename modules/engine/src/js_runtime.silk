@@ -121,6 +121,7 @@ pub effect fn allocateRuntimeStorage(stackTop: usize) -> *mut HeapHeader
   state.gcYoungLimit = usize.MAX
   state.gcYoungBudget = YOUNG_BUDGET
   state.gcFullBase = 0
+  state.gcIdleBytes = 0
   state.gcProbing = false
   state.gcHeapLimit = usize.MAX
   state.gcFullCount = 0
@@ -496,6 +497,8 @@ fn probeWindow(used: usize) -> usize {
 /// Usage growth that triggers a young collection (see collectOverThreshold).
 const YOUNG_BUDGET: usize = 8388608
 /// Below this usage full collections are cheap and young ones are not tried.
+/// Idle pooled memory under this stays with the process after a full collection.
+const IDLE_RELEASE_BYTES: usize = 8388608
 const YOUNG_MIN_USED: usize = 50331648
 /// The usage at which the next young collection runs: none while the heap is
 /// small enough that full collections stay cheap.
@@ -679,9 +682,14 @@ unsafe effect fn collectOverThreshold<H: HeapHooks>(allocator: &AllocationObserv
   state.gcFullThreshold = lesser(usize.wrappingAdd(used, step), heapCap(state.gcHeapLimit, used))
   state.gcYoungBase = used
   state.gcFullBase = used
-  // After a peak the arenas left wholly idle go back to the system, but for a
-  // quarter of what is in use: a heap that swings keeps that much to grow into.
-  let _released = allocator.releaseIdle(used / 4)
+  // After a peak the arenas left wholly idle go back to the system. Only memory
+  // that two full collections in a row found idle goes: what a launch's parse
+  // or one burst just freed is about to be allocated again. A quarter of what
+  // is in use stays as well, for a heap that swings.
+  let idle = allocator.idleBytes()
+  let settled = lesser(idle, state.gcIdleBytes)
+  state.gcIdleBytes = idle
+  if settled >= IDLE_RELEASE_BYTES { let _released = allocator.releaseIdle(usize.saturatingAdd(idle - settled, used / 4)) }
   let young = if tenured { tenuredThreshold(used, state.gcYoungBudget) } else { youngThreshold(used) }
   state.mallocGcThreshold = lesser(lesser(lesser(state.gcFullThreshold, young), usize.saturatingAdd(used, state.gcYoungLimit)), heapCap(state.gcHeapLimit, used))
   return true
