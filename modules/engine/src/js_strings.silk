@@ -644,15 +644,51 @@ impl Strings {
   }
   pub fn compare(left: ValueBits, right: ValueBits) -> i32 {
     if left.tag() != -6 && right.tag() != -6 { return Strings.compareFlat(left, right) }
+    // Leaf by leaf: the stretch both current leaves cover is compared in place,
+    // by words when both are Latin-1, so a long rope costs what a flat string does.
     let mut a = RopeIterator.make(&left)
     let mut b = RopeIterator.make(&right)
     let mut remaining = stringLength(left)
     if stringLength(right) < remaining { remaining = stringLength(right) }
+    let mut leafA = ValueBits.Undefined let mut offsetA: usize = 0 let mut lengthA: usize = 0
+    let mut leafB = ValueBits.Undefined let mut offsetB: usize = 0 let mut lengthB: usize = 0
     while remaining != 0 {
-      let av = a.next().unwrapOr(0)
-      let bv = b.next().unwrapOr(0)
-      if av != bv { return u16.toI32(av) - u16.toI32(bv) }
-      remaining = remaining - 1
+      if offsetA == lengthA {
+        match a.nextLeaf() { Option<ValueBits>.Some { value } => { leafA = value } Option<ValueBits>.None => { break } }
+        offsetA = 0 lengthA = stringLength(leafA)
+        continue
+      }
+      if offsetB == lengthB {
+        match b.nextLeaf() { Option<ValueBits>.Some { value } => { leafB = value } Option<ValueBits>.None => { break } }
+        offsetB = 0 lengthB = stringLength(leafB)
+        continue
+      }
+      let mut span = lengthA - offsetA
+      if lengthB - offsetB < span { span = lengthB - offsetB }
+      if remaining < span { span = remaining }
+      let x = unsafe HeapCell.shortPayload<FlatString, ValueBits>(&left, stringReference(leafA))
+      let y = unsafe HeapCell.shortPayload<FlatString, ValueBits>(&right, stringReference(leafB))
+      let mut i: usize = 0
+      if !x.wide && !y.wide {
+        let bytesX = unsafe latin1Bytes(&left, stringReference(leafA)) let bytesY = unsafe latin1Bytes(&right, stringReference(leafB))
+        // Both leaves hold span more units from their offsets, so the raw reads stay in bounds.
+        let px = unsafe Pointer.at<u8>(unsafe Intrinsic.pointerRequalify<?[*]const u8, [*]const u8>(Pointer.fromSlice<u8>(bytesX)), offsetA)
+        let py = unsafe Pointer.at<u8>(unsafe Intrinsic.pointerRequalify<?[*]const u8, [*]const u8>(Pointer.fromSlice<u8>(bytesY)), offsetB)
+        let mx = unsafe Pointer.assumeMany<u8>(px) let my = unsafe Pointer.assumeMany<u8>(py)
+        while i + 8 <= span && unsafe wordAt(mx, i) == unsafe wordAt(my, i) { i = i + 8 }
+        while i < span {
+          let p = unsafe Pointer.read<u8>(unsafe Pointer.at<u8>(mx, i)) let q = unsafe Pointer.read<u8>(unsafe Pointer.at<u8>(my, i))
+          if p != q { return u8.toI32(p) - u8.toI32(q) }
+          i = i + 1
+        }
+      } else {
+        while i < span {
+          let av = x.unit(offsetA + i) let bv = y.unit(offsetB + i)
+          if av != bv { return u16.toI32(av) - u16.toI32(bv) }
+          i = i + 1
+        }
+      }
+      offsetA = offsetA + span offsetB = offsetB + span remaining = remaining - span
     }
     if stringLength(left) < stringLength(right) { return -1 }
     if stringLength(left) > stringLength(right) { return 1 }
