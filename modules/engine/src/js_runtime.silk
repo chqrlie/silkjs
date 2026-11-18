@@ -120,6 +120,8 @@ pub effect fn allocateRuntimeStorage(stackTop: usize) -> *mut HeapHeader
   state.gcTenured = false
   state.gcYoungLimit = usize.MAX
   state.gcYoungBudget = YOUNG_BUDGET
+  state.gcFullBase = 0
+  state.gcProbing = false
   state.gcHeapLimit = usize.MAX
   state.gcFullCount = 0
   state.gcYoungCount = 0
@@ -480,6 +482,17 @@ pub unsafe fn resumeCollections(allocator: &AllocationObserver, runtime: *mut He
     if grown > state.gcFullThreshold { state.gcFullThreshold = grown }
   }
 }
+/// The most a heap grows past its last full collection while probes put the next
+/// one off (see collectOverThreshold).
+const QUIET_GROWTH_LIMIT: usize = 67108864
+/// How much is allocated between a probe's start and the young collection that
+/// ends it: an eighth of the heap, within 1 to 4 MiB.
+fn probeWindow(used: usize) -> usize {
+  let window = used / 8
+  if window < 1048576 { return 1048576 }
+  if window > 4194304 { return 4194304 }
+  return window
+}
 /// Usage growth that triggers a young collection (see collectOverThreshold).
 const YOUNG_BUDGET: usize = 8388608
 /// Below this usage full collections are cheap and young ones are not tried.
@@ -585,8 +598,48 @@ unsafe effect fn collectOverThreshold<H: HeapHooks>(allocator: &AllocationObserv
   let before = allocator.usedBytes()
   let current = unsafe HeapCell.payload<RuntimeState, ()>(&anchor, runtime)
   let tenured = current.gcTenured
-  let full = force || (!tenured && before < YOUNG_MIN_USED) || usize.wrappingAdd(before, size) > current.gcFullThreshold
+  let mut full = force || (!tenured && before < YOUNG_MIN_USED) || usize.wrappingAdd(before, size) > current.gcFullThreshold
+  let probing = current.gcProbing
+  // A full collection of a heap that is only growing rescans all of it to free
+  // nothing. Once one has come back quiet, the next is put off by a probe: the
+  // cells so far become old unscanned, and a young collection a short window
+  // later looks at just the window. Little freed there means the heap is still
+  // only growing, and the full collection waits for the next threshold; garbage
+  // there runs it now. However the probes come out, a full collection runs once
+  // the heap has grown QUIET_GROWTH_LIMIT past the last one, which bounds the
+  // cycles a quiet stretch can leave uncollected.
+  let probes = !tenured && current.gcHeapLimit == usize.MAX && current.gcYoungLimit == usize.MAX
+    && current.quietCollections != 0 && before < usize.saturatingAdd(current.gcFullBase, QUIET_GROWTH_LIMIT)
   drop current
+  if probing {
+    let state = unsafe HeapCell.payloadMut<RuntimeState, ()>(&mut anchor, runtime)
+    state.gcProbing = false
+    drop state
+  }
+  if probing && !force {
+    run unsafe gc.collectYoung(&mut hooks, runtime)
+    let used = allocator.stats().usedBytes
+    let state = unsafe HeapCell.payloadMut<RuntimeState, ()>(&mut anchor, runtime)
+    let grown = usize.wrappingSubtract(before, state.gcYoungBase)
+    let freed = if before > used { before - used } else { 0 }
+    state.gcYoungBase = used
+    if freed < grown / 8 {
+      if state.quietCollections < 3 { state.quietCollections = state.quietCollections + 1 }
+      let step = usize.wrappingMultiply(used / 2, 1 + u8.toUsize(state.quietCollections))
+      state.gcFullThreshold = lesser(usize.wrappingAdd(used, step), usize.saturatingAdd(state.gcFullBase, QUIET_GROWTH_LIMIT))
+      state.mallocGcThreshold = state.gcFullThreshold
+      return true
+    }
+    drop state
+    full = true
+  } else if full && !force && probes {
+    unsafe gc.tenureMembers(runtime)
+    let state = unsafe HeapCell.payloadMut<RuntimeState, ()>(&mut anchor, runtime)
+    state.gcProbing = true
+    state.gcYoungBase = before
+    state.mallocGcThreshold = usize.saturatingAdd(usize.saturatingAdd(before, size), probeWindow(before))
+    return false
+  }
   if !full {
     // Young collection: most cycles die young (a reloaded library, a discarded
     // closure graph), and finding them costs only the cells published since the
@@ -625,6 +678,7 @@ unsafe effect fn collectOverThreshold<H: HeapHooks>(allocator: &AllocationObserv
   let step = usize.wrappingMultiply(used / 2, 1 + u8.toUsize(state.quietCollections))
   state.gcFullThreshold = lesser(usize.wrappingAdd(used, step), heapCap(state.gcHeapLimit, used))
   state.gcYoungBase = used
+  state.gcFullBase = used
   let young = if tenured { tenuredThreshold(used, state.gcYoungBudget) } else { youngThreshold(used) }
   state.mallocGcThreshold = lesser(lesser(lesser(state.gcFullThreshold, young), usize.saturatingAdd(used, state.gcYoungLimit)), heapCap(state.gcHeapLimit, used))
   return true

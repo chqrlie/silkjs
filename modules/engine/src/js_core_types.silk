@@ -648,6 +648,12 @@ pub struct RuntimeState {
   /// The heap budget in allocator bytes (js_runtime.setHeapLimit, V8's max old
   /// space): collections run before usage reaches it. usize.MAX when unset.
   pub gcHeapLimit: usize,
+  /// Usage after the last full collection: how far the heap has grown without one.
+  pub gcFullBase: usize,
+  /// A full collection is due and a probe is deciding whether it is worth running:
+  /// everything allocated before it is old, and the young collection at the next
+  /// threshold looks only at what was allocated since (js_runtime.collectOverThreshold).
+  pub gcProbing: bool,
   /// Collections run so far, full and young, and the ticks (runtime_memory.ticks)
   /// they took in all: what a host reports as its GC cost (js_runtime.gcCounts).
   pub gcFullCount: u32,
