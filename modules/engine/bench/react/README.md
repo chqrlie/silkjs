@@ -17,7 +17,9 @@ time and are not called.
 The driver (`driver/`, a Silk program on the engine's embedding API) reports each phase:
 realm creation, parse + compile, bundle top-level evaluation, render + commit, the
 collections that ran and their time, heap in use (peak, after mount, after a forced
-full collection, after unmounting) and resident memory. `run-node.mjs` reports the same
+full collection, after unmounting) and resident memory. After unmounting it asks the
+allocator for its idle arenas back (`AllocationObserver.releaseIdle`), as a host does
+when its app goes idle; the runtime does the same after a full collection of its own. `run-node.mjs` reports the same
 lines for Node.
 
     cd driver && silk build --release && cd ..
