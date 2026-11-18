@@ -289,6 +289,7 @@ function createObjectURL(blob) {
 function revokeObjectURL(url) { objectURLs.delete(string(url)); }
 function resolveObjectURL(url) { return objectURLs.get(string(url)); }
 module.exports = { Blob, File, createObjectURL, revokeObjectURL, resolveObjectURL };
+Object.defineProperty(module.exports, 'isBlob', { value: value => blobs.has(value) });
 // Memory snapshots and lazy file descriptors for the structured-clone codec.
 // No filesystem read or descriptor ownership crosses the clone boundary.
 Object.defineProperty(module.exports, '_cloneData', { value(value) {

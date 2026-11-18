@@ -19,6 +19,7 @@ const groups = [
   ['internal/web/urlpattern', ['URLPattern']],
   ['internal/url', ['URL', 'URLSearchParams']],
   ['internal/web/blob', ['Blob', 'File']],
+  ['internal/web/filereader', ['FileReader', 'ProgressEvent']],
   ['internal/web/websocket', ['WebSocket', 'MessageEvent', 'CloseEvent']],
   ['worker_threads', ['MessageChannel', 'MessagePort', 'BroadcastChannel']],
 ];

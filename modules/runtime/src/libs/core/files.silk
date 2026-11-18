@@ -9,6 +9,7 @@ import silk.mem.pointer { Pointer }
 import silk.mem.layout { Layout }
 import silk.core.effect { Effect }
 import silk.core.result { Result }
+import silk.core.option { Option }
 import silk.core.ownership { Copy }
 import silk.collections.list { List }
 import silk.collections.slice { Slice }
@@ -517,10 +518,11 @@ impl RootedFiles {
     let mut copy = ops.call(call.op)
     copy.fd = call.fd copy.a = call.a copy.b = call.b copy.atime = call.atime copy.mtime = call.mtime
     copy.buffer = call.buffer copy.length = call.length copy.position = call.position
-    copy.path = run self.place(call.path.asSlice())
-    // A symbolic link's target is kept as given; every other second path is placed too.
-    if call.op == ops.SYMLINK { run copy.dest.appendBytes(call.dest.asSlice()) }
-    else if ops.takesDestination(call.op) { copy.dest = run self.place(call.dest.asSlice()) }
+    // A symbolic link's target (its `path`) is kept as given, and the link itself (`dest`) is
+    // placed; every other path is placed.
+    if call.op == ops.SYMLINK { run copy.path.appendBytes(call.path.asSlice()) }
+    else { copy.path = run self.place(call.path.asSlice()) }
+    if ops.takesDestination(call.op) { copy.dest = run self.place(call.dest.asSlice()) }
     if call.op == ops.MKDTEMP { run copy.path.appendBytes(b"XXXXXX") }
     return move copy
   }
@@ -534,5 +536,133 @@ impl RootedFiles {
     let rest = if inside && text.length > root.length { Slice.view(text, root.length, text.length - root.length) } else { b"/" }
     let _appended = run Effect.result(kept.appendBytes(rest)) |> Effect.provideMut<Allocator>(&mut allocator)
     out.text = move kept
+  }
+}
+
+/// The operating system's file system, limited to the paths the embedder grants while the program
+/// runs: a granted file, or a granted directory and everything below it. A user's choice in a
+/// file dialog is the usual grant. Every other path fails with `EACCES`, so with no grant nothing
+/// is reachable. Symbolic links are resolved before the check, so a link inside a granted
+/// directory does not reach outside it. Relative paths are refused. Every thread of the runtime
+/// shares the grants.
+pub struct GrantedFiles { grants: *mut Mutex<List<List<u8>>> }
+impl Copy for GrantedFiles {}
+
+const EACCES: i32 = 13
+
+impl GrantedFiles {
+  pub effect fn make() -> Self ! OutOfMemoryError ? &mut Allocator {
+    let mutex = run Mutex<List<List<u8>>>.make(List<List<u8>>.make())
+    let allocation = unsafe osabi.calloc(1, Layout.of<Mutex<List<List<u8>>>>().bytes)
+    if Pointer.isNull<u8>(allocation) { fail OutOfMemoryError {} }
+    let pointer = unsafe Intrinsic.pointerReinterpret<*mut u8, *mut Mutex<List<List<u8>>>>(unsafe Intrinsic.pointerRequalify<?*mut u8, *mut u8>(allocation))
+    unsafe Pointer.put<Mutex<List<List<u8>>>>(pointer, move mutex)
+    return GrantedFiles { grants: pointer }
+  }
+
+  /// Grants `path`, an absolute path, and everything below it when it is a directory. A path
+  /// that does not exist yet (a save dialog's choice) is granted as its directory resolves.
+  pub effect fn grant(self: &Self, path: &[u8]) -> () ! OutOfMemoryError ? &mut Allocator {
+    if path.length == 0 || path[0] != 47 { return () }
+    let resolved = run resolvedName(path)
+    let anchor = () let mutex = unsafe Pointer.borrow<(), Mutex<List<List<u8>>>>(&anchor, self.grants)
+    let mut guard = mutex.lock() let grants = guard.getMut()
+    let mut index: usize = 0
+    while index < grants.length() {
+      if same(grants.asSlice()[index].asSlice(), resolved.asSlice()) { return () }
+      index = index + 1
+    }
+    run grants.append(move resolved)
+  }
+
+  /// Whether `path` is granted now.
+  pub effect fn granted(self: &Self, path: &[u8], follow: bool) -> bool ! OutOfMemoryError ? &mut Allocator {
+    if path.length == 0 || path[0] != 47 { return false }
+    let name = run resolvedName(path)
+    if !self.covers(name.asSlice()) { return false }
+    if !follow { return true }
+    // The object a path names, through a final link: it must be granted too.
+    let full = run realPath(name.asSlice())
+    match move full {
+      Option<List<u8>>.Some { value } => { return self.covers(value.asSlice()) }
+      Option<List<u8>>.None => { return true }
+    }
+  }
+
+  fn covers(self: &Self, path: &[u8]) -> bool {
+    let anchor = () let mutex = unsafe Pointer.borrow<(), Mutex<List<List<u8>>>>(&anchor, self.grants)
+    let guard = mutex.lock() let grants = guard.get()
+    let mut index: usize = 0
+    while index < grants.length() {
+      let grant = grants.asSlice()[index].asSlice()
+      if same(grant, path) || inside(path, grant, true) { return true }
+      index = index + 1
+    }
+    return false
+  }
+}
+
+/// `path` normalized, with its directory resolved through links and its last name kept as given:
+/// what the path names, whether or not it exists.
+effect fn resolvedName(path: &[u8]) -> List<u8> ! OutOfMemoryError ? &mut Allocator {
+  let normal = run normalize(path)
+  if normal.length() == 1 { return move normal }
+  let parent = parentOf(normal.asSlice())
+  let base = Slice.view(normal.asSlice(), parent.length + 1, normal.length() - parent.length - 1)
+  let mut out = match move run realPath(parent) {
+    Option<List<u8>>.Some { value } => move value
+    Option<List<u8>>.None => { return move normal }
+  }
+  if out.length() > 1 { run out.append(47) }
+  run out.appendBytes(base)
+  return move out
+}
+
+effect fn realPath(path: &[u8]) -> Option<List<u8>> ! OutOfMemoryError ? &mut Allocator {
+  let mut call = ops.call(ops.REALPATH)
+  run call.path.appendBytes(path)
+  let mut out = ops.outcome()
+  unsafe ops.execute(&call, &mut out)
+  if out.code != 0 { return Option<List<u8>>.None }
+  let mut text = List<u8>.make()
+  run text.appendBytes(out.text.asSlice())
+  return Option<List<u8>>.Some { value: move text }
+}
+
+/// Whether `op` acts on a final symbolic link itself rather than what it points to.
+fn onLink(op: i32) -> bool {
+  return op == ops.LSTAT || op == ops.LCHMOD || op == ops.LCHOWN || op == ops.UNLINK || op == ops.RMDIR || op == ops.RENAME || op == ops.READLINK || op == ops.LUTIMES || op == ops.SYMLINK || op == ops.MKDIR || op == ops.MKDTEMP
+}
+
+impl Files for GrantedFiles {
+  static fn present() -> bool { return true }
+  static fn native() -> bool { return true }
+  static fn direct() -> bool { return false }
+  fn forWorker(self: &Self) -> Self { return GrantedFiles { grants: self.grants } }
+  unsafe fn execute(self: &Self, call: &Call, out: &mut Outcome) -> () {
+    if ops.takesDescriptor(call.op) { return unsafe ops.execute(&call, &mut out) }
+    let mut allocator = Allocator.systemAllocatorProvider()
+    let follow = !onLink(call.op)
+    let mut path = call.path.asSlice()
+    let mut prefix = List<u8>.make()
+    if call.op == ops.MKDTEMP {
+      // The directory it makes is the prefix plus six characters; the prefix's directory decides.
+      drop run Effect.result(prefix.appendBytes(path)) |> Effect.provideMut<Allocator>(&mut allocator)
+      drop run Effect.result(prefix.appendBytes(b"XXXXXX")) |> Effect.provideMut<Allocator>(&mut allocator)
+      path = prefix.asSlice()
+    }
+    // A symbolic link's `path` is its target, which making the link does not reach: only where
+    // the link goes, `dest`, is checked, and reading through the link is checked then.
+    if call.op == ops.SYMLINK { path = call.dest.asSlice() }
+    let first = run Effect.result(self.granted(path, follow)) |> Effect.provideMut<Allocator>(&mut allocator)
+    let mut allowed = match move first { Result<bool, OutOfMemoryError>.Success { value } => value
+      Result<bool, OutOfMemoryError>.Failure { .. } => { out.code = -12 return () } }
+    if allowed && ops.takesDestination(call.op) && call.op != ops.SYMLINK {
+      let second = run Effect.result(self.granted(call.dest.asSlice(), call.op == ops.COPYFILE)) |> Effect.provideMut<Allocator>(&mut allocator)
+      allowed = match move second { Result<bool, OutOfMemoryError>.Success { value } => value
+        Result<bool, OutOfMemoryError>.Failure { .. } => { out.code = -12 return () } }
+    }
+    if !allowed { out.code = -EACCES return () }
+    unsafe ops.execute(&call, &mut out)
   }
 }
