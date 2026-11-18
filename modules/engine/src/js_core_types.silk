@@ -1658,6 +1658,11 @@ pub struct ShapeData {
   /// On a prototype's empty shape: the largest slot capacity an object built from
   /// it grew to (js_shapes.growForTransition), up to SLOT_HINT_LIMIT.
   pub slotHint: u8,
+  /// On a prototype's empty shape: the most slots an object a constructor built
+  /// from it returned with (js_shapes.constructChain), when that is past
+  /// INLINE_SLOTS and at most BUILT_SLOTS_LIMIT; 0 when none did. Later objects
+  /// start with a tail of exactly that many slots in their cell.
+  pub builtSlots: u8,
   /// Made by an add under a computed key (obj[name] = v, js_shapes.addKeyedProperty):
   /// a dictionary-like object's shape, which later keyed adds extend in place
   /// while the object owns it alone, rather than copying it per key.

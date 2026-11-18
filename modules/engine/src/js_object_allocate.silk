@@ -207,6 +207,7 @@ unsafe effect fn prepareNode<H: HeapHooks>(hooks: &mut H, observer: &AllocationO
   let data = unsafe HeapCell.payload<ShapeData, ()>(&anchor, shape)
   let capacity = data.properties.capacity()
   let count = data.properties.length()
+  let built = u8.toUsize(data.builtSlots)
   drop data
   // A record (exact) takes a tail of just its slots: it is born with its final
   // shape and seldom grows (a later property moves its slots out of the cell).
@@ -226,6 +227,10 @@ unsafe effect fn prepareNode<H: HeapHooks>(hooks: &mut H, observer: &AllocationO
         let mut tail = unsafe shapes.planInline(shape, count)
         if function && tail == shapes.INLINE_SLOTS && count <= shapes.QUAD_SLOTS { tail = shapes.QUAD_SLOTS }
         if tail != 0 { return run unsafe inlineNode(&mut hooks, observer, runtime, tail, count, extra, plain, written) }
+        // Objects a constructor builds field by field past the inline tail all
+        // reach the size the earlier ones returned with: a tail of exactly that
+        // keeps them in one cell, with no slot list to grow on the way.
+        if built != 0 { return run unsafe inlineNode(&mut hooks, observer, runtime, built, count, extra, plain, written) }
       }
     }
   }

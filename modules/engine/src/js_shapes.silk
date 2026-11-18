@@ -386,7 +386,7 @@ unsafe effect fn allocateShape(runtime: *mut HeapHeader, hashSize: usize, capaci
   let mut anchor = ()
   let data = unsafe HeapCell.payloadMut<ShapeData, ()>(&mut anchor, shape)
   unsafe Pointer.put<ShapeData>(Pointer.fromMutRef<ShapeData>(&mut data), ShapeData {
-    isHashed: false, slotPlan: SLOTS_UNDECIDED, planCreated: 0, planOutgrown: 0, memoSlot: NO_MEMO_SLOT, slotHint: 0, keyed: false, hash: hash, propertyHashMask: usize.toU32(hashSize - 1), version: 0, plainVersion: NO_PLAIN_VERSION,
+    isHashed: false, slotPlan: SLOTS_UNDECIDED, planCreated: 0, planOutgrown: 0, memoSlot: NO_MEMO_SLOT, slotHint: 0, builtSlots: 0, keyed: false, hash: hash, propertyHashMask: usize.toU32(hashSize - 1), version: 0, plainVersion: NO_PLAIN_VERSION,
     deletedPropertyCount: deletedPropertyCount, hashNext: Pointer.null<HeapHeader>(), prototype: prototype, runtime: runtime,
     hashIndices: move indices, properties: move properties,
     enumVersion: NO_PLAIN_VERSION, enumKind: ENUM_UNSUPPORTED, quietEpoch: 0, jsonEpoch: 0, enumKeys: ThinList<ValueBits>.make()
@@ -1336,6 +1336,8 @@ pub unsafe fn transitionChain(runtime: *mut HeapHeader, base: *mut HeapHeader,
 }
 /// The most shapes one RuntimeState.constructPins entry holds.
 pub const PIN_SHAPES: usize = 8
+/// The most slots ShapeData.builtSlots records: a 592-byte cell at most.
+pub const BUILT_SLOTS_LIMIT: usize = 32
 /// The longest shape chain constructChain walks to pin its end.
 const PIN_WALK: usize = 64
 /// The interned chain an object built property by property from its prototype's
@@ -1349,6 +1351,7 @@ pub unsafe fn constructChain(runtime: *mut HeapHeader, final: *mut HeapHeader, c
   let count = data.properties.length()
   if !data.isHashed || data.deletedPropertyCount != 0 || count + 1 > PIN_WALK { return 0 }
   let mut shape = unsafe findPrototype(runtime, data.prototype)
+  let root = shape
   // A longer chain keeps its last PIN_SHAPES shapes, final included: the
   // retired ring (gc.retireShape) holds the shapes an add leaves, but nothing
   // else holds the final shape once the object dies, so without a pin every
@@ -1363,6 +1366,11 @@ pub unsafe fn constructChain(runtime: *mut HeapHeader, final: *mut HeapHeader, c
   }
   if Pointer.address<HeapHeader>(present(shape)) != Pointer.address<HeapHeader>(final) { return 0 }
   chain[count & (PIN_SHAPES - 1)] = shape
+  if count > INLINE_SLOTS && count <= BUILT_SLOTS_LIMIT {
+    let mut rootAnchor = ()
+    let rootData = unsafe HeapCell.payloadMut<ShapeData, ()>(&mut rootAnchor, present(root))
+    if u8.toUsize(rootData.builtSlots) < count { rootData.builtSlots = usize.toU8(count) }
+  }
   if count + 1 > PIN_SHAPES { return PIN_SHAPES }
   return count + 1
 }
