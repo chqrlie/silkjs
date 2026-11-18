@@ -18,6 +18,10 @@
 //! the bytes must stay readable and unchanged until the runtime is destroyed:
 //! embed them, map them, or keep the buffer for the life of the process.
 //!
+//! A module's import.meta is the embedder's to fill, as after any compile: load
+//! the image, set it on the module, then evaluation.evaluateFunction (the shell
+//! does; evaluate() here leaves it empty).
+//!
 //! An image carries its script's text once, for Function.prototype.toString and
 //! stack traces: scripts see no difference from an evaluate of the source.
 //!

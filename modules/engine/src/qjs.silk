@@ -132,6 +132,11 @@ unsafe effect fn imageValue<'m>(session: &mut Session<'m>, bytes: &[u8]) -> Valu
   let memory = session.engine.memory
   let compiled = run unsafe image.load(&mut session.engine, realm, Pointer.fromRef<u8>(&bytes[0]), bytes.length)
   let isModule = match compiled.view() { ValueBits.Module { .. } => true _ => false }
+  if isModule {
+    // import.meta is the host's to fill, as libc.evalBuffer does for a module file.
+    let metadata = run Effect.result(modules.setImportMeta(&mut session.engine, realm, compiled.borrow(), true, true))
+    if let Result<(), OutOfMemoryError | JsException>.Failure { error } = move metadata { session.release(move compiled) fail move error }
+  }
   let value = (run evaluation.evaluateFunction(&mut session.engine, memory, realm, move compiled)).intoBits()
   if isModule { return run unsafe libc.awaitValue(&mut session.engine, realm, value) }
   return value
