@@ -24,6 +24,14 @@ lines for Node.
     python3 run.py                       # engine, node --jitless, node: median of 5 runs
     python3 run.py --runs 9 --engine before=/path/old-driver --engine after=/path/new-driver
 
+To measure a launch that parses nothing, write the bundle as a bytecode image
+(`js_bytecode_image`; the shell's `--write-image` writes the same bytes) and load it:
+
+    ../../../../build/x86_64-unknown-linux-gnu/release/silkjs-react-bench image dist/bundle.js > dist/bundle.bin
+    python3 run.py --engine source=DRIVER --engine "image=DRIVER --bytecode dist/bundle.bin"
+
+An image only loads in the engine build that wrote it, so it is not committed.
+
 Runs are interleaved across engines, one fresh process each. Compare builds on a quiet
 machine: a compile running beside the benchmark moves the numbers by 10% or more.
 

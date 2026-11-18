@@ -30,6 +30,7 @@ import silkjs.js_os_events_platform as clock
 import silkjs.js_os_platform as os
 import silkjs.js_eval_compile as compile
 import silkjs.js_eval as evaluation
+import silkjs.js_bytecode_image as image
 import silkjs.js_owned_value { Value }
 import silkjs.js_value { ValueBits }
 import silkjs.js_exceptions { JsException }
@@ -101,13 +102,19 @@ unsafe fn collections(rt: *mut HeapHeader, before: runtime.GcCounts, full: &[u8]
   line(ticks, counts.ticks - before.ticks)
   return counts
 }
-unsafe effect fn measure<'m>(session: &mut Session<'m>, source: &[u8], stream: bool, messages: usize, ticks: usize) -> () ! OutOfMemoryError | JsException ? &mut Allocator {
+unsafe effect fn measure<'m>(session: &mut Session<'m>, source: &[u8], bytecode: &[u8], stream: bool, messages: usize, ticks: usize) -> () ! OutOfMemoryError | JsException ? &mut Allocator {
   let observer = session.engine.memory
   let realm = session.context.realm()
   let start = now()
-  let compiled = run libc.evalBuffer(&mut session.engine, realm, source, b"bundle.js", compile.TYPE_GLOBAL | compile.FLAG_COMPILE_ONLY)
+  // With --bytecode nothing is parsed: the image's top level is decoded and the
+  // function bodies stay in its bytes until they are first called.
+  let compiled = if bytecode.length != 0 {
+    run unsafe image.load(&mut session.engine, realm, Pointer.fromRef<u8>(&bytecode[0]), bytecode.length)
+  } else {
+    unsafe Value.adoptBits(run libc.evalBuffer(&mut session.engine, realm, source, b"bundle.js", compile.TYPE_GLOBAL | compile.FLAG_COMPILE_ONLY))
+  }
   let parsed = now()
-  let result = run evaluation.evaluateFunction(&mut session.engine, observer, realm, unsafe Value.adoptBits(compiled))
+  let result = run evaluation.evaluateFunction(&mut session.engine, observer, realm, move compiled)
   unsafe gc.release(&mut session.engine, session.runtime, result.intoBits())
   let evaluated = now()
   let mount = run call(b"reactBench.mount(", messages, b")")
@@ -145,13 +152,26 @@ unsafe effect fn measure<'m>(session: &mut Session<'m>, source: &[u8], stream: b
 effect fn program() -> i32 ! HostInputError | OutOfMemoryError | SynchronizationError ? &mut HostInput | &mut Allocator {
   let arguments: List<Bytes> = run HostInput.arguments()
   let values = arguments.asSlice()
-  if values.length < 3 { out(b"usage: react-bench mount|stream <bundle.js> [messages] [ticks]\n") return 2 }
-  let stream = values[1].asSlice() == b"stream"
+  // --bytecode <image>: load the bundle from an image (`silkjs-engine --write-image`).
+  let mut first: usize = 1
+  let mut bytecode = List<u8>.make()
+  if values.length > 2 && values[1].asSlice() == b"--bytecode" {
+    let read = run Effect.result(platform.readFile(values[2].asSlice()))
+    match move read {
+      Result<List<u8>, OutOfMemoryError | PlatformError>.Success { value } => { bytecode = move value }
+      Result<List<u8>, OutOfMemoryError | PlatformError>.Failure { .. } => { out(b"react-bench: cannot read the image\n") return 2 }
+    }
+    if !image.loadable(bytecode.asSlice()) { out(b"react-bench: not a bytecode image of this engine build\n") return 2 }
+    first = 3
+  }
+  if values.length < first + 2 { out(b"usage: react-bench [--bytecode <image>] mount|stream <bundle.js> [messages] [ticks] | image <bundle.js> > <image>\n") return 2 }
+  let stream = values[first].asSlice() == b"stream"
+  let writes = values[first].asSlice() == b"image"
   let mut messages: usize = if stream { 200 } else { 1000 }
   let mut ticks: usize = 200
-  if values.length > 3 { messages = parse(values[3].asSlice(), messages) }
-  if values.length > 4 { ticks = parse(values[4].asSlice(), ticks) }
-  let loaded = run Effect.result(platform.readFile(values[2].asSlice()))
+  if values.length > first + 2 { messages = parse(values[first + 2].asSlice(), messages) }
+  if values.length > first + 3 { ticks = parse(values[first + 3].asSlice(), ticks) }
+  let loaded = run Effect.result(platform.readFile(values[first + 1].asSlice()))
   let source = match move loaded {
     Result<List<u8>, OutOfMemoryError | PlatformError>.Success { value } => move value
     Result<List<u8>, OutOfMemoryError | PlatformError>.Failure { .. } => { out(b"react-bench: cannot read the bundle\n") return 2 }
@@ -169,9 +189,26 @@ effect fn program() -> i32 ! HostInputError | OutOfMemoryError | Synchronization
     Result<Session, OutOfMemoryError | JsException>.Success { value } => move value
     Result<Session, OutOfMemoryError | JsException>.Failure { .. } => { out(b"react-bench: cannot create the realm\n") return 2 }
   }
+  if writes {
+    // `image <bundle.js>`: the bundle as a bytecode image on standard output, for --bytecode.
+    let realm = session.context.realm()
+    let built = run Effect.result(image.write(&mut session.engine, &observer, realm, source.asSlice(), b"bundle.js", compile.TYPE_GLOBAL)) |> Effect.provideMut<Allocator>(&mut allocator)
+    let mut status: i32 = 1
+    match move built {
+      Result<List<u8>, JsException>.Success { value } => {
+        if platform.writeAll(1, value.asSlice()) { status = 0 } else { out(b"react-bench: cannot write the image\n") }
+      }
+      Result<List<u8>, JsException>.Failure { .. } => {
+        run libc.dumpError(&mut session.engine, realm) |> Effect.provideMut<Allocator>(&mut allocator)
+      }
+    }
+    run unsafe session.close() |> Effect.provideMut<Allocator>(&mut allocator)
+    drop session
+    return status
+  }
   line(b"realm_ns", now() - clockStart)
   line(b"realm_used_bytes", observer.usedBytes())
-  let measured = run Effect.result(unsafe measure(&mut session, source.asSlice(), stream, messages, ticks)) |> Effect.provideMut<Allocator>(&mut allocator)
+  let measured = run Effect.result(unsafe measure(&mut session, source.asSlice(), bytecode.asSlice(), stream, messages, ticks)) |> Effect.provideMut<Allocator>(&mut allocator)
   let mut status: i32 = 0
   match move measured {
     Result<(), OutOfMemoryError | JsException>.Success { .. } => ()
@@ -186,6 +223,7 @@ effect fn program() -> i32 ! HostInputError | OutOfMemoryError | Synchronization
   run unsafe session.close() |> Effect.provideMut<Allocator>(&mut allocator)
   drop session
   line(b"closed_resident_bytes", resident())
+  drop bytecode
   return status
 }
 pub effect fn main() -> i32 ? &mut HostInput {

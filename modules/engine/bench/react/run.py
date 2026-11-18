@@ -7,7 +7,7 @@ The table shows the median of --runs runs; --json keeps every run.
 
   python3 run.py                                   # the release driver against node
   python3 run.py --engine before=old/react-bench --engine after=new/react-bench
-  python3 run.py --engine "cached=new/react-bench --bytecode dist/bundle.bin"
+  python3 run.py --engine "image=new/react-bench --bytecode dist/bundle.bin"
 """
 import argparse
 import json

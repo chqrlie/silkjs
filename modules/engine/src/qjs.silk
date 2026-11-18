@@ -20,6 +20,8 @@ import js_exceptions { JsException }
 import js_gc as gc
 import js_runtime as runtime
 import qjs_repl
+import js_bytecode_image as image
+import silk.mem.pointer { Pointer }
 
 unsafe effect fn repl<'m>(session: &mut Session<'m>) -> () ! OutOfMemoryError | JsException ? &mut Allocator {
   let realm = session.context.realm()
@@ -91,7 +93,52 @@ unsafe effect fn file<'m>(session: &mut Session<'m>, filename: &[u8], module: i3
   if module < 0 { isModule = suffix(filename, b".mjs") || Lexer.detectModule(source.asSlice()) }
   return run unsafe buffer(&mut session, source.asSlice(), filename, flags(isModule, strict), true)
 }
-pub unsafe effect fn execute<'m>(session: &mut Session<'m>, arguments: &Arguments, options: &QjsOptions) -> i32
+/// --write-image: compiles the input file into the named image and writes it.
+unsafe effect fn writeImage<'m>(session: &mut Session<'m>, arguments: &Arguments, options: &QjsOptions, output: &[u8]) -> i32
+  ! OutOfMemoryError | JsException ? &mut Allocator {
+  if options.firstInput >= arguments.count() { cli_io.stderr(b"qjs: --write-image needs a file to compile\n") return 2 }
+  let filename = arguments.bytes(options.firstInput)
+  let loaded = run Effect.result(platform.readFile(filename))
+  let source = match move loaded {
+    Result<List<u8>, OutOfMemoryError | PlatformError>.Success { value } => move value
+    Result<List<u8>, OutOfMemoryError | PlatformError>.Failure { .. } => { cli_io.stderr(filename) cli_io.stderr(b": cannot read\n") return 2 }
+  }
+  let mut isModule = options.module > 0
+  if options.module < 0 { isModule = suffix(filename, b".mjs") || Lexer.detectModule(source.asSlice()) }
+  let memory = session.engine.memory
+  let bytes = run image.write(&mut session.engine, memory, session.context.realm(), source.asSlice(), filename, flags(isModule, options.strict))
+  let stored = run Effect.result(cli_io.writeFile(output, bytes.asSlice()))
+  match move stored {
+    Result<(), OutOfMemoryError | cli_io.IoError>.Success { .. } => { return 0 }
+    Result<(), OutOfMemoryError | cli_io.IoError>.Failure { .. } => { cli_io.stderr(output) cli_io.stderr(b": cannot write\n") return 2 }
+  }
+}
+/// --image: runs the image as a file of the same kind would run. bytes outlive the runtime.
+unsafe effect fn runImage<'m>(session: &mut Session<'m>, bytes: &[u8]) -> bool ? &mut Allocator {
+  let realm = session.context.realm()
+  if !image.loadable(bytes) { cli_io.stderr(b"qjs: not a bytecode image of this engine build\n") return false }
+  let ran = run Effect.result(unsafe imageValue(&mut session, bytes))
+  match move ran {
+    Result<ValueBits, OutOfMemoryError | JsException>.Success { value } => {
+      unsafe gc.release(&mut session.engine, session.runtime, value) return true
+    }
+    Result<ValueBits, OutOfMemoryError | JsException>.Failure { .. } => {
+      run libc.dumpError(&mut session.engine, realm) return false
+    }
+  }
+}
+unsafe effect fn imageValue<'m>(session: &mut Session<'m>, bytes: &[u8]) -> ValueBits ! OutOfMemoryError | JsException ? &mut Allocator {
+  let realm = session.context.realm()
+  let memory = session.engine.memory
+  let compiled = run unsafe image.load(&mut session.engine, realm, Pointer.fromRef<u8>(&bytes[0]), bytes.length)
+  let isModule = match compiled.view() { ValueBits.Module { .. } => true _ => false }
+  let value = (run evaluation.evaluateFunction(&mut session.engine, memory, realm, move compiled)).intoBits()
+  if isModule { return run unsafe libc.awaitValue(&mut session.engine, realm, value) }
+  return value
+}
+/// imageBytes is the --image file's content (empty without one), which the caller
+/// keeps until the runtime is destroyed.
+pub unsafe effect fn execute<'m>(session: &mut Session<'m>, arguments: &Arguments, options: &QjsOptions, imageBytes: &[u8]) -> i32
   ! OutOfMemoryError | JsException ? &mut Allocator {
   let realm = session.context.realm()
   unsafe libc.setRejectionTracker(&mut session.engine, session.runtime, options.dumpUnhandledRejection)
@@ -106,18 +153,22 @@ pub unsafe effect fn execute<'m>(session: &mut Session<'m>, arguments: &Argument
       b"import * as std from 'std';\nimport * as os from 'os';\nglobalThis.std = std;\nglobalThis.os = os;\n",
       b"<input>", compile.TYPE_MODULE, false)
   }
+  if let Option<ArgRef>.Some { value: output } = &options.writeImage {
+    return run unsafe writeImage(&mut session, arguments, options, arguments.resolve(output))
+  }
   at = 0
   while at < options.includes.length() {
     if !run unsafe file(&mut session, arguments.resolve(options.includes.get(at)), 0, options.strict) { return 1 }
     at = at + 1
   }
+  if imageBytes.length != 0 && !run unsafe runImage(&mut session, imageBytes) { return 1 }
   let mut interactive = options.interactive != 0
   match &options.expression {
     Option<ArgRef>.Some { value } => {
       if !run unsafe buffer(&mut session, arguments.resolve(value), b"<cmdline>", flags(options.module > 0, options.strict), false) { return 1 }
     }
     Option<ArgRef>.None => {
-      if options.firstInput >= arguments.count() { interactive = true }
+      if options.firstInput >= arguments.count() { interactive = imageBytes.length == 0 }
       else if !run unsafe file(&mut session, arguments.bytes(options.firstInput), options.module, options.strict) { return 1 }
     }
   }
