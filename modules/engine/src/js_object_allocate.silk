@@ -214,6 +214,11 @@ unsafe effect fn prepareNode<H: HeapHooks>(hooks: &mut H, observer: &AllocationO
   if exact && count != 0 && count <= RECORD_INLINE_SLOTS {
     return run unsafe inlineNode(&mut hooks, observer, runtime, count, count, extra, plain, written)
   }
+  // A construct plan's object past the inline tail is born with all its slots
+  // written: one cell of exactly that many, as the field-by-field build ends with.
+  if plain && extra == 0 && written == count && count > shapes.INLINE_SLOTS && count <= shapes.BUILT_SLOTS_LIMIT && !Pointer.isNull<HeapHeader>(plan) {
+    return run unsafe inlineNode(&mut hooks, observer, runtime, count, count, extra, plain, written)
+  }
   // Inline objects always get the full tail: properties added later (a constructor's
   // this.x = ...) then stay in the cell, and every such cell fits a spare one.
   if capacity <= shapes.INLINE_SLOTS {

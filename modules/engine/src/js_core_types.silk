@@ -1147,8 +1147,8 @@ pub struct ConstructRecipe {
   pub stores: u8,
   pub nodes: [u32; 32],
   pub constants: [ValueBits; 16],
-  pub roots: [u8; 16],
-  pub atoms: [u32; 16],
+  pub roots: [u8; 32],
+  pub atoms: [u32; 32],
   /// For a class constructor, the closure reference holding its class's field
   /// initializer: undefined when the class has no instance fields, else a
   /// constant-only initializer (js_class_fields) whose fields go first. 255: none.
@@ -1179,7 +1179,7 @@ pub struct ConstructCacheEntry {
 impl Copy for ConstructCacheEntry {}
 pub fn blankRecipe() -> ConstructRecipe {
   return ConstructRecipe { nodeCount: 0, stores: 0, nodes: [0; 32],
-    constants: [ValueBits.Undefined; 16], roots: [0; 16], atoms: [0; 16], fieldsReference: 255 }
+    constants: [ValueBits.Undefined; 16], roots: [0; 32], atoms: [0; 32], fieldsReference: 255 }
 }
 pub fn blankConstructEntry() -> ConstructCacheEntry {
   return ConstructCacheEntry { code: 0, recipe: blankRecipe(), base: 0, baseVersion: 0, final: Pointer.null<HeapHeader>(), chain: [0; 3], depth: 0, epoch: 0, fieldCount: 0, fieldAtoms: [0; 8] }
