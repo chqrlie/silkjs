@@ -11,4 +11,4 @@ exports = ["sqlite_database"]
 silkjs = { path = "../../engine", package = "silkjs-engine" }
 silkjsruntime = { path = "..", package = "silkjs-runtime" }
 # SQLite 3 compiled from the amalgamation that silk-lang/lib-sqlite pins, with the features Node builds.
-sqlite = { git = "https://github.com/silk-lang/lib-sqlite", rev = "7fbab9dbfbb696097f2dbecc065e21b7204eb974", package = "db-sqlite" }
+sqlite = { git = "https://github.com/silk-lang/lib-sqlite", rev = "bf7afd3cfa0ec512d2d9bee76ebba15baadb0f84", package = "db-sqlite" }
