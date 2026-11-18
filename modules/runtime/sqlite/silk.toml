@@ -2,7 +2,7 @@
 name = "silkjs-runtime-sqlite"
 description = "node:sqlite and localStorage for the SilkJS runtime, over SQLite: the real implementation of its Database capability"
 version = "0.1.0"
-silk-version = "0.1.0-dev.86+c9d19330761b"
+silk-version = "0.1.0-dev.87+37fa5f8857de"
 kind = "library"
 # `sqlite_database` is SqliteDatabase.
 exports = ["sqlite_database"]
