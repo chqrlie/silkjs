@@ -1302,387 +1302,390 @@ static const unsigned char b433[] = {40,102,117,110,99,116,105,111,110,40,109,11
 #embed "ext/web/fetch.js" suffix(,)
 10,125,41,};
 static const unsigned char b434[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/index.js" suffix(,)
+#embed "ext/web/filereader.js" suffix(,)
 10,125,41,};
 static const unsigned char b435[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/serve.js" suffix(,)
+#embed "ext/web/index.js" suffix(,)
 10,125,41,};
 static const unsigned char b436[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/storage.js" suffix(,)
+#embed "ext/web/serve.js" suffix(,)
 10,125,41,};
 static const unsigned char b437[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/streams.js" suffix(,)
+#embed "ext/web/storage.js" suffix(,)
 10,125,41,};
 static const unsigned char b438[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/structured_clone.js" suffix(,)
+#embed "ext/web/streams.js" suffix(,)
 10,125,41,};
 static const unsigned char b439[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/urlpattern.js" suffix(,)
+#embed "ext/web/structured_clone.js" suffix(,)
 10,125,41,};
 static const unsigned char b440[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/big5.cp.js" suffix(,)
+#embed "ext/web/urlpattern.js" suffix(,)
 10,125,41,};
 static const unsigned char b441[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/euc-kr.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/big5.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b442[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/gb18030.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/euc-kr.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b443[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/gb18030.ranges.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/gb18030.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b444[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/ibm866.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/gb18030.ranges.js" suffix(,)
 10,125,41,};
 static const unsigned char b445[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/iso-2022-jp-katakana.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/ibm866.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b446[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/iso-8859-10.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/iso-2022-jp-katakana.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b447[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/iso-8859-13.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/iso-8859-10.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b448[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/iso-8859-14.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/iso-8859-13.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b449[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/iso-8859-15.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/iso-8859-14.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b450[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/iso-8859-16.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/iso-8859-15.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b451[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/iso-8859-2.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/iso-8859-16.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b452[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/iso-8859-3.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/iso-8859-2.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b453[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/iso-8859-4.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/iso-8859-3.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b454[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/iso-8859-5.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/iso-8859-4.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b455[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/iso-8859-6.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/iso-8859-5.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b456[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/iso-8859-7.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/iso-8859-6.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b457[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/iso-8859-8.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/iso-8859-7.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b458[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/jis0208.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/iso-8859-8.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b459[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/jis0212.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/jis0208.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b460[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/koi8-r.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/jis0212.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b461[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/koi8-u.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/koi8-r.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b462[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/macintosh.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/koi8-u.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b463[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/windows-1250.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/macintosh.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b464[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/windows-1251.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/windows-1250.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b465[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/windows-1252.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/windows-1251.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b466[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/windows-1253.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/windows-1252.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b467[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/windows-1254.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/windows-1253.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b468[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/windows-1255.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/windows-1254.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b469[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/windows-1256.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/windows-1255.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b470[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/windows-1257.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/windows-1256.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b471[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/windows-1258.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/windows-1257.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b472[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/windows-874.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/windows-1258.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b473[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/x-mac-cyrillic.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/windows-874.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b474[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/AbstractDecoder.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/x-mac-cyrillic.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b475[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/AbstractEncoder.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/AbstractDecoder.js" suffix(,)
 10,125,41,};
 static const unsigned char b476[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/ByteBuffer.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/AbstractEncoder.js" suffix(,)
 10,125,41,};
 static const unsigned char b477[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/Decoder.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/ByteBuffer.js" suffix(,)
 10,125,41,};
 static const unsigned char b478[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/Encoder.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/Decoder.js" suffix(,)
 10,125,41,};
 static const unsigned char b479[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/Encoding.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/Encoder.js" suffix(,)
 10,125,41,};
 static const unsigned char b480[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/TextDecoder.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/Encoding.js" suffix(,)
 10,125,41,};
 static const unsigned char b481[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/TextEncoder.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/TextDecoder.js" suffix(,)
 10,125,41,};
 static const unsigned char b482[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/constants.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/TextEncoder.js" suffix(,)
 10,125,41,};
 static const unsigned char b483[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/decoders/Big5Decoder.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/constants.js" suffix(,)
 10,125,41,};
 static const unsigned char b484[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/decoders/EUCJPDecoder.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/decoders/Big5Decoder.js" suffix(,)
 10,125,41,};
 static const unsigned char b485[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/decoders/EUCKRDecoder.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/decoders/EUCJPDecoder.js" suffix(,)
 10,125,41,};
 static const unsigned char b486[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/decoders/GBDecoder.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/decoders/EUCKRDecoder.js" suffix(,)
 10,125,41,};
 static const unsigned char b487[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/decoders/ISO2022JPDecoder.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/decoders/GBDecoder.js" suffix(,)
 10,125,41,};
 static const unsigned char b488[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/decoders/ShiftJISDecoder.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/decoders/ISO2022JPDecoder.js" suffix(,)
 10,125,41,};
 static const unsigned char b489[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/decoders/SingleByteDecoder.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/decoders/ShiftJISDecoder.js" suffix(,)
 10,125,41,};
 static const unsigned char b490[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/decoders/UTF16Decoder.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/decoders/SingleByteDecoder.js" suffix(,)
 10,125,41,};
 static const unsigned char b491[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/decoders/UTF8Decoder.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/decoders/UTF16Decoder.js" suffix(,)
 10,125,41,};
 static const unsigned char b492[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/decoders/XUserDefinedDecoder.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/decoders/UTF8Decoder.js" suffix(,)
 10,125,41,};
 static const unsigned char b493[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encoders/Big5Encoder.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/decoders/XUserDefinedDecoder.js" suffix(,)
 10,125,41,};
 static const unsigned char b494[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encoders/CodePointIndex.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encoders/Big5Encoder.js" suffix(,)
 10,125,41,};
 static const unsigned char b495[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encoders/EUCJPEncoder.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encoders/CodePointIndex.js" suffix(,)
 10,125,41,};
 static const unsigned char b496[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encoders/EUCKREncoder.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encoders/EUCJPEncoder.js" suffix(,)
 10,125,41,};
 static const unsigned char b497[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encoders/GBEncoder.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encoders/EUCKREncoder.js" suffix(,)
 10,125,41,};
 static const unsigned char b498[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encoders/ISO2022JPEncoder.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encoders/GBEncoder.js" suffix(,)
 10,125,41,};
 static const unsigned char b499[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encoders/JIS0208Index.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encoders/ISO2022JPEncoder.js" suffix(,)
 10,125,41,};
 static const unsigned char b500[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encoders/ShiftJISEncoder.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encoders/JIS0208Index.js" suffix(,)
 10,125,41,};
 static const unsigned char b501[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encoders/SingleByteEncoder.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encoders/ShiftJISEncoder.js" suffix(,)
 10,125,41,};
 static const unsigned char b502[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encoders/UTF16Encoder.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encoders/SingleByteEncoder.js" suffix(,)
 10,125,41,};
 static const unsigned char b503[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encoders/UTF8Encoder.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encoders/UTF16Encoder.js" suffix(,)
 10,125,41,};
 static const unsigned char b504[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encoders/XUserDefinedEncoder.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encoders/UTF8Encoder.js" suffix(,)
 10,125,41,};
 static const unsigned char b505[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/big5.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encoders/XUserDefinedEncoder.js" suffix(,)
 10,125,41,};
 static const unsigned char b506[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/euc-jp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/big5.js" suffix(,)
 10,125,41,};
 static const unsigned char b507[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/euc-kr.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/euc-jp.js" suffix(,)
 10,125,41,};
 static const unsigned char b508[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/gb18030.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/euc-kr.js" suffix(,)
 10,125,41,};
 static const unsigned char b509[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/gbk.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/gb18030.js" suffix(,)
 10,125,41,};
 static const unsigned char b510[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/ibm866.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/gbk.js" suffix(,)
 10,125,41,};
 static const unsigned char b511[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-2022-jp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/ibm866.js" suffix(,)
 10,125,41,};
 static const unsigned char b512[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-8859-10.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-2022-jp.js" suffix(,)
 10,125,41,};
 static const unsigned char b513[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-8859-13.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-8859-10.js" suffix(,)
 10,125,41,};
 static const unsigned char b514[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-8859-14.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-8859-13.js" suffix(,)
 10,125,41,};
 static const unsigned char b515[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-8859-15.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-8859-14.js" suffix(,)
 10,125,41,};
 static const unsigned char b516[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-8859-16.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-8859-15.js" suffix(,)
 10,125,41,};
 static const unsigned char b517[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-8859-2.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-8859-16.js" suffix(,)
 10,125,41,};
 static const unsigned char b518[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-8859-3.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-8859-2.js" suffix(,)
 10,125,41,};
 static const unsigned char b519[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-8859-4.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-8859-3.js" suffix(,)
 10,125,41,};
 static const unsigned char b520[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-8859-5.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-8859-4.js" suffix(,)
 10,125,41,};
 static const unsigned char b521[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-8859-6.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-8859-5.js" suffix(,)
 10,125,41,};
 static const unsigned char b522[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-8859-7.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-8859-6.js" suffix(,)
 10,125,41,};
 static const unsigned char b523[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-8859-8-i.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-8859-7.js" suffix(,)
 10,125,41,};
 static const unsigned char b524[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-8859-8.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-8859-8-i.js" suffix(,)
 10,125,41,};
 static const unsigned char b525[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/koi8-r.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-8859-8.js" suffix(,)
 10,125,41,};
 static const unsigned char b526[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/koi8-u.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/koi8-r.js" suffix(,)
 10,125,41,};
 static const unsigned char b527[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/macintosh.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/koi8-u.js" suffix(,)
 10,125,41,};
 static const unsigned char b528[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/shift_jis.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/macintosh.js" suffix(,)
 10,125,41,};
 static const unsigned char b529[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/utf-16.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/shift_jis.js" suffix(,)
 10,125,41,};
 static const unsigned char b530[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/utf-16be.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/utf-16.js" suffix(,)
 10,125,41,};
 static const unsigned char b531[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/utf-16le.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/utf-16be.js" suffix(,)
 10,125,41,};
 static const unsigned char b532[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/utf-8.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/utf-16le.js" suffix(,)
 10,125,41,};
 static const unsigned char b533[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/windows-1250.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/utf-8.js" suffix(,)
 10,125,41,};
 static const unsigned char b534[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/windows-1251.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/windows-1250.js" suffix(,)
 10,125,41,};
 static const unsigned char b535[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/windows-1252.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/windows-1251.js" suffix(,)
 10,125,41,};
 static const unsigned char b536[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/windows-1253.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/windows-1252.js" suffix(,)
 10,125,41,};
 static const unsigned char b537[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/windows-1254.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/windows-1253.js" suffix(,)
 10,125,41,};
 static const unsigned char b538[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/windows-1255.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/windows-1254.js" suffix(,)
 10,125,41,};
 static const unsigned char b539[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/windows-1256.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/windows-1255.js" suffix(,)
 10,125,41,};
 static const unsigned char b540[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/windows-1257.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/windows-1256.js" suffix(,)
 10,125,41,};
 static const unsigned char b541[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/windows-1258.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/windows-1257.js" suffix(,)
 10,125,41,};
 static const unsigned char b542[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/windows-874.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/windows-1258.js" suffix(,)
 10,125,41,};
 static const unsigned char b543[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/x-mac-cyrillic.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/windows-874.js" suffix(,)
 10,125,41,};
 static const unsigned char b544[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/x-user-defined.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/x-mac-cyrillic.js" suffix(,)
 10,125,41,};
 static const unsigned char b545[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/x-user-defined.js" suffix(,)
 10,125,41,};
 static const unsigned char b546[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/index-no-encodings.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings.js" suffix(,)
 10,125,41,};
 static const unsigned char b547[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/index.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/index-no-encodings.js" suffix(,)
 10,125,41,};
 static const unsigned char b548[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/util.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/index.js" suffix(,)
 10,125,41,};
 static const unsigned char b549[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/urlpattern.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/util.js" suffix(,)
 10,125,41,};
 static const unsigned char b550[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/wasm/compile_options.js" suffix(,)
+#embed "ext/web/vendor/urlpattern.js" suffix(,)
 10,125,41,};
 static const unsigned char b551[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/wasm.js" suffix(,)
+#embed "ext/web/wasm/compile_options.js" suffix(,)
 10,125,41,};
 static const unsigned char b552[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/websocket/compression.js" suffix(,)
+#embed "ext/web/wasm.js" suffix(,)
 10,125,41,};
 static const unsigned char b553[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/websocket/events.js" suffix(,)
+#embed "ext/web/websocket/compression.js" suffix(,)
 10,125,41,};
 static const unsigned char b554[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/websocket/framing.js" suffix(,)
+#embed "ext/web/websocket/events.js" suffix(,)
 10,125,41,};
 static const unsigned char b555[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/websocket.js" suffix(,)
+#embed "ext/web/websocket/framing.js" suffix(,)
 10,125,41,};
 static const unsigned char b556[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "libs/node_resolver/cjs_exports.js" suffix(,)
+#embed "ext/web/websocket.js" suffix(,)
 10,125,41,};
 static const unsigned char b557[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "libs/node_resolver/hooks.js" suffix(,)
+#embed "libs/node_resolver/cjs_exports.js" suffix(,)
 10,125,41,};
 static const unsigned char b558[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "libs/node_resolver/hooks_transport.js" suffix(,)
+#embed "libs/node_resolver/hooks.js" suffix(,)
 10,125,41,};
 static const unsigned char b559[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "libs/node_resolver/hooks_worker.js" suffix(,)
+#embed "libs/node_resolver/hooks_transport.js" suffix(,)
 10,125,41,};
 static const unsigned char b560[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
+#embed "libs/node_resolver/hooks_worker.js" suffix(,)
+10,125,41,};
+static const unsigned char b561[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
 #embed "libs/node_resolver/loader.js" suffix(,)
 10,125,41,};
-static const unsigned char b561[] = {40,102,117,110,99,116,105,111,110,40,115,116,100,78,97,109,101,115,112,97,99,101,44,32,111,115,78,97,109,101,115,112,97,99,101,41,32,123,32,39,117,115,101,32,115,116,114,105,99,116,39,59,10,10,
+static const unsigned char b562[] = {40,102,117,110,99,116,105,111,110,40,115,116,100,78,97,109,101,115,112,97,99,101,44,32,111,115,78,97,109,101,115,112,97,99,101,41,32,123,32,39,117,115,101,32,115,116,114,105,99,116,39,59,10,10,
 #embed "runtime/bootstrap.js" clang::offset(92) suffix(,)
 10,125,41,};
 
@@ -2249,13 +2252,14 @@ static const struct { const unsigned char *data; size_t length; } sources[] = {
   { b559, sizeof b559 },
   { b560, sizeof b560 },
   { b561, sizeof b561 },
+  { b562, sizeof b562 },
 };
 
 /* The built-ins of TypeStripping, which its package installs (tools/embed.py, PACKAGED). */
 const unsigned char *(*silk_type_stripping_sources)(size_t index, size_t *length);
 
 const unsigned char *silk_builtin_source(size_t index, size_t *length) {
-  if (index > 561) { *length = 0; return (const unsigned char *)""; }
+  if (index > 562) { *length = 0; return (const unsigned char *)""; }
   switch (index) {
     case 105:
     case 191:

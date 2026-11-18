@@ -11,7 +11,7 @@ import silk.num.usize
 import ext.fs_ops as ops
 import ext.fs_ops { Call, Outcome }
 import libs.core.capabilities { Files }
-import libs.core.files { MemoryFiles, RootedFiles }
+import libs.core.files { MemoryFiles, RootedFiles, GrantedFiles, OsFiles }
 
 type Failures = AssertionError<'static> | OutOfMemoryError
 
@@ -110,6 +110,15 @@ effect fn rootedFiles() -> () ! Failures ? &mut Allocator {
   let real = run pathCall(ops.REALPATH, name.asSlice())
   out = ops.outcome()
   run Testing.expect(run1(&files, &real, &mut out) == 0 && same(out.text.asSlice(), name.asSlice()), "realpath loses the root")
+  // symlink(target, link): the link is made inside the root, and the target kept as given.
+  let link = run joined(name.asSlice(), b"/link")
+  out = ops.outcome()
+  run Testing.expect(run1(&files, &run twoPathCall(ops.SYMLINK, b"/elsewhere", link.asSlice()), &mut out) == 0, "symlink under the root")
+  let host = run joined(b"/tmp", link.asSlice())
+  out = ops.outcome()
+  run Testing.expect(run1(&OsFiles {}, &run pathCall(ops.READLINK, host.asSlice()), &mut out) == 0 && same(out.text.asSlice(), b"/elsewhere"), "the link is inside the root")
+  out = ops.outcome()
+  run Testing.expect(run1(&files, &run pathCall(ops.UNLINK, link.asSlice()), &mut out) == 0, "unlink")
   let remove = run pathCall(ops.RMDIR, name.asSlice())
   out = ops.outcome()
   run Testing.expect(run1(&files, &remove, &mut out) == 0, "rmdir")
@@ -118,4 +127,77 @@ effect fn rootedFiles() -> () ! Failures ? &mut Allocator {
 test effect fn rootedFilesTest() -> () ! Failures {
   let mut allocator = Allocator.systemAllocatorProvider()
   run rootedFiles() |> Effect.provideMut<Allocator>(&mut allocator)
+}
+
+effect fn twoPathCall(op: i32, path: &[u8], dest: &[u8]) -> Call ! OutOfMemoryError ? &mut Allocator {
+  let mut call = run pathCall(op, path)
+  run call.dest.appendBytes(dest)
+  return move call
+}
+
+effect fn joined(directory: &[u8], name: &[u8]) -> List<u8> ! OutOfMemoryError ? &mut Allocator {
+  let mut path = List<u8>.make()
+  run path.appendBytes(directory)
+  run path.appendBytes(name)
+  return move path
+}
+
+effect fn grantedFiles() -> () ! Failures ? &mut Allocator {
+  let os = OsFiles {}
+  let mut out = ops.outcome()
+  let make = run pathCall(ops.MKDTEMP, b"/tmp/silkjs-granted-XXXXXX")
+  run Testing.expect(run1(&os, &make, &mut out) == 0, "mkdtemp")
+  let mut root = List<u8>.make()
+  run root.appendBytes(out.text.asSlice())
+  let picked = run joined(root.asSlice(), b"/picked")
+  let inner = run joined(root.asSlice(), b"/picked/inner")
+  let other = run joined(root.asSlice(), b"/other")
+  let link = run joined(root.asSlice(), b"/picked/out")
+  out = ops.outcome() run Testing.expect(run1(&os, &run pathCall(ops.MKDIR, picked.asSlice()), &mut out) == 0, "mkdir picked")
+  out = ops.outcome() run Testing.expect(run1(&os, &run pathCall(ops.MKDIR, inner.asSlice()), &mut out) == 0, "mkdir inner")
+  out = ops.outcome() run Testing.expect(run1(&os, &run pathCall(ops.MKDIR, other.asSlice()), &mut out) == 0, "mkdir other")
+  out = ops.outcome() run Testing.expect(run1(&os, &run twoPathCall(ops.SYMLINK, other.asSlice(), link.asSlice()), &mut out) == 0, "symlink out")
+
+  let files = run GrantedFiles.make()
+  out = ops.outcome()
+  run Testing.expect(run1(&files, &run pathCall(ops.STAT, inner.asSlice()), &mut out) == -13, "nothing is reachable before a grant")
+  run files.grant(picked.asSlice())
+  out = ops.outcome()
+  run Testing.expect(run1(&files, &run pathCall(ops.STAT, inner.asSlice()), &mut out) == 0, "below a granted directory")
+  out = ops.outcome()
+  run Testing.expect(run1(&files, &run pathCall(ops.STAT, picked.asSlice()), &mut out) == 0, "the granted directory itself")
+  out = ops.outcome()
+  run Testing.expect(run1(&files, &run pathCall(ops.STAT, other.asSlice()), &mut out) == -13, "a sibling is not granted")
+  let escape = run joined(picked.asSlice(), b"/../other")
+  out = ops.outcome()
+  run Testing.expect(run1(&files, &run pathCall(ops.STAT, escape.asSlice()), &mut out) == -13, ".. leaves the grant")
+  out = ops.outcome()
+  run Testing.expect(run1(&files, &run pathCall(ops.STAT, link.asSlice()), &mut out) == -13, "a link does not reach outside")
+  out = ops.outcome()
+  run Testing.expect(run1(&files, &run pathCall(ops.LSTAT, link.asSlice()), &mut out) == 0, "the link itself is inside")
+  let outside = run joined(other.asSlice(), b"/link")
+  out = ops.outcome()
+  run Testing.expect(run1(&files, &run twoPathCall(ops.SYMLINK, inner.asSlice(), outside.asSlice()), &mut out) == -13, "a link made outside the grant")
+  let moved = run joined(other.asSlice(), b"/moved")
+  out = ops.outcome()
+  run Testing.expect(run1(&files, &run twoPathCall(ops.RENAME, inner.asSlice(), moved.asSlice()), &mut out) == -13, "a rename out of the grant")
+  out = ops.outcome()
+  run Testing.expect(run1(&files, &run pathCall(ops.STAT, b"picked"), &mut out) == -13, "relative paths are refused")
+  let saved = run joined(other.asSlice(), b"/saved.txt")
+  run files.grant(saved.asSlice())
+  out = ops.outcome()
+  run Testing.expect(run1(&files, &run pathCall(ops.STAT, saved.asSlice()), &mut out) == -2, "a granted file that does not exist yet")
+  out = ops.outcome()
+  run Testing.expect(run1(&files, &run pathCall(ops.STAT, other.asSlice()), &mut out) == -13, "granting a file grants not its directory")
+
+  out = ops.outcome() drop run1(&os, &run pathCall(ops.UNLINK, link.asSlice()), &mut out)
+  out = ops.outcome() drop run1(&os, &run pathCall(ops.RMDIR, inner.asSlice()), &mut out)
+  out = ops.outcome() drop run1(&os, &run pathCall(ops.RMDIR, picked.asSlice()), &mut out)
+  out = ops.outcome() drop run1(&os, &run pathCall(ops.RMDIR, other.asSlice()), &mut out)
+  out = ops.outcome() drop run1(&os, &run pathCall(ops.RMDIR, root.asSlice()), &mut out)
+}
+
+test effect fn grantedFilesTest() -> () ! Failures {
+  let mut allocator = Allocator.systemAllocatorProvider()
+  run grantedFiles() |> Effect.provideMut<Allocator>(&mut allocator)
 }
