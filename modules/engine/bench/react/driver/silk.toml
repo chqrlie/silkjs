@@ -1,0 +1,8 @@
+[package]
+name = "silkjs-react-bench"
+description = "Runs the React benchmark bundle in the engine and reports each phase (../README.md)"
+version = "0.1.0"
+silk-version = "0.1.0-dev.87+37fa5f8857de"
+
+[dependencies]
+silkjs = { path = "../../..", package = "silkjs-engine" }

@@ -648,6 +648,11 @@ pub struct RuntimeState {
   /// The heap budget in allocator bytes (js_runtime.setHeapLimit, V8's max old
   /// space): collections run before usage reaches it. usize.MAX when unset.
   pub gcHeapLimit: usize,
+  /// Collections run so far, full and young, and the ticks (runtime_memory.ticks)
+  /// they took in all: what a host reports as its GC cost (js_runtime.gcCounts).
+  pub gcFullCount: u32,
+  pub gcYoungCount: u32,
+  pub gcTicks: usize,
   /// V8's --use-strict: every script and eval compiles as strict code (js_runtime.setUseStrict).
   pub useStrict: bool,
   /// V8's --allow-natives-syntax: %Name(...) calls parse (js_parser_expressions.parseNativeCall).

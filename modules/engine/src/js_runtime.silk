@@ -12,6 +12,7 @@ import intl_zone_name { ZoneNames }
 import silk.collections.hash { Hash }
 import silk.collections.hash_map { HashMap }
 import silk.core.option { Option }
+import silk.core.ownership { Copy }
 import silk.mem.pointer { Pointer }
 import silk.mem.layout { Layout }
 import silk.mem.raw_buffer { RawBuffer }
@@ -120,6 +121,9 @@ pub effect fn allocateRuntimeStorage(stackTop: usize) -> *mut HeapHeader
   state.gcYoungLimit = usize.MAX
   state.gcYoungBudget = YOUNG_BUDGET
   state.gcHeapLimit = usize.MAX
+  state.gcFullCount = 0
+  state.gcYoungCount = 0
+  state.gcTicks = 0
   state.useStrict = false
   state.allowNativesSyntax = false
   state.zeroStackCount = 0
@@ -433,6 +437,14 @@ fn heapCap(limit: usize, used: usize) -> usize {
   if limit == usize.MAX { return usize.MAX }
   if used >= limit { return used }
   return used + (limit - used) / 2
+}
+/// Collections so far and the time they took (RuntimeState.gcTicks).
+pub struct GcCounts { pub full: u32, pub young: u32, pub ticks: usize }
+impl Copy for GcCounts {}
+pub unsafe fn gcCounts(runtime: *mut HeapHeader) -> GcCounts {
+  let anchor = ()
+  let state = unsafe HeapCell.payload<RuntimeState, ()>(&anchor, runtime)
+  return GcCounts { full: state.gcFullCount, young: state.gcYoungCount, ticks: state.gcTicks }
 }
 /// The allocator usage the last collection left: what was allocated since is the
 /// young generation, which the next young collection scans.

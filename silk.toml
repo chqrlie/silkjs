@@ -2,5 +2,5 @@
 # they build with (it overrides the members' own pins). `silk set <version>` here moves them all.
 [workspace]
 members = ["modules/engine", "modules/runtime", "modules/runtime/wamr", "modules/runtime/cli", "modules/runtime/cli/silkjs",
-  "modules/runtime/cli/silk", "modules/runtime/smoke", "modules/runtime/smoke-wamr", "modules/pm", "modules/runtime/tools/capabilities"]
+  "modules/runtime/cli/silk", "modules/runtime/smoke", "modules/runtime/smoke-wamr", "modules/pm", "modules/runtime/tools/capabilities", "modules/engine/bench/react/driver"]
 silk-version = "0.1.0-dev.87+37fa5f8857de"
