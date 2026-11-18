@@ -121,4 +121,8 @@ jobs:
         working-directory: modules/runtime
         env:
           SILKJS_RUNTIME: build/silk/silkjs
-        run: node tests/compat.mjs
+        # Less the zlib and Zstandard matrices, which check that main's Silk ports of zlib and zstd
+        # (NativeCompression) reproduce those libraries' bytes: SilkCompression's codecs are
+        # silk.compress's, which round-trip with them but compress differently. The release builds
+        # of macos-runtime.yml and linux-arm64-runtime.yml run them against the executable.
+        run: node tests/compat.mjs '^(?!zlib-(behaviour|compressed-bytes|fuzz)|zstd-(levels|parameters|streams|decoding|dictionaries|workers))'
