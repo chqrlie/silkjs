@@ -1,6 +1,6 @@
 #!/bin/sh
-# Builds the differential harness: the runtime's zlib adapter (src/ext/zlib_stream.silk over
-# src/stdlib_copy) as an object with C exports, zlib 1.3.1 from its pinned release, the zlib
+# Builds the differential harness: the runtime's zlib adapter (compress/src/ext/zlib_stream.silk over
+# compress/src/stdlib_copy) as an object with C exports, zlib 1.3.1 from its pinned release, the zlib
 # Node 24 builds (Chromium's, from deps/zlib at v24.22.3, with the defines of Node's x64 build),
 # and the programs that drive them with the same calls. Needs the Silk toolchain, gcc and curl.
 #
@@ -48,8 +48,8 @@ rm -f libzref.a && ar rcs libzref.a zref.o adler32.o crc32.o deflate.o inflate.o
 # A package of its own, so that the build reaches only the adapter and the codecs.
 cp "$here/silk.toml" package/silk.toml
 cp "$here/src/zshim.silk" package/src/zshim.silk
-ln -sfn "$runtime/src/stdlib_copy" package/src/stdlib_copy
-ln -sfn "$runtime/src/ext/zlib_stream.silk" package/src/ext/zlib_stream.silk
+ln -sfn "$runtime/compress/src/stdlib_copy" package/src/stdlib_copy
+ln -sfn "$runtime/compress/src/ext/zlib_stream.silk" package/src/ext/zlib_stream.silk
 rm -f zshim.o
 (cd package && silk build src/zshim.silk --emit object -o "$out/zshim.o")
 objcopy --redefine-sym main=zs_unused_main zshim.o zshim_lib.o

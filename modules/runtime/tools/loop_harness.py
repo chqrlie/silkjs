@@ -23,12 +23,14 @@ def main():
     if os.path.exists(package):
         shutil.rmtree(package)
     os.makedirs(os.path.join(package, 'src'))
-    os.symlink(os.path.join(HERE, 'src', 'ext'), os.path.join(package, 'src', 'ext'))
+    # libuv's C API in Silk is the Node-API package's; it uses the core's records.
+    os.symlink(os.path.join(HERE, 'napi', 'src', 'ext'), os.path.join(package, 'src', 'ext'))
     shutil.copy(os.path.join(HERE, 'tests', 'loop-harness', 'main.silk'), os.path.join(package, 'src', 'main.silk'))
     with open(os.path.join(HERE, 'silk.toml')) as manifest:
         version = re.search(r'^silk-version = "(.*)"', manifest.read(), re.M).group(1)
     with open(os.path.join(package, 'silk.toml'), 'w') as manifest:
-        manifest.write(f'[package]\nname = "loopharness"\nversion = "0.1.0"\nsilk-version = "{version}"\n')
+        manifest.write(f'[package]\nname = "loopharness"\nversion = "0.1.0"\nsilk-version = "{version}"\n'
+                       f'[dependencies]\nsilkjsruntime = {{ path = "{HERE}", package = "silkjs-runtime" }}\n')
     compiler = os.environ.get('SILK_CLANG', 'clang')
     # As tools/libuv_suite.py: on Linux, C library names Silk's link stub lacks (fstat) resolve when
     # the program loads.

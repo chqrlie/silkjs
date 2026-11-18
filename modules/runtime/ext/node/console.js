@@ -541,13 +541,20 @@ for (const prop of Reflect.ownKeys(Console.prototype)) {
 globalConsole.Console = Console;
 // lib/internal/util/inspector.js wrapConsole adds the V8 console methods Node's
 // console lacks; they report to inspector sessions only.
-globalConsole.profile = function profile(...args) { return require('internal/inspector').console.profile(args[0]); };
-globalConsole.profileEnd = function profileEnd(...args) { return require('internal/inspector').console.profileEnd(args[0]); };
+// Without an inspector there is no session to report to, and they do nothing.
+globalConsole.profile = function profile(...args) { if (process.features.inspector) return require('internal/inspector').console.profile(args[0]); };
+globalConsole.profileEnd = function profileEnd(...args) { if (process.features.inspector) return require('internal/inspector').console.profileEnd(args[0]); };
 // V8 hands the label to the embedder (consoleTimeStamp), which Node does not record.
 globalConsole.timeStamp = function timeStamp(...args) {};
 // V8's console.context(name): a console of its own, whose calls go to inspector
 // sessions only.
-globalConsole.context = function context(name) { return require('internal/inspector').consoleContext(); };
+globalConsole.context = function context(name) {
+  if (process.features.inspector) return require('internal/inspector').consoleContext();
+  // A console whose calls go nowhere, as they would with no session listening.
+  const quiet = { __proto__: null };
+  for (const key of Object.keys(globalConsole)) if (typeof globalConsole[key] === 'function') quiet[key] = function() {};
+  return quiet;
+};
 // V8's console.createTask(name): a task whose run(f) calls f (async stack
 // tagging, which only an inspector reads).
 globalConsole.createTask = function createTask(...args) {

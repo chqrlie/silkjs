@@ -1,5 +1,8 @@
 # zlib in Silk
 
+Since the composable runtime merged, these files are the compression package's: `src/stdlib_copy` and
+`src/ext/zlib_stream.silk` below are `compress/src/stdlib_copy` and `compress/src/ext/zlib_stream.silk`.
+
 `node:zlib` (deflate, inflate, raw deflate, gzip, gunzip, unzip, `crc32`) runs on Silk code. No
 zlib C is compiled or linked: `modules/native/zlib` is gone, and `nm build/silkjs` has no zlib
 symbol. Zstandard and Brotli are as they were.

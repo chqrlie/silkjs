@@ -8,6 +8,7 @@ import platform
 import shutil
 import struct
 import subprocess
+from built import built
 import sys
 import tempfile
 import tomllib
@@ -46,7 +47,7 @@ def main():
     if args.release:
         command += ['--optimization', 'speed']
     try:
-        subprocess.run(command, cwd=ROOT, env=environment, check=True)
+        subprocess.run(command, cwd=ROOT / "cli/silkjs", env=environment, check=True)
     finally:
         named.unlink(missing_ok=True)
     shutil.copy2(built_executable(args.release), args.output.resolve())
@@ -55,13 +56,8 @@ def main():
 
 
 def built_executable(release):
-    """The executable the package build just wrote, named by the request it published."""
-    profile = 'release' if release else 'dev'
-    requests = sorted((ROOT.parent.parent / 'build/requests').glob(f'silkjs-runtime.*.{profile}.toml'),
-                      key=lambda path: path.stat().st_mtime)
-    if not requests:
-        raise SystemExit('the build published no request for silkjs-runtime')
-    return Path(tomllib.loads(requests[-1].read_text())['output'])
+    """The executable the package build just wrote (tools/built.py)."""
+    return built('silkjs', release)
 
 
 def build_cache_object(environment, identity, cache=None):

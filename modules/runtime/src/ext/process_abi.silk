@@ -1,13 +1,8 @@
-//! POSIX/libuv process ABI; callbacks never enter JavaScript.
+//! POSIX process ABI: socket pairs, descriptors and descriptor passing for child processes and
+//! their IPC channels.
 import silk.core.ownership { Drop }
 import silk.collections.list { List }
 import silk.num.i32
-pub type ExitCallback = extern "C" fn(*mut u8,i64,i32)->()
-pub type SignalCallback = extern "C" fn(*mut u8,i32)->()
-pub extern "C" struct Stdio { pub flags:i32, pub data:usize }
-pub extern "C" struct Options { pub exitCallback:ExitCallback, pub file:*const u8, pub args:*const ?*const u8, pub env:*const ?*const u8, pub cwd:?*const u8, pub flags:u32, pub stdioCount:i32, pub stdio:*const Stdio, pub uid:u32, pub gid:u32 }
-// The monotonic clock is Silk (uv_os), published here under libuv's name.
-pub import ext.uv_os { uv_hrtime }
 pub unsafe extern "C" fn socketpair(domain:i32,kind:i32,protocol:i32,fds:*mut i32)->i32
 pub unsafe extern "C" fn close(fd:i32)->i32
 @foreign(noCapture: .("buffer"))
@@ -17,7 +12,6 @@ pub unsafe extern "C" fn send(fd:i32,buffer:*const u8,count:usize,flags:i32)->is
 pub fn nonblockFlag()->i32 { static if Intrinsic.targetOperatingSystem()=="darwin" { return 4 } else { return 2048 } }
 pub struct Descriptors { pub fds:List<i32> }
 impl Drop for Descriptors { fn drop(self:&mut Self)->() { let mut i:usize=0 while i<self.fds.length() { if self.fds.asSlice()[i]>=0 { let _ignored=unsafe close(self.fds.asSlice()[i]) } i=i+1 } } }
-pub type PollCallback = extern "C" fn(*mut u8,i32,i32)->()
 pub extern "C" struct Iovec { pub base:*mut u8, pub length:usize }
 static if Intrinsic.targetOperatingSystem()=="darwin" {
   pub extern "C" struct Message { pub name:?*mut u8, pub nameLength:u32, pub vectors:*mut Iovec, pub vectorCount:i32, pub control:?*mut u8, pub controlLength:u32, pub flags:i32 }

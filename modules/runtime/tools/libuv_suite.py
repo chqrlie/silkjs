@@ -20,7 +20,8 @@ import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-EXT = os.path.join(HERE, 'src', 'ext')
+# libuv's C API in Silk is the Node-API package's (napi/src/ext); it uses the core's records.
+EXT = os.path.join(HERE, 'napi', 'src', 'ext')
 MODULES = ['uv_api_loop', 'uv_api_sys', 'uv_api_fs', 'uv_api_stream']
 # Tests of libuv's internals rather than its interface: they compile libuv's own sources in, so
 # their results are left out. Their copies of public functions are renamed, so as not to clash
@@ -112,7 +113,8 @@ def build_silk(work, objects, compiler):
     with open(os.path.join(HERE, 'silk.toml')) as manifest:
         version = re.search(r'^silk-version = "(.*)"', manifest.read(), re.M).group(1)
     with open(os.path.join(package, 'silk.toml'), 'w') as manifest:
-        manifest.write(f'[package]\nname = "uvsuite"\nversion = "0.1.0"\nsilk-version = "{version}"\n')
+        manifest.write(f'[package]\nname = "uvsuite"\nversion = "0.1.0"\nsilk-version = "{version}"\n'
+                       f'[dependencies]\nsilkjsruntime = {{ path = "{HERE}", package = "silkjs-runtime" }}\n')
     with open(os.path.join(package, 'src', 'main.silk'), 'w') as main:
         main.write(''.join(f'import ext.{module}\n' for module in MODULES))
         main.write('unsafe extern "C" fn uv_suite_entry() -> i32\npub fn main() -> i32 { return unsafe uv_suite_entry() }\n')

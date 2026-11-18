@@ -3,6 +3,15 @@
 Branch `feature/replace-libuv`, from `main` f3d5ea8. Scope, what moved, compiler walls, test
 status and benchmark numbers.
 
+## Status (2026-11-17)
+
+Since the composable runtime merged (docs/composable-runtime.md), the core's loop is
+`silk.io.reactor` alone and has no libuv shape: libuv's C API below lives in the Node-API package,
+`napi/src/ext/uv_*.silk`, for addons only, and runs as the reactor's guest when an addon asks for
+it. WASI is Silk in `wamr/` (no uvwasi), so `modules/native/uvwasi` and `uvwasi_host.silk` are
+gone. The `src/ext/uv_*` paths below are now `napi/src/ext/uv_*`; `uv_errno.silk` stays in the
+core's `src/ext`, where `system_errors` reads it.
+
 ## Status (2026-11-16)
 
 No libuv C is compiled or linked. `modules/native/uvwasi/silk.toml` (formerly `modules/native/libuv`) has no `[native.archive]`

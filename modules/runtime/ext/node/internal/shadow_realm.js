@@ -19,7 +19,7 @@ function fileHref(filename) { return require('url').pathToFileURL(filename).href
 function asURL(name) { return host.hasURLScheme(name) ? name : fileHref(name); }
 
 function moduleSource(filename, format) {
-  const source = host.readText(filename);
+  const source = host.readModule(filename);
   if (format === 'module') return host.loader.cleanSource(source);
   // JSON text is a JavaScript expression.
   if (format === 'json') return `export default ${source.replace(/^﻿/, '')};`;

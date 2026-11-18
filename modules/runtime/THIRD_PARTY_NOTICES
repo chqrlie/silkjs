@@ -39,10 +39,10 @@ Node.js compatibility modules and Node-API declarations (MIT)
   SonicBoom copyright and MIT notice. These acknowledgments remain applicable.
 
 llhttp 9.4.3 (MIT)
-  vendor/llhttp/{include,src}/ contains the generated C/header distribution
+  llhttp/vendor/{include,src}/ contains the generated C/header distribution
   from nodejs/node commit 338f67f57129b4fd15311fab612ceaa18963acb7.
-  Exact source URL and per-file SHA-256: vendor/llhttp/source.json.
-  License: vendor/llhttp/LICENSE.
+  Exact source URL and per-file SHA-256: llhttp/vendor/source.json.
+  License: llhttp/vendor/LICENSE.
   https://github.com/nodejs/node/tree/338f67f57129b4fd15311fab612ceaa18963acb7/deps/llhttp
   The build supplies callback symbol renames and a separate runtime bridge;
   the checked-in upstream parser remains covered by its original license.
@@ -139,32 +139,30 @@ WAMR (Apache-2.0 WITH LLVM-exception)
 uvwasi (MIT)
   https://github.com/nodejs/uvwasi
   Revision: e76edba54038e097aa58f55eef5ad34cb258b817.
-  ../native/uvwasi/uvwasi is its src/ and include/ with
-  ../native/uvwasi/uvwasi/ownership.patch applied.
-  ../native/uvwasi/uvwasi/shim/uv.h, which uvwasi is compiled against in place
-  of libuv's uv.h, takes its error, handle type and event numbers from
-  libuv 1.51.0 (MIT).
+  No uvwasi C is compiled. wamr/src/ext/wasi_host.silk follows uvwasi 0.0.23's
+  behavior call by call, so its notice still applies to it.
   License: vendor/licenses/UVWASI-LICENSE.
 
 3. Downloaded at build time, not source-vendored
 ------------------------------------------------
 libuv 1.51.0 (MIT) is no longer downloaded or compiled. The Silk modules that
-replace it (src/ext/uv_loop.silk, uv_os.silk, uv_inet.silk, uv_addon.silk and
-uvwasi_host.silk) follow its behavior and adapt parts of its logic, so its
-license notice still applies to them (vendor/licenses/LIBUV-LICENSE).
+give Node-API addons its C API (napi/src/ext/uv_loop.silk, uv_api_*.silk,
+uv_os.silk, uv_inet.silk) follow its behavior and adapt parts of its logic, so
+its license notice still applies to them (vendor/licenses/LIBUV-LICENSE).
 
 Silk downloads these source releases, checks their SHA-256 and compiles them
 into the executable ([native.archive] in each silk.toml):
 
-  SIMDe (MIT), header-only, for WAMR: this package's silk.toml.
+  SIMDe (MIT), header-only, for WAMR: ../native/wamr/silk.toml.
     vendor/licenses/SIMDe-LICENSE retains upstream COPYING.
   OpenSSL 3.5.4 (Apache-2.0): ../native/openssl, with the files its Configure
     writes in ../native/openssl/generated
   nghttp2 1.66.0 (MIT): ../native/nghttp2
-  zlib 1.3.1 (zlib): no zlib C is compiled or linked. src/stdlib_copy/compress and
-    src/ext/zlib_stream.silk are Silk code that follows zlib's deflate and inflate
+  zlib 1.3.1 (zlib): no zlib C is compiled or linked. compress/src/stdlib_copy/compress
+    and compress/src/ext/zlib_stream.silk are Silk code that follows zlib's deflate and inflate
     (Jean-loup Gailly and Mark Adler) closely enough to write the same bytes.
-  Zstandard 1.5.7 (BSD-3-Clause OR GPL-2.0): ../native/zstd
+  Zstandard 1.5.7 (BSD-3-Clause OR GPL-2.0): no zstd C is compiled; ../../zstd
+    is a Silk port of it
   Brotli 1.2.0 (MIT): ../native/brotli
   SQLite: the db-sqlite package of silk-lang/lib-sqlite, pinned by commit in
     silk.toml, compiles the amalgamation that package pins by SHA-256.
@@ -248,7 +246,7 @@ maintained libraries.
 
 The externally maintained libraries used by Node.js are:
 
-vendor/llhttp/LICENSE
+llhttp/vendor/LICENSE
 ---------------------
 MIT License
 

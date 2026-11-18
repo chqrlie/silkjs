@@ -99,6 +99,8 @@ function createLoader(host, builtins) {
   // reads are taken then.
   let fsOriginals = null;
   function patchedFs(name) {
+    // Without a file system (Files.empty) there is no fs to patch.
+    if (!host.hasService('Files')) return null;
     const fs = builtins.get('fs');
     fsOriginals ??= { readFileSync: fs.readFileSync, realpathSync: fs.realpathSync };
     return fs[name] === fsOriginals[name] ? null : fs;
@@ -106,7 +108,7 @@ function createLoader(host, builtins) {
   // A module's source. Node reads package.json files natively, so they never come here.
   function text(filename) {
     const fs = patchedFs('readFileSync');
-    return fs === null ? host.readText(filename) : `${fs.readFileSync(filename, 'utf8')}`;
+    return fs === null ? host.readModule(filename) : `${fs.readFileSync(filename, 'utf8')}`;
   }
   // Module._stat as user code replaced it (Node's experimental hook for a virtual file
   // system), which the CommonJS file lookups ask instead of the filesystem; null while
@@ -226,7 +228,7 @@ function createLoader(host, builtins) {
     if (known !== undefined) return known;
     if (!isFile(filename)) { packages.set(directory, null); return null; }
     let data;
-    try { data = JSON.parse(host.readText(filename).replace(/^\uFEFF/, '')); }
+    try { data = JSON.parse(host.readModule(filename).replace(/^\uFEFF/, '')); }
     catch (cause) {
       if (!(cause instanceof SyntaxError)) throw cause;
       throw Object.assign(error('ERR_INVALID_PACKAGE_CONFIG', filename, importing, cause.message), { cause });
@@ -323,6 +325,13 @@ function createLoader(host, builtins) {
     return result.slice();
   }
 
+  // node:X for a module of a service this program does not have (docs/composable-runtime.md).
+  function absent(name, specifier) {
+    const code = builtins.absent?.(name);
+    if (code === undefined) return;
+    throw code === 'ERR_UNKNOWN_BUILTIN_MODULE' ? error(code, specifier) : error(code);
+  }
+
   function builtinName(specifier) {
     // The runtime's own modules, such as silk:serve, have only their silk: names.
     if (builtinPrefix(specifier, 'silk:')) {
@@ -331,11 +340,15 @@ function createLoader(host, builtins) {
     }
     if (builtinPrefix(specifier, 'node:')) {
       const name = builtinSlice(specifier, 5);
+      absent(name, specifier);
       if (builtins.runtime(name) || (!builtins.listed(name) && !builtins.listed(specifier))) {
         throw error('ERR_UNKNOWN_BUILTIN_MODULE', specifier);
       }
       return name;
     }
+    // A bare name of a module this program leaves out is looked up as a package, as in a Node
+    // build without it; crypto and the inspector throw their own errors first.
+    if (!realmResolving) { const code = builtins.absent?.(specifier); if (code !== undefined && code !== 'ERR_UNKNOWN_BUILTIN_MODULE') throw error(code); }
     return !realmResolving && builtins.listed(specifier) && builtins.has(specifier) ? specifier : null;
   }
   // A ShadowRealm resolves as Node's defaultResolve in a realm that may load no
@@ -372,6 +385,7 @@ function createLoader(host, builtins) {
   const detectedModules = new WeakSet();
 
   function wasmMagic(disk) {
+    if (!host.hasService('Files')) return false;
     const fs = builtins.get('fs');
     const bytes = new Uint8Array(4);
     let fd;
@@ -1359,6 +1373,7 @@ function createLoader(host, builtins) {
   Module._initPaths();
   Module.findPackageJSON = findPackageJSON;
   Module.stripTypeScriptTypes = function stripTypeScriptTypes(code, options) {
+    host.assertTypeScript?.();
     return arguments.length < 2 ? builtins.get('internal/modules/typescript').stripTypeScriptTypes(code)
       : builtins.get('internal/modules/typescript').stripTypeScriptTypes(code, options);
   };

@@ -27,7 +27,9 @@ const ArrayPrototypePush = (array, ...values) => array.push(...values);
 const MathMax = Math.max;
 const SymbolDispose = Symbol.dispose;
 const sleep = ms => require('internal/fs/utils').os.sleep(ms);
-const core = require('internal/fs/utils');
+// Loaded when first used: a runtime without a file system (Files.empty) loads this module too.
+const lazy = name => { let loaded; return new Proxy({}, { get(target, key) { return (loaded ??= require(name))[key]; } }); };
+const core = lazy('internal/fs/utils');
 class ERR_INVALID_ARG_TYPE extends TypeError { constructor(name, expected) { super(`The "${name}" argument must be ${expected}`); this.code = 'ERR_INVALID_ARG_TYPE'; } }
 class ERR_INVALID_ARG_VALUE extends TypeError { constructor(name, value, reason = '') { super(`The argument '${name}' is invalid. ${reason}`); this.code = 'ERR_INVALID_ARG_VALUE'; } }
 ERR_INVALID_ARG_VALUE.RangeError = class extends RangeError { constructor(name, value, reason) { super(`The argument '${name}' is invalid. ${reason}`); this.code = 'ERR_INVALID_ARG_VALUE'; } };
@@ -40,7 +42,7 @@ const validateOneOf = (value, name, allowed) => { if (!allowed.includes(value)) 
 const validateString = (value, name) => { if (typeof value !== 'string') throw core.invalid(name, 'a string'); };
 const validateUint32 = (value, name) => core.integer(value, name, 0, 0xffffffff);
 const { Buffer } = require('buffer');
-const fs = require('fs');
+const fs = lazy('fs');
 const EventEmitter = require('events');
 const path = require('path');
 const { clearInterval, setInterval, setTimeout } = require('timers');
@@ -118,7 +120,7 @@ class Utf8Stream extends EventEmitter {
     fd ??= dest;
 
     validateObject(overrideFs, 'options.fs');
-    this.#fs = { ...fs, ...overrideFs };
+    this.#fs = { ...require('fs'), ...overrideFs };
     validateFunction(this.#fs.write, 'options.fs.write');
     validateFunction(this.#fs.writeSync, 'options.fs.writeSync');
     validateFunction(this.#fs.fsync, 'options.fs.fsync');

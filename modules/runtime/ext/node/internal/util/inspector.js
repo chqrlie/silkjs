@@ -43,7 +43,8 @@ function getInspectPort(inspectPort) {
 // is on (the inspector is then unavailable, so no REPL previews or completion).
 let session;
 function sendInspectorCommand(cb, onError) {
-  if (require('internal/permission').enabled()) return onError();
+  // Node's checks hasInspector first: a build without one has no session to send to.
+  if (!process.features.inspector || require('internal/permission').enabled()) return onError();
   const inspector = require('inspector');
   if (session === undefined) session = new inspector.Session();
   session.connect();

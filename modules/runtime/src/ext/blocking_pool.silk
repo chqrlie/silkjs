@@ -20,6 +20,7 @@ import silk.num.i32
 import silk.num.i64
 import silkjs.js_os_events_platform as clock
 import ext.trace_abi as trace
+import ext.thread_signals as threadSignals
 
 /// The header of one job. `next` belongs to the pool while the job is queued, running or done.
 /// `work` runs on a worker; `finish` runs on the loop thread once the loop takes the job back.
@@ -145,6 +146,8 @@ unsafe fn pop(chain: &mut Chain) -> ?*mut Job {
 }
 
 fn workerMain(shared: Arc<Shared>) -> () {
+  // Process signals go to the main thread's watch (ext/thread_signals).
+  threadSignals.blockAsynchronous()
   while true {
     let mut job = Pointer.null<Job>()
     let mut guard = shared.get().queue.lock()
@@ -225,12 +228,10 @@ impl Pool {
     let mut allocator = Allocator.systemAllocatorProvider()
     while self.threads.length() < self.size {
       let shared = self.shared.clone()
-      let thread = run NativeThread.spawn(
-        || -> () {
-          return workerMain(move shared)
-        },
-      )
-        |> Effect.provideMut<Allocator>(&mut allocator)
+      let saved = threadSignals.blockForStart()
+      let spawned = run Effect.result(NativeThread.spawn(|| -> () { return workerMain(move shared) })) |> Effect.provideMut<Allocator>(&mut allocator)
+      threadSignals.restore(move saved)
+      let thread = match move spawned { Result<JoinHandle<()>, OutOfMemoryError | SpawnError>.Success { value } => move value Result<JoinHandle<()>, OutOfMemoryError | SpawnError>.Failure { error } => { fail move error } }
       run self.threads.append(move thread) |> Effect.provideMut<Allocator>(&mut allocator)
     }
   }

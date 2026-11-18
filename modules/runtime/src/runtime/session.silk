@@ -17,13 +17,14 @@ import silkjs.js_runtime as runtime
 import silkjs.js_gc as gc
 import silkjs.js_promise as promise
 import silkjs.js_eval as evaluation
-import silkjs.js_eval_compile as flags
 import libs.core.common as common
 import libs.core.host { Services }
-import libs.core.embedder { Embedder }
+import libs.core.capabilities { Composition }
 import silk.collections.list { List }
 import silk.mem.pointer { Pointer }
 import ext.fs_async
+import ext.module_cache
+import libs.core.modules
 import ext.worker_native
 
 /// What a turn of the loop left.
@@ -38,13 +39,13 @@ pub union Turn {
 /// What runs the loop once the bootstrap has started the program.
 pub interface Driver {
   /// Turns the loop until the runtime finishes, and returns its exit status.
-  effect fn drive<'e, 'm>(self: &mut Self, runtime: &mut Runtime<'e, 'm>) -> i32 ! OutOfMemoryError | JsException ? &mut Allocator
+  effect fn drive<'e, 'm, C: Composition>(self: &mut Self, runtime: &mut Runtime<'e, 'm, C>) -> i32 ! OutOfMemoryError | JsException ? &mut Allocator
 }
 
 /// The executable's loop, and a worker thread's: Node's SpinEventLoop.
 pub struct NodeLoop {}
 impl Driver for NodeLoop {
-  effect fn drive<'e, 'm>(self: &mut Self, runtime: &mut Runtime<'e, 'm>) -> i32 ! OutOfMemoryError | JsException ? &mut Allocator {
+  effect fn drive<'e, 'm, C: Composition>(self: &mut Self, runtime: &mut Runtime<'e, 'm, C>) -> i32 ! OutOfMemoryError | JsException ? &mut Allocator {
     while true {
       match run runtime.spin() {
         Turn.Running => ()
@@ -56,8 +57,9 @@ impl Driver for NodeLoop {
 }
 
 /// A runtime whose bootstrap has run: the loop, turned one pass at a time.
-pub struct Runtime<'e, 'm> {
-  engine: &'e mut Engine<'m, Services>,
+/// `C` is the capabilities the runtime was started with (`embed.start`).
+pub struct Runtime<'e, 'm, C> {
+  engine: &'e mut Engine<'m, Services<C>>,
   context: *mut HeapHeader,
   // Borrowed: the realm keeps it until the driver returns.
   bootstrap: ValueBits,
@@ -68,8 +70,8 @@ pub struct Runtime<'e, 'm> {
   status: i32,
 }
 
-impl<'e, 'm> Runtime<'e, 'm> {
-  pub fn make(engine: &'e mut Engine<'m, Services>, context: *mut HeapHeader, bootstrap: ValueBits, keepAlive: bool, embedded: bool) -> Runtime<'e, 'm> {
+impl<'e, 'm, C: Composition> Runtime<'e, 'm, C> {
+  pub fn make(engine: &'e mut Engine<'m, Services<C>>, context: *mut HeapHeader, bootstrap: ValueBits, keepAlive: bool, embedded: bool) -> Runtime<'e, 'm, C> {
     return Runtime { engine: move engine, context: context, bootstrap: bootstrap, keepAlive: keepAlive, embedded: embedded, started: false, finished: false, status: 0 }
   }
 
@@ -212,14 +214,16 @@ impl<'e, 'm> Runtime<'e, 'm> {
   pub effect fn evaluateModule(self: &mut Self, name: &[u8], source: &[u8]) -> () ! OutOfMemoryError | JsException ? &mut Allocator {
     let context = self.context
     let memory = self.engine.memory
-    let evaluated = run evaluation.evaluate(&mut self.engine.*, memory, unsafe lendRealm(&context, context), source, name, flags.TYPE_MODULE)
-    unsafe gc.release(&mut self.engine.*, unsafe runtime.contextRuntime(context), evaluated.intoBits())
-  }
-
-  /// Gives the runtime the host's own native functions: a function the host makes with a
-  /// `NativeFunctionId.Host` id of `embedder.FIRST` or more runs `embedder.native`.
-  pub fn setEmbedder(self: &mut Self, embedder: Embedder) -> () {
-    self.engine.services.embedder = move embedder
+    let rt = unsafe runtime.contextRuntime(context)
+    // As the runtime's own entry module: compiled through the module cache, with the loader's
+    // import.meta (url, filename, dirname) for its name.
+    let compiled = run unsafe module_cache.compileModule(&mut self.engine.*, context, source, name)
+    let module = match compiled { ValueBits.Module { reference } => reference _ => Intrinsic.trap("module compiler returned non-module") }
+    let callback = self.engine.services.meta
+    let metadata = run Effect.result(unsafe modules.setMeta(&mut self.engine.*, context, module, callback, name))
+    match move metadata { Result<(), JsException>.Failure { error } => { unsafe gc.release(&mut self.engine.*, rt, compiled) fail move error } _ => () }
+    let evaluated = run evaluation.evaluateFunction(&mut self.engine.*, memory, unsafe lendRealm(&context, context), unsafe Value.adoptBits(compiled))
+    unsafe gc.release(&mut self.engine.*, rt, evaluated.intoBits())
   }
 
   /// Calls `function` with `receiver` and `arguments` from the host, as the runtime calls a
@@ -234,7 +238,7 @@ impl<'e, 'm> Runtime<'e, 'm> {
   }
 
   /// The engine and realm, for an embedder's own native calls until the embedding API covers them.
-  pub fn rawEngine(self: &mut Self) -> &mut Engine<'m, Services> { return &mut self.engine.* }
+  pub fn rawEngine(self: &mut Self) -> &mut Engine<'m, Services<C>> { return &mut self.engine.* }
   pub fn rawContext(self: &Self) -> *mut HeapHeader { return self.context }
 }
 

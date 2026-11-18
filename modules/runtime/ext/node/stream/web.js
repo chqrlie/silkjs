@@ -63,10 +63,11 @@ const {
   TextDecoderStream,
 } = require('internal/webstreams/encoding');
 
+// Without compression (Compression.empty) these are not there.
 const {
   CompressionStream,
   DecompressionStream,
-} = require('internal/webstreams/compression');
+} = require('internal/host').hasService('Compression') ? require('internal/webstreams/compression') : {};
 
 function ReadableStreamTee(stream, cloneForBranch2 = false) {
   if (!isReadableStream(stream)) {

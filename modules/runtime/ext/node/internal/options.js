@@ -387,7 +387,7 @@ function getOptionValue(name) {
     // Addons load through require only; import() of a .node file is unsupported.
     case '--experimental-addon-modules': return false;
     case '--experimental-package-map': return host.packageMap ?? '';
-    default: return startupControls.getOptionValue(name) ?? require('internal/tls/options').getOptionValue(name) ?? parsedOptionValue(name);
+    default: return startupControls.getOptionValue(name) ?? (require('internal/host').hasService('Tls') ? require('internal/tls/options').getOptionValue(name) : undefined) ?? parsedOptionValue(name);
   }
 }
 

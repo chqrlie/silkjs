@@ -1,11 +1,8 @@
-//! The record layouts of file-system results that the runtime keeps from libuv's ABI (uv_stat_t,
-//! uv_statfs_t, uv_buf_t, uv_dirent_t): Node's stat and statfs objects are built from them.
+//! libuv's stat layouts, which the `Files` operations and fs.watchFile fill (fs_ops makes them
+//! itself, with no libuv) and fs_native turns into Node's Stats. No libuv function is declared here.
 import silk.core.ownership { Copy }
-// The errno translation is Silk (uv_os), published here under libuv's name.
-pub import ext.uv_os { uv_translate_sys_error }
 pub extern "C" struct UvTimespec { pub tv_sec: isize, pub tv_nsec: isize }
 impl Copy for UvTimespec {}
-impl Copy for UvStat {}
 pub extern "C" struct UvStat {
   pub st_dev: u64,
   pub st_mode: u64,
@@ -21,6 +18,5 @@ pub extern "C" struct UvStat {
   pub st_gen: u64,
   pub st_atim: UvTimespec, pub st_mtim: UvTimespec, pub st_ctim: UvTimespec, pub st_birthtim: UvTimespec
 }
+impl Copy for UvStat {}
 pub extern "C" struct UvStatfs { pub f_type: u64, pub f_bsize: u64, pub f_blocks: u64, pub f_bfree: u64, pub f_bavail: u64, pub f_files: u64, pub f_ffree: u64, pub f_frsize: u64, pub f_spare: [u64; 3] }
-pub extern "C" struct UvBuf { pub base: ?*mut u8, pub len: usize }
-pub extern "C" struct UvDirent { pub name: *const u8, pub kind: i32 }

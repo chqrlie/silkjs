@@ -1,18 +1,8 @@
-//! Darwin/Linux LP64 system ABI, and the operating system queries of ext.uv_os. No JS is entered by these calls.
+//! Darwin/Linux LP64 system ABI, and libuv's version string. No JS is entered by these calls.
 import silk.mem.pointer { Pointer }
 import silk.mem.allocator { OutOfMemoryError }
 import silk.core.ownership { Drop }
 import silk.mem.layout { Layout }
-// The operating system queries that libuv used to answer are Silk now (uv_os), with libuv's names,
-// structures and statuses; they are published here so that the callers read as they did.
-pub import ext.uv_os {
-  CpuTimes, Cpu, Interface, Passwd, Uname, Timeval, Usage,
-  uv_cpu_info, uv_free_cpu_info, uv_interface_addresses, uv_free_interface_addresses, uv_available_parallelism,
-  uv_version_string, uv_get_free_memory, uv_get_total_memory, uv_get_constrained_memory, uv_get_available_memory,
-  uv_loadavg, uv_uptime, uv_os_gethostname, uv_os_homedir, uv_os_tmpdir, uv_exepath, uv_os_uname,
-  uv_os_get_passwd, uv_os_get_passwd2, uv_os_free_passwd, uv_os_getppid, uv_os_getpriority, uv_os_setpriority,
-  uv_getrusage, uv_getrusage_thread, uv_resident_set_memory,
-}
 static if Intrinsic.targetOperatingSystem() == "darwin" {
   pub extern "C" struct NativePasswd { pub name:*const u8, pub password:*const u8, pub uid:u32, pub gid:u32, pub change:isize, pub className:*const u8, pub gecos:*const u8, pub home:*const u8, pub shell:*const u8, pub expire:isize, pub fields:i32 }
 } else {
@@ -27,16 +17,6 @@ pub effect fn allocate(size:usize)->Allocation !OutOfMemoryError {
   let p=unsafe calloc(1,size) if Pointer.isNull<u8>(p) { fail OutOfMemoryError {} }
   return Allocation { pointer:unsafe Intrinsic.pointerRequalify<?*mut u8,*mut u8>(p) }
 }
-pub struct Cpus { pub pointer:?*mut Cpu, pub count:i32 }
-impl Drop for Cpus { fn drop(self:&mut Self)->() { unsafe uv_free_cpu_info(self.pointer,self.count) } }
-pub struct Interfaces { pub pointer:?*mut Interface, pub count:i32 }
-impl Drop for Interfaces { fn drop(self:&mut Self)->() { unsafe uv_free_interface_addresses(self.pointer,self.count) } }
-// Version queries of the libraries linked into the binary (process.versions).
-pub extern "C" struct Nghttp2Info { pub age:i32, pub versionNumber:i32, pub versionText:*const u8, pub protocolText:*const u8 }
-pub unsafe extern "C" fn OpenSSL_version(kind:i32)->*const u8
-pub unsafe extern "C" fn BrotliDecoderVersion()->u32
-pub unsafe extern "C" fn nghttp2_version(least:i32)->*mut Nghttp2Info
-pub unsafe extern "C" fn sqlite3_libversion()->*const u8
 pub unsafe extern "C" fn getuid()->u32
 pub unsafe extern "C" fn geteuid()->u32
 pub unsafe extern "C" fn getgid()->u32

@@ -318,9 +318,7 @@ static const unsigned char b103[] = {40,102,117,110,99,116,105,111,110,40,109,11
 static const unsigned char b104[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
 #embed "ext/node/internal/deps/acorn/acorn-walk/dist/walk.js" suffix(,)
 10,125,41,};
-static const unsigned char b105[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/deps/amaro/index.js" suffix(,)
-10,125,41,};
+static const unsigned char b105[] = {0};
 static const unsigned char b106[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
 #embed "ext/node/internal/deps/undici/undici.js" suffix(,)
 10,125,41,};
@@ -576,9 +574,7 @@ static const unsigned char b189[] = {40,102,117,110,99,116,105,111,110,40,109,11
 static const unsigned char b190[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
 #embed "ext/node/internal/modules/package_map.js" suffix(,)
 10,125,41,};
-static const unsigned char b191[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/modules/typescript.js" suffix(,)
-10,125,41,};
+static const unsigned char b191[] = {0};
 static const unsigned char b192[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
 #embed "ext/node/internal/modules_binding.js" suffix(,)
 10,125,41,};
@@ -607,1083 +603,1086 @@ static const unsigned char b200[] = {40,102,117,110,99,116,105,111,110,40,109,11
 #embed "ext/node/internal/os_binding.js" suffix(,)
 10,125,41,};
 static const unsigned char b201[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/path_events/abort_listener.js" suffix(,)
+#embed "ext/node/internal/os_constants.js" suffix(,)
 10,125,41,};
 static const unsigned char b202[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/path_events/constants.js" suffix(,)
+#embed "ext/node/internal/path_events/abort_listener.js" suffix(,)
 10,125,41,};
 static const unsigned char b203[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/path_events/event_target.js" suffix(,)
+#embed "ext/node/internal/path_events/constants.js" suffix(,)
 10,125,41,};
 static const unsigned char b204[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/path_events/glob.js" suffix(,)
+#embed "ext/node/internal/path_events/event_target.js" suffix(,)
 10,125,41,};
 static const unsigned char b205[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/path_events/minimatch.js" suffix(,)
+#embed "ext/node/internal/path_events/glob.js" suffix(,)
 10,125,41,};
 static const unsigned char b206[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/path_events/primordials.js" suffix(,)
+#embed "ext/node/internal/path_events/minimatch.js" suffix(,)
 10,125,41,};
 static const unsigned char b207[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/path_events/support.js" suffix(,)
+#embed "ext/node/internal/path_events/primordials.js" suffix(,)
 10,125,41,};
 static const unsigned char b208[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/path_events/symbols.js" suffix(,)
+#embed "ext/node/internal/path_events/support.js" suffix(,)
 10,125,41,};
 static const unsigned char b209[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/per_context/domexception.js" suffix(,)
+#embed "ext/node/internal/path_events/symbols.js" suffix(,)
 10,125,41,};
 static const unsigned char b210[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/per_context/messageport.js" suffix(,)
+#embed "ext/node/internal/per_context/domexception.js" suffix(,)
 10,125,41,};
 static const unsigned char b211[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/per_context/primordials.js" suffix(,)
+#embed "ext/node/internal/per_context/messageport.js" suffix(,)
 10,125,41,};
 static const unsigned char b212[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/perf/event_loop_delay.js" suffix(,)
+#embed "ext/node/internal/per_context/primordials.js" suffix(,)
 10,125,41,};
 static const unsigned char b213[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/perf/observe.js" suffix(,)
+#embed "ext/node/internal/perf/event_loop_delay.js" suffix(,)
 10,125,41,};
 static const unsigned char b214[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/perf_observers.js" suffix(,)
+#embed "ext/node/internal/perf/observe.js" suffix(,)
 10,125,41,};
 static const unsigned char b215[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/performance_binding.js" suffix(,)
+#embed "ext/node/internal/perf_observers.js" suffix(,)
 10,125,41,};
 static const unsigned char b216[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/permission.js" suffix(,)
+#embed "ext/node/internal/performance_binding.js" suffix(,)
 10,125,41,};
 static const unsigned char b217[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/postgres_rows.js" suffix(,)
+#embed "ext/node/internal/permission.js" suffix(,)
 10,125,41,};
 static const unsigned char b218[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/priority_queue.js" suffix(,)
+#embed "ext/node/internal/postgres_rows.js" suffix(,)
 10,125,41,};
 static const unsigned char b219[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/process/execution.js" suffix(,)
+#embed "ext/node/internal/priority_queue.js" suffix(,)
 10,125,41,};
 static const unsigned char b220[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/process/per_thread.js" suffix(,)
+#embed "ext/node/internal/process/execution.js" suffix(,)
 10,125,41,};
 static const unsigned char b221[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/process/pre_execution.js" suffix(,)
+#embed "ext/node/internal/process/per_thread.js" suffix(,)
 10,125,41,};
 static const unsigned char b222[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/process/task_queues.js" suffix(,)
+#embed "ext/node/internal/process/pre_execution.js" suffix(,)
 10,125,41,};
 static const unsigned char b223[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/process/title.js" suffix(,)
+#embed "ext/node/internal/process/task_queues.js" suffix(,)
 10,125,41,};
 static const unsigned char b224[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/process/worker_thread_only.js" suffix(,)
+#embed "ext/node/internal/process/title.js" suffix(,)
 10,125,41,};
 static const unsigned char b225[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/process_finalization.js" suffix(,)
+#embed "ext/node/internal/process/worker_thread_only.js" suffix(,)
 10,125,41,};
 static const unsigned char b226[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/process_native.js" suffix(,)
+#embed "ext/node/internal/process_finalization.js" suffix(,)
 10,125,41,};
 static const unsigned char b227[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/process_report.js" suffix(,)
+#embed "ext/node/internal/process_native.js" suffix(,)
 10,125,41,};
 static const unsigned char b228[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/process_signals.js" suffix(,)
+#embed "ext/node/internal/process_report.js" suffix(,)
 10,125,41,};
 static const unsigned char b229[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/profiler_binding.js" suffix(,)
+#embed "ext/node/internal/process_signals.js" suffix(,)
 10,125,41,};
 static const unsigned char b230[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/promise_hooks.js" suffix(,)
+#embed "ext/node/internal/profiler_binding.js" suffix(,)
 10,125,41,};
 static const unsigned char b231[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/querystring.js" suffix(,)
+#embed "ext/node/internal/promise_hooks.js" suffix(,)
 10,125,41,};
 static const unsigned char b232[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/readline/callbacks.js" suffix(,)
+#embed "ext/node/internal/querystring.js" suffix(,)
 10,125,41,};
 static const unsigned char b233[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/readline/emitKeypressEvents.js" suffix(,)
+#embed "ext/node/internal/readline/callbacks.js" suffix(,)
 10,125,41,};
 static const unsigned char b234[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/readline/interface.js" suffix(,)
+#embed "ext/node/internal/readline/emitKeypressEvents.js" suffix(,)
 10,125,41,};
 static const unsigned char b235[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/readline/promises.js" suffix(,)
+#embed "ext/node/internal/readline/interface.js" suffix(,)
 10,125,41,};
 static const unsigned char b236[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/readline/utils.js" suffix(,)
+#embed "ext/node/internal/readline/promises.js" suffix(,)
 10,125,41,};
 static const unsigned char b237[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/readline/width.js" suffix(,)
+#embed "ext/node/internal/readline/utils.js" suffix(,)
 10,125,41,};
 static const unsigned char b238[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/readline/width_data.js" suffix(,)
+#embed "ext/node/internal/readline/width.js" suffix(,)
 10,125,41,};
 static const unsigned char b239[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/rejections.js" suffix(,)
+#embed "ext/node/internal/readline/width_data.js" suffix(,)
 10,125,41,};
 static const unsigned char b240[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/repl/await.js" suffix(,)
+#embed "ext/node/internal/rejections.js" suffix(,)
 10,125,41,};
 static const unsigned char b241[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/repl/completion.js" suffix(,)
+#embed "ext/node/internal/repl/await.js" suffix(,)
 10,125,41,};
 static const unsigned char b242[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/repl/history.js" suffix(,)
+#embed "ext/node/internal/repl/completion.js" suffix(,)
 10,125,41,};
 static const unsigned char b243[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/repl/utils.js" suffix(,)
+#embed "ext/node/internal/repl/history.js" suffix(,)
 10,125,41,};
 static const unsigned char b244[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/repl.js" suffix(,)
+#embed "ext/node/internal/repl/utils.js" suffix(,)
 10,125,41,};
 static const unsigned char b245[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/sea.js" suffix(,)
+#embed "ext/node/internal/repl.js" suffix(,)
 10,125,41,};
 static const unsigned char b246[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/serialization/v8.js" suffix(,)
+#embed "ext/node/internal/sea.js" suffix(,)
 10,125,41,};
 static const unsigned char b247[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/shadow_realm.js" suffix(,)
+#embed "ext/node/internal/serialization/v8.js" suffix(,)
 10,125,41,};
 static const unsigned char b248[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/signal_wrap.js" suffix(,)
+#embed "ext/node/internal/shadow_realm.js" suffix(,)
 10,125,41,};
 static const unsigned char b249[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/socket_list.js" suffix(,)
+#embed "ext/node/internal/signal_wrap.js" suffix(,)
 10,125,41,};
 static const unsigned char b250[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/socketaddress.js" suffix(,)
+#embed "ext/node/internal/socket_list.js" suffix(,)
 10,125,41,};
 static const unsigned char b251[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/source_map/source_map.js" suffix(,)
+#embed "ext/node/internal/socketaddress.js" suffix(,)
 10,125,41,};
 static const unsigned char b252[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/source_map/source_map_cache.js" suffix(,)
+#embed "ext/node/internal/source_map/source_map.js" suffix(,)
 10,125,41,};
 static const unsigned char b253[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/source_maps.js" suffix(,)
+#embed "ext/node/internal/source_map/source_map_cache.js" suffix(,)
 10,125,41,};
 static const unsigned char b254[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/sqlite/database.js" suffix(,)
+#embed "ext/node/internal/source_maps.js" suffix(,)
 10,125,41,};
 static const unsigned char b255[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/sqlite/shared.js" suffix(,)
+#embed "ext/node/internal/sqlite/database.js" suffix(,)
 10,125,41,};
 static const unsigned char b256[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/sqlite/statement.js" suffix(,)
+#embed "ext/node/internal/sqlite/shared.js" suffix(,)
 10,125,41,};
 static const unsigned char b257[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/startup_controls.js" suffix(,)
+#embed "ext/node/internal/sqlite/statement.js" suffix(,)
 10,125,41,};
 static const unsigned char b258[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/stdio.js" suffix(,)
+#embed "ext/node/internal/startup_controls.js" suffix(,)
 10,125,41,};
 static const unsigned char b259[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/stream_base_commons.js" suffix(,)
+#embed "ext/node/internal/stdio.js" suffix(,)
 10,125,41,};
 static const unsigned char b260[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/streams/add-abort-signal.js" suffix(,)
+#embed "ext/node/internal/stream_base_commons.js" suffix(,)
 10,125,41,};
 static const unsigned char b261[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/streams/compose.js" suffix(,)
+#embed "ext/node/internal/streams/add-abort-signal.js" suffix(,)
 10,125,41,};
 static const unsigned char b262[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/streams/destroy.js" suffix(,)
+#embed "ext/node/internal/streams/compose.js" suffix(,)
 10,125,41,};
 static const unsigned char b263[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/streams/duplex.js" suffix(,)
+#embed "ext/node/internal/streams/destroy.js" suffix(,)
 10,125,41,};
 static const unsigned char b264[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/streams/duplexify.js" suffix(,)
+#embed "ext/node/internal/streams/duplex.js" suffix(,)
 10,125,41,};
 static const unsigned char b265[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/streams/duplexpair.js" suffix(,)
+#embed "ext/node/internal/streams/duplexify.js" suffix(,)
 10,125,41,};
 static const unsigned char b266[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/streams/end-of-stream.js" suffix(,)
+#embed "ext/node/internal/streams/duplexpair.js" suffix(,)
 10,125,41,};
 static const unsigned char b267[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/streams/fast-utf8-stream.js" suffix(,)
+#embed "ext/node/internal/streams/end-of-stream.js" suffix(,)
 10,125,41,};
 static const unsigned char b268[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/streams/from.js" suffix(,)
+#embed "ext/node/internal/streams/fast-utf8-stream.js" suffix(,)
 10,125,41,};
 static const unsigned char b269[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/streams/iter/broadcast.js" suffix(,)
+#embed "ext/node/internal/streams/from.js" suffix(,)
 10,125,41,};
 static const unsigned char b270[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/streams/iter/classic.js" suffix(,)
+#embed "ext/node/internal/streams/iter/broadcast.js" suffix(,)
 10,125,41,};
 static const unsigned char b271[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/streams/iter/compression.js" suffix(,)
+#embed "ext/node/internal/streams/iter/classic.js" suffix(,)
 10,125,41,};
 static const unsigned char b272[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/streams/iter/consumers.js" suffix(,)
+#embed "ext/node/internal/streams/iter/compression.js" suffix(,)
 10,125,41,};
 static const unsigned char b273[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/streams/iter/duplex.js" suffix(,)
+#embed "ext/node/internal/streams/iter/consumers.js" suffix(,)
 10,125,41,};
 static const unsigned char b274[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/streams/iter/from.js" suffix(,)
+#embed "ext/node/internal/streams/iter/duplex.js" suffix(,)
 10,125,41,};
 static const unsigned char b275[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/streams/iter/primordials.js" suffix(,)
+#embed "ext/node/internal/streams/iter/from.js" suffix(,)
 10,125,41,};
 static const unsigned char b276[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/streams/iter/pull.js" suffix(,)
+#embed "ext/node/internal/streams/iter/primordials.js" suffix(,)
 10,125,41,};
 static const unsigned char b277[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/streams/iter/push.js" suffix(,)
+#embed "ext/node/internal/streams/iter/pull.js" suffix(,)
 10,125,41,};
 static const unsigned char b278[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/streams/iter/ringbuffer.js" suffix(,)
+#embed "ext/node/internal/streams/iter/push.js" suffix(,)
 10,125,41,};
 static const unsigned char b279[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/streams/iter/share.js" suffix(,)
+#embed "ext/node/internal/streams/iter/ringbuffer.js" suffix(,)
 10,125,41,};
 static const unsigned char b280[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/streams/iter/support.js" suffix(,)
+#embed "ext/node/internal/streams/iter/share.js" suffix(,)
 10,125,41,};
 static const unsigned char b281[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/streams/iter/transform.js" suffix(,)
+#embed "ext/node/internal/streams/iter/support.js" suffix(,)
 10,125,41,};
 static const unsigned char b282[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/streams/iter/types.js" suffix(,)
+#embed "ext/node/internal/streams/iter/transform.js" suffix(,)
 10,125,41,};
 static const unsigned char b283[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/streams/iter/utils.js" suffix(,)
+#embed "ext/node/internal/streams/iter/types.js" suffix(,)
 10,125,41,};
 static const unsigned char b284[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/streams/lazy_transform.js" suffix(,)
+#embed "ext/node/internal/streams/iter/utils.js" suffix(,)
 10,125,41,};
 static const unsigned char b285[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/streams/legacy.js" suffix(,)
+#embed "ext/node/internal/streams/lazy_transform.js" suffix(,)
 10,125,41,};
 static const unsigned char b286[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/streams/operators.js" suffix(,)
+#embed "ext/node/internal/streams/legacy.js" suffix(,)
 10,125,41,};
 static const unsigned char b287[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/streams/passthrough.js" suffix(,)
+#embed "ext/node/internal/streams/operators.js" suffix(,)
 10,125,41,};
 static const unsigned char b288[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/streams/pipeline.js" suffix(,)
+#embed "ext/node/internal/streams/passthrough.js" suffix(,)
 10,125,41,};
 static const unsigned char b289[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/streams/primordials.js" suffix(,)
+#embed "ext/node/internal/streams/pipeline.js" suffix(,)
 10,125,41,};
 static const unsigned char b290[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/streams/readable.js" suffix(,)
+#embed "ext/node/internal/streams/primordials.js" suffix(,)
 10,125,41,};
 static const unsigned char b291[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/streams/state.js" suffix(,)
+#embed "ext/node/internal/streams/readable.js" suffix(,)
 10,125,41,};
 static const unsigned char b292[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/streams/support.js" suffix(,)
+#embed "ext/node/internal/streams/state.js" suffix(,)
 10,125,41,};
 static const unsigned char b293[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/streams/transform.js" suffix(,)
+#embed "ext/node/internal/streams/support.js" suffix(,)
 10,125,41,};
 static const unsigned char b294[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/streams/utils.js" suffix(,)
+#embed "ext/node/internal/streams/transform.js" suffix(,)
 10,125,41,};
 static const unsigned char b295[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/streams/web.js" suffix(,)
+#embed "ext/node/internal/streams/utils.js" suffix(,)
 10,125,41,};
 static const unsigned char b296[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/streams/writable.js" suffix(,)
+#embed "ext/node/internal/streams/web.js" suffix(,)
 10,125,41,};
 static const unsigned char b297[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/test/binding.js" suffix(,)
+#embed "ext/node/internal/streams/writable.js" suffix(,)
 10,125,41,};
 static const unsigned char b298[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/test/transfer.js" suffix(,)
+#embed "ext/node/internal/test/binding.js" suffix(,)
 10,125,41,};
 static const unsigned char b299[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/test_runner/assert.js" suffix(,)
+#embed "ext/node/internal/test/transfer.js" suffix(,)
 10,125,41,};
 static const unsigned char b300[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/test_runner/coverage.js" suffix(,)
+#embed "ext/node/internal/test_runner/assert.js" suffix(,)
 10,125,41,};
 static const unsigned char b301[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/test_runner/harness.js" suffix(,)
+#embed "ext/node/internal/test_runner/coverage.js" suffix(,)
 10,125,41,};
 static const unsigned char b302[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/test_runner/mock/loader.js" suffix(,)
+#embed "ext/node/internal/test_runner/harness.js" suffix(,)
 10,125,41,};
 static const unsigned char b303[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/test_runner/mock/mock.js" suffix(,)
+#embed "ext/node/internal/test_runner/mock/loader.js" suffix(,)
 10,125,41,};
 static const unsigned char b304[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/test_runner/mock/mock_timers.js" suffix(,)
+#embed "ext/node/internal/test_runner/mock/mock.js" suffix(,)
 10,125,41,};
 static const unsigned char b305[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/test_runner/reporter/dot.js" suffix(,)
+#embed "ext/node/internal/test_runner/mock/mock_timers.js" suffix(,)
 10,125,41,};
 static const unsigned char b306[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/test_runner/reporter/junit.js" suffix(,)
+#embed "ext/node/internal/test_runner/reporter/dot.js" suffix(,)
 10,125,41,};
 static const unsigned char b307[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/test_runner/reporter/lcov.js" suffix(,)
+#embed "ext/node/internal/test_runner/reporter/junit.js" suffix(,)
 10,125,41,};
 static const unsigned char b308[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/test_runner/reporter/rerun.js" suffix(,)
+#embed "ext/node/internal/test_runner/reporter/lcov.js" suffix(,)
 10,125,41,};
 static const unsigned char b309[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/test_runner/reporter/spec.js" suffix(,)
+#embed "ext/node/internal/test_runner/reporter/rerun.js" suffix(,)
 10,125,41,};
 static const unsigned char b310[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/test_runner/reporter/tap.js" suffix(,)
+#embed "ext/node/internal/test_runner/reporter/spec.js" suffix(,)
 10,125,41,};
 static const unsigned char b311[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/test_runner/reporter/utils.js" suffix(,)
+#embed "ext/node/internal/test_runner/reporter/tap.js" suffix(,)
 10,125,41,};
 static const unsigned char b312[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/test_runner/reporter/v8-serializer.js" suffix(,)
+#embed "ext/node/internal/test_runner/reporter/utils.js" suffix(,)
 10,125,41,};
 static const unsigned char b313[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/test_runner/runner.js" suffix(,)
+#embed "ext/node/internal/test_runner/reporter/v8-serializer.js" suffix(,)
 10,125,41,};
 static const unsigned char b314[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/test_runner/snapshot.js" suffix(,)
+#embed "ext/node/internal/test_runner/runner.js" suffix(,)
 10,125,41,};
 static const unsigned char b315[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/test_runner/tag_filter.js" suffix(,)
+#embed "ext/node/internal/test_runner/snapshot.js" suffix(,)
 10,125,41,};
 static const unsigned char b316[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/test_runner/test.js" suffix(,)
+#embed "ext/node/internal/test_runner/tag_filter.js" suffix(,)
 10,125,41,};
 static const unsigned char b317[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/test_runner/tests_stream.js" suffix(,)
+#embed "ext/node/internal/test_runner/test.js" suffix(,)
 10,125,41,};
 static const unsigned char b318[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/test_runner/utils.js" suffix(,)
+#embed "ext/node/internal/test_runner/tests_stream.js" suffix(,)
 10,125,41,};
 static const unsigned char b319[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/timers.js" suffix(,)
+#embed "ext/node/internal/test_runner/utils.js" suffix(,)
 10,125,41,};
 static const unsigned char b320[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/timers_binding.js" suffix(,)
+#embed "ext/node/internal/timers.js" suffix(,)
 10,125,41,};
 static const unsigned char b321[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/tls/binding.js" suffix(,)
+#embed "ext/node/internal/timers_binding.js" suffix(,)
 10,125,41,};
 static const unsigned char b322[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/tls/context.js" suffix(,)
+#embed "ext/node/internal/tls/binding.js" suffix(,)
 10,125,41,};
 static const unsigned char b323[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/tls/errors.js" suffix(,)
+#embed "ext/node/internal/tls/context.js" suffix(,)
 10,125,41,};
 static const unsigned char b324[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/tls/identity.js" suffix(,)
+#embed "ext/node/internal/tls/errors.js" suffix(,)
 10,125,41,};
 static const unsigned char b325[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/tls/options.js" suffix(,)
+#embed "ext/node/internal/tls/identity.js" suffix(,)
 10,125,41,};
 static const unsigned char b326[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/tls/roots.js" suffix(,)
+#embed "ext/node/internal/tls/options.js" suffix(,)
 10,125,41,};
 static const unsigned char b327[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/tls/server.js" suffix(,)
+#embed "ext/node/internal/tls/roots.js" suffix(,)
 10,125,41,};
 static const unsigned char b328[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/tls/transport.js" suffix(,)
+#embed "ext/node/internal/tls/server.js" suffix(,)
 10,125,41,};
 static const unsigned char b329[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/trace_events.js" suffix(,)
+#embed "ext/node/internal/tls/transport.js" suffix(,)
 10,125,41,};
 static const unsigned char b330[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/trace_events_binding.js" suffix(,)
+#embed "ext/node/internal/trace_events.js" suffix(,)
 10,125,41,};
 static const unsigned char b331[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/tty/colors.js" suffix(,)
+#embed "ext/node/internal/trace_events_binding.js" suffix(,)
 10,125,41,};
 static const unsigned char b332[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/tty/write.js" suffix(,)
+#embed "ext/node/internal/tty/colors.js" suffix(,)
 10,125,41,};
 static const unsigned char b333[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/url.js" suffix(,)
+#embed "ext/node/internal/tty/write.js" suffix(,)
 10,125,41,};
 static const unsigned char b334[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/url_binding.js" suffix(,)
+#embed "ext/node/internal/url.js" suffix(,)
 10,125,41,};
 static const unsigned char b335[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/util/binding.js" suffix(,)
+#embed "ext/node/internal/url_binding.js" suffix(,)
 10,125,41,};
 static const unsigned char b336[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/util/colors.js" suffix(,)
+#embed "ext/node/internal/util/binding.js" suffix(,)
 10,125,41,};
 static const unsigned char b337[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/util/comparisons.js" suffix(,)
+#embed "ext/node/internal/util/colors.js" suffix(,)
 10,125,41,};
 static const unsigned char b338[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/util/debuglog.js" suffix(,)
+#embed "ext/node/internal/util/comparisons.js" suffix(,)
 10,125,41,};
 static const unsigned char b339[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/util/inspect.js" suffix(,)
+#embed "ext/node/internal/util/debuglog.js" suffix(,)
 10,125,41,};
 static const unsigned char b340[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/util/inspector.js" suffix(,)
+#embed "ext/node/internal/util/inspect.js" suffix(,)
 10,125,41,};
 static const unsigned char b341[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/util/types.js" suffix(,)
+#embed "ext/node/internal/util/inspector.js" suffix(,)
 10,125,41,};
 static const unsigned char b342[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/util.js" suffix(,)
+#embed "ext/node/internal/util/types.js" suffix(,)
 10,125,41,};
 static const unsigned char b343[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/util_public/debounce.js" suffix(,)
+#embed "ext/node/internal/util.js" suffix(,)
 10,125,41,};
 static const unsigned char b344[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/util_public/diff.js" suffix(,)
+#embed "ext/node/internal/util_public/debounce.js" suffix(,)
 10,125,41,};
 static const unsigned char b345[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/util_public/mime.js" suffix(,)
+#embed "ext/node/internal/util_public/diff.js" suffix(,)
 10,125,41,};
 static const unsigned char b346[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/util_public/myers_diff.js" suffix(,)
+#embed "ext/node/internal/util_public/mime.js" suffix(,)
 10,125,41,};
 static const unsigned char b347[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/util_public/parse_args.js" suffix(,)
+#embed "ext/node/internal/util_public/myers_diff.js" suffix(,)
 10,125,41,};
 static const unsigned char b348[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/util_public/parse_args_utils.js" suffix(,)
+#embed "ext/node/internal/util_public/parse_args.js" suffix(,)
 10,125,41,};
 static const unsigned char b349[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/util_public/parse_env.js" suffix(,)
+#embed "ext/node/internal/util_public/parse_args_utils.js" suffix(,)
 10,125,41,};
 static const unsigned char b350[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/util_public/primordials.js" suffix(,)
+#embed "ext/node/internal/util_public/parse_env.js" suffix(,)
 10,125,41,};
 static const unsigned char b351[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/util_public/support.js" suffix(,)
+#embed "ext/node/internal/util_public/primordials.js" suffix(,)
 10,125,41,};
 static const unsigned char b352[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/util_public/system.js" suffix(,)
+#embed "ext/node/internal/util_public/support.js" suffix(,)
 10,125,41,};
 static const unsigned char b353[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/util_public/throttle.js" suffix(,)
+#embed "ext/node/internal/util_public/system.js" suffix(,)
 10,125,41,};
 static const unsigned char b354[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/uv_binding.js" suffix(,)
+#embed "ext/node/internal/util_public/throttle.js" suffix(,)
 10,125,41,};
 static const unsigned char b355[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/v8/startup_snapshot.js" suffix(,)
+#embed "ext/node/internal/uv_binding.js" suffix(,)
 10,125,41,};
 static const unsigned char b356[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/validators.js" suffix(,)
+#embed "ext/node/internal/v8/startup_snapshot.js" suffix(,)
 10,125,41,};
 static const unsigned char b357[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/vm/module.js" suffix(,)
+#embed "ext/node/internal/validators.js" suffix(,)
 10,125,41,};
 static const unsigned char b358[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/vm/module_wrap.js" suffix(,)
+#embed "ext/node/internal/vm/module.js" suffix(,)
 10,125,41,};
 static const unsigned char b359[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/vm.js" suffix(,)
+#embed "ext/node/internal/vm/module_wrap.js" suffix(,)
 10,125,41,};
 static const unsigned char b360[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/watch_mode/dependencies.js" suffix(,)
+#embed "ext/node/internal/vm.js" suffix(,)
 10,125,41,};
 static const unsigned char b361[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/watch_mode/files_watcher.js" suffix(,)
+#embed "ext/node/internal/watch_mode/dependencies.js" suffix(,)
 10,125,41,};
 static const unsigned char b362[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/webidl.js" suffix(,)
+#embed "ext/node/internal/watch_mode/files_watcher.js" suffix(,)
 10,125,41,};
 static const unsigned char b363[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/webstreams/adapters.js" suffix(,)
+#embed "ext/node/internal/webidl.js" suffix(,)
 10,125,41,};
 static const unsigned char b364[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/webstreams/compression.js" suffix(,)
+#embed "ext/node/internal/webstreams/adapters.js" suffix(,)
 10,125,41,};
 static const unsigned char b365[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/webstreams/encoding.js" suffix(,)
+#embed "ext/node/internal/webstreams/compression.js" suffix(,)
 10,125,41,};
 static const unsigned char b366[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/webstreams/queuingstrategies.js" suffix(,)
+#embed "ext/node/internal/webstreams/encoding.js" suffix(,)
 10,125,41,};
 static const unsigned char b367[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/webstreams/readablestream.js" suffix(,)
+#embed "ext/node/internal/webstreams/queuingstrategies.js" suffix(,)
 10,125,41,};
 static const unsigned char b368[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/webstreams/support.js" suffix(,)
+#embed "ext/node/internal/webstreams/readablestream.js" suffix(,)
 10,125,41,};
 static const unsigned char b369[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/webstreams/transfer.js" suffix(,)
+#embed "ext/node/internal/webstreams/support.js" suffix(,)
 10,125,41,};
 static const unsigned char b370[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/webstreams/transformstream.js" suffix(,)
+#embed "ext/node/internal/webstreams/transfer.js" suffix(,)
 10,125,41,};
 static const unsigned char b371[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/webstreams/util.js" suffix(,)
+#embed "ext/node/internal/webstreams/transformstream.js" suffix(,)
 10,125,41,};
 static const unsigned char b372[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/webstreams/writablestream.js" suffix(,)
+#embed "ext/node/internal/webstreams/util.js" suffix(,)
 10,125,41,};
 static const unsigned char b373[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/worker/broadcast.js" suffix(,)
+#embed "ext/node/internal/webstreams/writablestream.js" suffix(,)
 10,125,41,};
 static const unsigned char b374[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/worker/clone.js" suffix(,)
+#embed "ext/node/internal/worker/broadcast.js" suffix(,)
 10,125,41,};
 static const unsigned char b375[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/worker/clone_dom_exception.js" suffix(,)
+#embed "ext/node/internal/worker/clone.js" suffix(,)
 10,125,41,};
 static const unsigned char b376[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/worker/io.js" suffix(,)
+#embed "ext/node/internal/worker/clone_dom_exception.js" suffix(,)
 10,125,41,};
 static const unsigned char b377[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/worker/js_transferable.js" suffix(,)
+#embed "ext/node/internal/worker/io.js" suffix(,)
 10,125,41,};
 static const unsigned char b378[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/worker/locks.js" suffix(,)
+#embed "ext/node/internal/worker/js_transferable.js" suffix(,)
 10,125,41,};
 static const unsigned char b379[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/worker/messaging.js" suffix(,)
+#embed "ext/node/internal/worker/locks.js" suffix(,)
 10,125,41,};
 static const unsigned char b380[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/worker/ports.js" suffix(,)
+#embed "ext/node/internal/worker/messaging.js" suffix(,)
 10,125,41,};
 static const unsigned char b381[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/worker/profiles.js" suffix(,)
+#embed "ext/node/internal/worker/ports.js" suffix(,)
 10,125,41,};
 static const unsigned char b382[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/worker.js" suffix(,)
+#embed "ext/node/internal/worker/profiles.js" suffix(,)
 10,125,41,};
 static const unsigned char b383[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/internal/ws.js" suffix(,)
+#embed "ext/node/internal/worker.js" suffix(,)
 10,125,41,};
 static const unsigned char b384[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/module.js" suffix(,)
+#embed "ext/node/internal/ws.js" suffix(,)
 10,125,41,};
 static const unsigned char b385[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/net.js" suffix(,)
+#embed "ext/node/module.js" suffix(,)
 10,125,41,};
 static const unsigned char b386[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/os.js" suffix(,)
+#embed "ext/node/net.js" suffix(,)
 10,125,41,};
 static const unsigned char b387[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/path/posix.js" suffix(,)
+#embed "ext/node/os.js" suffix(,)
 10,125,41,};
 static const unsigned char b388[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/path/win32.js" suffix(,)
+#embed "ext/node/path/posix.js" suffix(,)
 10,125,41,};
 static const unsigned char b389[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/path.js" suffix(,)
+#embed "ext/node/path/win32.js" suffix(,)
 10,125,41,};
 static const unsigned char b390[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/perf_hooks.js" suffix(,)
+#embed "ext/node/path.js" suffix(,)
 10,125,41,};
 static const unsigned char b391[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/punycode.js" suffix(,)
+#embed "ext/node/perf_hooks.js" suffix(,)
 10,125,41,};
 static const unsigned char b392[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/querystring.js" suffix(,)
+#embed "ext/node/punycode.js" suffix(,)
 10,125,41,};
 static const unsigned char b393[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/readline/promises.js" suffix(,)
+#embed "ext/node/querystring.js" suffix(,)
 10,125,41,};
 static const unsigned char b394[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/readline.js" suffix(,)
+#embed "ext/node/readline/promises.js" suffix(,)
 10,125,41,};
 static const unsigned char b395[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/repl.js" suffix(,)
+#embed "ext/node/readline.js" suffix(,)
 10,125,41,};
 static const unsigned char b396[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/sea.js" suffix(,)
+#embed "ext/node/repl.js" suffix(,)
 10,125,41,};
 static const unsigned char b397[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/sqlite.js" suffix(,)
+#embed "ext/node/sea.js" suffix(,)
 10,125,41,};
 static const unsigned char b398[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/stream/consumers.js" suffix(,)
+#embed "ext/node/sqlite.js" suffix(,)
 10,125,41,};
 static const unsigned char b399[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/stream/iter.js" suffix(,)
+#embed "ext/node/stream/consumers.js" suffix(,)
 10,125,41,};
 static const unsigned char b400[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/stream/promises.js" suffix(,)
+#embed "ext/node/stream/iter.js" suffix(,)
 10,125,41,};
 static const unsigned char b401[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/stream/web.js" suffix(,)
+#embed "ext/node/stream/promises.js" suffix(,)
 10,125,41,};
 static const unsigned char b402[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/stream.js" suffix(,)
+#embed "ext/node/stream/web.js" suffix(,)
 10,125,41,};
 static const unsigned char b403[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/string_decoder.js" suffix(,)
+#embed "ext/node/stream.js" suffix(,)
 10,125,41,};
 static const unsigned char b404[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/sys.js" suffix(,)
+#embed "ext/node/string_decoder.js" suffix(,)
 10,125,41,};
 static const unsigned char b405[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/test/reporters.js" suffix(,)
+#embed "ext/node/sys.js" suffix(,)
 10,125,41,};
 static const unsigned char b406[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/test.js" suffix(,)
+#embed "ext/node/test/reporters.js" suffix(,)
 10,125,41,};
 static const unsigned char b407[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/timers/promises.js" suffix(,)
+#embed "ext/node/test.js" suffix(,)
 10,125,41,};
 static const unsigned char b408[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/timers.js" suffix(,)
+#embed "ext/node/timers/promises.js" suffix(,)
 10,125,41,};
 static const unsigned char b409[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/tls.js" suffix(,)
+#embed "ext/node/timers.js" suffix(,)
 10,125,41,};
 static const unsigned char b410[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/trace_events.js" suffix(,)
+#embed "ext/node/tls.js" suffix(,)
 10,125,41,};
 static const unsigned char b411[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/tty.js" suffix(,)
+#embed "ext/node/trace_events.js" suffix(,)
 10,125,41,};
 static const unsigned char b412[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/url.js" suffix(,)
+#embed "ext/node/tty.js" suffix(,)
 10,125,41,};
 static const unsigned char b413[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/util/types.js" suffix(,)
+#embed "ext/node/url.js" suffix(,)
 10,125,41,};
 static const unsigned char b414[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/util.js" suffix(,)
+#embed "ext/node/util/types.js" suffix(,)
 10,125,41,};
 static const unsigned char b415[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/v8.js" suffix(,)
+#embed "ext/node/util.js" suffix(,)
 10,125,41,};
 static const unsigned char b416[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/vm.js" suffix(,)
+#embed "ext/node/v8.js" suffix(,)
 10,125,41,};
 static const unsigned char b417[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/wasi.js" suffix(,)
+#embed "ext/node/vm.js" suffix(,)
 10,125,41,};
 static const unsigned char b418[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/worker_threads.js" suffix(,)
+#embed "ext/node/wasi.js" suffix(,)
 10,125,41,};
 static const unsigned char b419[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/zlib/iter.js" suffix(,)
+#embed "ext/node/worker_threads.js" suffix(,)
 10,125,41,};
 static const unsigned char b420[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/node/zlib.js" suffix(,)
+#embed "ext/node/zlib/iter.js" suffix(,)
 10,125,41,};
 static const unsigned char b421[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/blob.js" suffix(,)
+#embed "ext/node/zlib.js" suffix(,)
 10,125,41,};
 static const unsigned char b422[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/compression.js" suffix(,)
+#embed "ext/web/blob.js" suffix(,)
 10,125,41,};
 static const unsigned char b423[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/eventsource/parser.js" suffix(,)
+#embed "ext/web/compression.js" suffix(,)
 10,125,41,};
 static const unsigned char b424[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/eventsource.js" suffix(,)
+#embed "ext/web/eventsource/parser.js" suffix(,)
 10,125,41,};
 static const unsigned char b425[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/fetch/body.js" suffix(,)
+#embed "ext/web/eventsource.js" suffix(,)
 10,125,41,};
 static const unsigned char b426[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/fetch/client.js" suffix(,)
+#embed "ext/web/fetch/body.js" suffix(,)
 10,125,41,};
 static const unsigned char b427[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/fetch/dispatcher.js" suffix(,)
+#embed "ext/web/fetch/client.js" suffix(,)
 10,125,41,};
 static const unsigned char b428[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/fetch/formdata.js" suffix(,)
+#embed "ext/web/fetch/dispatcher.js" suffix(,)
 10,125,41,};
 static const unsigned char b429[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/fetch/headers.js" suffix(,)
+#embed "ext/web/fetch/formdata.js" suffix(,)
 10,125,41,};
 static const unsigned char b430[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/fetch/message.js" suffix(,)
+#embed "ext/web/fetch/headers.js" suffix(,)
 10,125,41,};
 static const unsigned char b431[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/fetch/transport.js" suffix(,)
+#embed "ext/web/fetch/message.js" suffix(,)
 10,125,41,};
 static const unsigned char b432[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/fetch.js" suffix(,)
+#embed "ext/web/fetch/transport.js" suffix(,)
 10,125,41,};
 static const unsigned char b433[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/index.js" suffix(,)
+#embed "ext/web/fetch.js" suffix(,)
 10,125,41,};
 static const unsigned char b434[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/serve.js" suffix(,)
+#embed "ext/web/index.js" suffix(,)
 10,125,41,};
 static const unsigned char b435[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/storage.js" suffix(,)
+#embed "ext/web/serve.js" suffix(,)
 10,125,41,};
 static const unsigned char b436[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/streams.js" suffix(,)
+#embed "ext/web/storage.js" suffix(,)
 10,125,41,};
 static const unsigned char b437[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/structured_clone.js" suffix(,)
+#embed "ext/web/streams.js" suffix(,)
 10,125,41,};
 static const unsigned char b438[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/urlpattern.js" suffix(,)
+#embed "ext/web/structured_clone.js" suffix(,)
 10,125,41,};
 static const unsigned char b439[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/big5.cp.js" suffix(,)
+#embed "ext/web/urlpattern.js" suffix(,)
 10,125,41,};
 static const unsigned char b440[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/euc-kr.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/big5.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b441[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/gb18030.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/euc-kr.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b442[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/gb18030.ranges.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/gb18030.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b443[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/ibm866.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/gb18030.ranges.js" suffix(,)
 10,125,41,};
 static const unsigned char b444[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/iso-2022-jp-katakana.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/ibm866.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b445[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/iso-8859-10.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/iso-2022-jp-katakana.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b446[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/iso-8859-13.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/iso-8859-10.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b447[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/iso-8859-14.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/iso-8859-13.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b448[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/iso-8859-15.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/iso-8859-14.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b449[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/iso-8859-16.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/iso-8859-15.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b450[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/iso-8859-2.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/iso-8859-16.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b451[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/iso-8859-3.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/iso-8859-2.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b452[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/iso-8859-4.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/iso-8859-3.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b453[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/iso-8859-5.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/iso-8859-4.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b454[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/iso-8859-6.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/iso-8859-5.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b455[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/iso-8859-7.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/iso-8859-6.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b456[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/iso-8859-8.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/iso-8859-7.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b457[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/jis0208.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/iso-8859-8.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b458[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/jis0212.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/jis0208.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b459[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/koi8-r.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/jis0212.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b460[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/koi8-u.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/koi8-r.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b461[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/macintosh.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/koi8-u.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b462[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/windows-1250.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/macintosh.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b463[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/windows-1251.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/windows-1250.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b464[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/windows-1252.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/windows-1251.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b465[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/windows-1253.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/windows-1252.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b466[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/windows-1254.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/windows-1253.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b467[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/windows-1255.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/windows-1254.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b468[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/windows-1256.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/windows-1255.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b469[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/windows-1257.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/windows-1256.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b470[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/windows-1258.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/windows-1257.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b471[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/windows-874.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/windows-1258.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b472[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/data/x-mac-cyrillic.cp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/windows-874.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b473[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/AbstractDecoder.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/data/x-mac-cyrillic.cp.js" suffix(,)
 10,125,41,};
 static const unsigned char b474[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/AbstractEncoder.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/AbstractDecoder.js" suffix(,)
 10,125,41,};
 static const unsigned char b475[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/ByteBuffer.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/AbstractEncoder.js" suffix(,)
 10,125,41,};
 static const unsigned char b476[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/Decoder.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/ByteBuffer.js" suffix(,)
 10,125,41,};
 static const unsigned char b477[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/Encoder.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/Decoder.js" suffix(,)
 10,125,41,};
 static const unsigned char b478[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/Encoding.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/Encoder.js" suffix(,)
 10,125,41,};
 static const unsigned char b479[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/TextDecoder.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/Encoding.js" suffix(,)
 10,125,41,};
 static const unsigned char b480[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/TextEncoder.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/TextDecoder.js" suffix(,)
 10,125,41,};
 static const unsigned char b481[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/constants.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/TextEncoder.js" suffix(,)
 10,125,41,};
 static const unsigned char b482[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/decoders/Big5Decoder.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/constants.js" suffix(,)
 10,125,41,};
 static const unsigned char b483[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/decoders/EUCJPDecoder.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/decoders/Big5Decoder.js" suffix(,)
 10,125,41,};
 static const unsigned char b484[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/decoders/EUCKRDecoder.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/decoders/EUCJPDecoder.js" suffix(,)
 10,125,41,};
 static const unsigned char b485[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/decoders/GBDecoder.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/decoders/EUCKRDecoder.js" suffix(,)
 10,125,41,};
 static const unsigned char b486[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/decoders/ISO2022JPDecoder.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/decoders/GBDecoder.js" suffix(,)
 10,125,41,};
 static const unsigned char b487[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/decoders/ShiftJISDecoder.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/decoders/ISO2022JPDecoder.js" suffix(,)
 10,125,41,};
 static const unsigned char b488[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/decoders/SingleByteDecoder.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/decoders/ShiftJISDecoder.js" suffix(,)
 10,125,41,};
 static const unsigned char b489[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/decoders/UTF16Decoder.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/decoders/SingleByteDecoder.js" suffix(,)
 10,125,41,};
 static const unsigned char b490[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/decoders/UTF8Decoder.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/decoders/UTF16Decoder.js" suffix(,)
 10,125,41,};
 static const unsigned char b491[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/decoders/XUserDefinedDecoder.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/decoders/UTF8Decoder.js" suffix(,)
 10,125,41,};
 static const unsigned char b492[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encoders/Big5Encoder.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/decoders/XUserDefinedDecoder.js" suffix(,)
 10,125,41,};
 static const unsigned char b493[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encoders/CodePointIndex.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encoders/Big5Encoder.js" suffix(,)
 10,125,41,};
 static const unsigned char b494[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encoders/EUCJPEncoder.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encoders/CodePointIndex.js" suffix(,)
 10,125,41,};
 static const unsigned char b495[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encoders/EUCKREncoder.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encoders/EUCJPEncoder.js" suffix(,)
 10,125,41,};
 static const unsigned char b496[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encoders/GBEncoder.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encoders/EUCKREncoder.js" suffix(,)
 10,125,41,};
 static const unsigned char b497[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encoders/ISO2022JPEncoder.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encoders/GBEncoder.js" suffix(,)
 10,125,41,};
 static const unsigned char b498[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encoders/JIS0208Index.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encoders/ISO2022JPEncoder.js" suffix(,)
 10,125,41,};
 static const unsigned char b499[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encoders/ShiftJISEncoder.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encoders/JIS0208Index.js" suffix(,)
 10,125,41,};
 static const unsigned char b500[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encoders/SingleByteEncoder.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encoders/ShiftJISEncoder.js" suffix(,)
 10,125,41,};
 static const unsigned char b501[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encoders/UTF16Encoder.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encoders/SingleByteEncoder.js" suffix(,)
 10,125,41,};
 static const unsigned char b502[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encoders/UTF8Encoder.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encoders/UTF16Encoder.js" suffix(,)
 10,125,41,};
 static const unsigned char b503[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encoders/XUserDefinedEncoder.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encoders/UTF8Encoder.js" suffix(,)
 10,125,41,};
 static const unsigned char b504[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/big5.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encoders/XUserDefinedEncoder.js" suffix(,)
 10,125,41,};
 static const unsigned char b505[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/euc-jp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/big5.js" suffix(,)
 10,125,41,};
 static const unsigned char b506[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/euc-kr.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/euc-jp.js" suffix(,)
 10,125,41,};
 static const unsigned char b507[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/gb18030.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/euc-kr.js" suffix(,)
 10,125,41,};
 static const unsigned char b508[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/gbk.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/gb18030.js" suffix(,)
 10,125,41,};
 static const unsigned char b509[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/ibm866.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/gbk.js" suffix(,)
 10,125,41,};
 static const unsigned char b510[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-2022-jp.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/ibm866.js" suffix(,)
 10,125,41,};
 static const unsigned char b511[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-8859-10.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-2022-jp.js" suffix(,)
 10,125,41,};
 static const unsigned char b512[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-8859-13.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-8859-10.js" suffix(,)
 10,125,41,};
 static const unsigned char b513[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-8859-14.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-8859-13.js" suffix(,)
 10,125,41,};
 static const unsigned char b514[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-8859-15.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-8859-14.js" suffix(,)
 10,125,41,};
 static const unsigned char b515[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-8859-16.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-8859-15.js" suffix(,)
 10,125,41,};
 static const unsigned char b516[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-8859-2.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-8859-16.js" suffix(,)
 10,125,41,};
 static const unsigned char b517[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-8859-3.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-8859-2.js" suffix(,)
 10,125,41,};
 static const unsigned char b518[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-8859-4.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-8859-3.js" suffix(,)
 10,125,41,};
 static const unsigned char b519[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-8859-5.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-8859-4.js" suffix(,)
 10,125,41,};
 static const unsigned char b520[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-8859-6.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-8859-5.js" suffix(,)
 10,125,41,};
 static const unsigned char b521[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-8859-7.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-8859-6.js" suffix(,)
 10,125,41,};
 static const unsigned char b522[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-8859-8-i.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-8859-7.js" suffix(,)
 10,125,41,};
 static const unsigned char b523[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-8859-8.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-8859-8-i.js" suffix(,)
 10,125,41,};
 static const unsigned char b524[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/koi8-r.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/iso-8859-8.js" suffix(,)
 10,125,41,};
 static const unsigned char b525[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/koi8-u.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/koi8-r.js" suffix(,)
 10,125,41,};
 static const unsigned char b526[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/macintosh.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/koi8-u.js" suffix(,)
 10,125,41,};
 static const unsigned char b527[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/shift_jis.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/macintosh.js" suffix(,)
 10,125,41,};
 static const unsigned char b528[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/utf-16.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/shift_jis.js" suffix(,)
 10,125,41,};
 static const unsigned char b529[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/utf-16be.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/utf-16.js" suffix(,)
 10,125,41,};
 static const unsigned char b530[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/utf-16le.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/utf-16be.js" suffix(,)
 10,125,41,};
 static const unsigned char b531[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/utf-8.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/utf-16le.js" suffix(,)
 10,125,41,};
 static const unsigned char b532[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/windows-1250.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/utf-8.js" suffix(,)
 10,125,41,};
 static const unsigned char b533[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/windows-1251.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/windows-1250.js" suffix(,)
 10,125,41,};
 static const unsigned char b534[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/windows-1252.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/windows-1251.js" suffix(,)
 10,125,41,};
 static const unsigned char b535[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/windows-1253.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/windows-1252.js" suffix(,)
 10,125,41,};
 static const unsigned char b536[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/windows-1254.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/windows-1253.js" suffix(,)
 10,125,41,};
 static const unsigned char b537[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/windows-1255.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/windows-1254.js" suffix(,)
 10,125,41,};
 static const unsigned char b538[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/windows-1256.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/windows-1255.js" suffix(,)
 10,125,41,};
 static const unsigned char b539[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/windows-1257.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/windows-1256.js" suffix(,)
 10,125,41,};
 static const unsigned char b540[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/windows-1258.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/windows-1257.js" suffix(,)
 10,125,41,};
 static const unsigned char b541[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/windows-874.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/windows-1258.js" suffix(,)
 10,125,41,};
 static const unsigned char b542[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/x-mac-cyrillic.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/windows-874.js" suffix(,)
 10,125,41,};
 static const unsigned char b543[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings/x-user-defined.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/x-mac-cyrillic.js" suffix(,)
 10,125,41,};
 static const unsigned char b544[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/encodings.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings/x-user-defined.js" suffix(,)
 10,125,41,};
 static const unsigned char b545[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/index-no-encodings.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/encodings.js" suffix(,)
 10,125,41,};
 static const unsigned char b546[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/index.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/index-no-encodings.js" suffix(,)
 10,125,41,};
 static const unsigned char b547[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/text-encoding/lib/main/util.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/index.js" suffix(,)
 10,125,41,};
 static const unsigned char b548[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/vendor/urlpattern.js" suffix(,)
+#embed "ext/web/vendor/text-encoding/lib/main/util.js" suffix(,)
 10,125,41,};
 static const unsigned char b549[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/wasm/compile_options.js" suffix(,)
+#embed "ext/web/vendor/urlpattern.js" suffix(,)
 10,125,41,};
 static const unsigned char b550[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/wasm.js" suffix(,)
+#embed "ext/web/wasm/compile_options.js" suffix(,)
 10,125,41,};
 static const unsigned char b551[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/websocket/compression.js" suffix(,)
+#embed "ext/web/wasm.js" suffix(,)
 10,125,41,};
 static const unsigned char b552[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/websocket/events.js" suffix(,)
+#embed "ext/web/websocket/compression.js" suffix(,)
 10,125,41,};
 static const unsigned char b553[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/websocket/framing.js" suffix(,)
+#embed "ext/web/websocket/events.js" suffix(,)
 10,125,41,};
 static const unsigned char b554[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "ext/web/websocket.js" suffix(,)
+#embed "ext/web/websocket/framing.js" suffix(,)
 10,125,41,};
 static const unsigned char b555[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "libs/node_resolver/cjs_exports.js" suffix(,)
+#embed "ext/web/websocket.js" suffix(,)
 10,125,41,};
 static const unsigned char b556[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "libs/node_resolver/hooks.js" suffix(,)
+#embed "libs/node_resolver/cjs_exports.js" suffix(,)
 10,125,41,};
 static const unsigned char b557[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "libs/node_resolver/hooks_transport.js" suffix(,)
+#embed "libs/node_resolver/hooks.js" suffix(,)
 10,125,41,};
 static const unsigned char b558[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
-#embed "libs/node_resolver/hooks_worker.js" suffix(,)
+#embed "libs/node_resolver/hooks_transport.js" suffix(,)
 10,125,41,};
 static const unsigned char b559[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
+#embed "libs/node_resolver/hooks_worker.js" suffix(,)
+10,125,41,};
+static const unsigned char b560[] = {40,102,117,110,99,116,105,111,110,40,109,111,100,117,108,101,44,32,101,120,112,111,114,116,115,44,32,114,101,113,117,105,114,101,44,32,112,114,111,99,101,115,115,41,32,123,10,
 #embed "libs/node_resolver/loader.js" suffix(,)
 10,125,41,};
-static const unsigned char b560[] = {40,102,117,110,99,116,105,111,110,40,115,116,100,78,97,109,101,115,112,97,99,101,44,32,111,115,78,97,109,101,115,112,97,99,101,41,32,123,32,39,117,115,101,32,115,116,114,105,99,116,39,59,10,10,
+static const unsigned char b561[] = {40,102,117,110,99,116,105,111,110,40,115,116,100,78,97,109,101,115,112,97,99,101,44,32,111,115,78,97,109,101,115,112,97,99,101,41,32,123,32,39,117,115,101,32,115,116,114,105,99,116,39,59,10,10,
 #embed "runtime/bootstrap.js" clang::offset(92) suffix(,)
 10,125,41,};
 
@@ -1793,7 +1792,7 @@ static const struct { const unsigned char *data; size_t length; } sources[] = {
   { b102, sizeof b102 },
   { b103, sizeof b103 },
   { b104, sizeof b104 },
-  { b105, sizeof b105 },
+  { b105, 0 },
   { b106, sizeof b106 },
   { b107, sizeof b107 },
   { b108, sizeof b108 },
@@ -1879,7 +1878,7 @@ static const struct { const unsigned char *data; size_t length; } sources[] = {
   { b188, sizeof b188 },
   { b189, sizeof b189 },
   { b190, sizeof b190 },
-  { b191, sizeof b191 },
+  { b191, 0 },
   { b192, sizeof b192 },
   { b193, sizeof b193 },
   { b194, sizeof b194 },
@@ -2249,10 +2248,21 @@ static const struct { const unsigned char *data; size_t length; } sources[] = {
   { b558, sizeof b558 },
   { b559, sizeof b559 },
   { b560, sizeof b560 },
+  { b561, sizeof b561 },
 };
 
+/* The built-ins of TypeStripping, which its package installs (tools/embed.py, PACKAGED). */
+const unsigned char *(*silk_type_stripping_sources)(size_t index, size_t *length);
+
 const unsigned char *silk_builtin_source(size_t index, size_t *length) {
-  if (index > 560) { *length = 0; return (const unsigned char *)""; }
+  if (index > 561) { *length = 0; return (const unsigned char *)""; }
+  switch (index) {
+    case 105:
+    case 191:
+      if (silk_type_stripping_sources) return silk_type_stripping_sources(index, length);
+      *length = 0; return (const unsigned char *)"";
+    default: break;
+  }
   *length = sources[index].length;
   return sources[index].data;
 }

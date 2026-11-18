@@ -36,7 +36,7 @@ import silkjs.js_std_support as host
 import silkjs.js_promise as promise
 import silkjs.js_buffer_storage as buffers
 import ext.dns_abi as abi
-import ext.uv_net as net
+import ext.inet as inet
 import ext.fs_native { equal }
 import ext.resource_snapshot as resources
 import ext.fs_async as fs_async
@@ -341,9 +341,12 @@ unsafe effect fn invoke<'m, S: EngineServices>(engine: &mut Engine<'m,S>, contex
     let family = number(args.values[1]) request.family = if family == 4 { 2 } else if family == 6 { abi.inet6() } else { 0 }
     request.flags = number(args.values[2])
   } else {
-    let mut status = unsafe net.uv_ip4_addr(host.pointer(&request.name), number(args.values[1]), unsafe Intrinsic.pointerReinterpret<*mut u64, *mut u8>(Pointer.fromMutRef<u64>(&mut request.address[0])))
+    // The host text, without the NUL that ctext ends it with.
+    let whole = request.name.asSlice() let mut textLength = whole.length while textLength > 0 && whole[textLength - 1] == 0 { textLength = textLength - 1 }
+    let name = Slice.view<u8>(whole, 0, textLength)
+    let mut status = unsafe inet.ip4Sockaddr(name, number(args.values[1]), unsafe Intrinsic.pointerReinterpret<*mut u64, *mut u8>(Pointer.fromMutRef<u64>(&mut request.address[0])))
     request.addressLength = 16
-    if status < 0 { status = unsafe net.uv_ip6_addr(host.pointer(&request.name), number(args.values[1]), unsafe Intrinsic.pointerReinterpret<*mut u64, *mut u8>(Pointer.fromMutRef<u64>(&mut request.address[0]))) request.addressLength = 28 }
+    if status < 0 { status = unsafe inet.ip6Sockaddr(name, number(args.values[1]), unsafe Intrinsic.pointerReinterpret<*mut u64, *mut u8>(Pointer.fromMutRef<u64>(&mut request.address[0]))) request.addressLength = 28 }
     if status < 0 { request.status = status request.done = true return ValueBits.Undefined }
   }
   request.running = true drop request
@@ -604,7 +607,7 @@ unsafe effect fn payload<'m,S:EngineServices>(engine:&mut Engine<'m,S>,context:*
   let a = () let r = unsafe Pointer.borrow<(),Request>(&a,p) if r.status != 0 { return ValueBits.Undefined } let mut out = List<u8>.make()
   if r.kind == QUERY { let memory = engine.memory let data = Pointer.fromRef<u8>(&r.reply.asSlice()[0]) return run unsafe buffers.newArrayBufferCopy(&mut engine, memory, unsafe lendRealm(&context, context), data, usize.toU64(r.reply.length())) }
   if r.kind == LOOKUP { let mut node = r.addresses while !Pointer.isNull<abi.AddrInfo>(node) { let addr = unsafe Pointer.borrow<(),abi.AddrInfo>(&a,unsafe nonnull(node)) let mut text:[u8;256] = [0;256] let mut status:i32 = -1 let mut family:u8 = 0
-    if !Pointer.isNull<u8>(addr.address) { if addr.family == 2 { status = unsafe net.uv_ip4_name(unsafe nonnull(addr.address),Pointer.fromMutRef<u8>(&mut text[0]),256) family = 52 } else if addr.family == abi.inet6() { status = unsafe net.uv_ip6_name(unsafe nonnull(addr.address),Pointer.fromMutRef<u8>(&mut text[0]),256) family = 54 } }
+    if !Pointer.isNull<u8>(addr.address) && (addr.family == 2 || addr.family == abi.inet6()) { let mut written:[u8;64] = [0;64] if unsafe inet.sockaddrText(unsafe Intrinsic.pointerRequalify<*mut u8, *const u8>(unsafe nonnull(addr.address)),&mut written) >= 0 { status = 0 let mut k:usize = 0 while k < 64 { text[k] = written[k] k = k + 1 } } family = if addr.family == 2 { 52 } else { 54 } }
     if status == 0 { run out.append(family) run out.append(32) run unsafe appendCString(&mut out,Pointer.fromRef<u8>(&text[0])) run out.append(10) } node = addr.next
   } } else { run unsafe appendCString(&mut out,Pointer.fromRef<u8>(&r.host[0])) run out.append(10) run unsafe appendCString(&mut out,Pointer.fromRef<u8>(&r.serviceName[0])) }
   return (run host.string(&mut engine,unsafe lendRealm(&context, context),out.asSlice())).intoBits()

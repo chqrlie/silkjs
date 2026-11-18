@@ -7,10 +7,12 @@
 
 const EventEmitter = require('events');
 const http = require('http');
-const https = require('https');
+// https and crypto load with the first connection that needs them.
+const lazy = name => { let loaded; return new Proxy({}, { get(target, key) { return (loaded ??= require(name))[key]; } }); };
+const https = lazy('https');
 const { Duplex } = require('stream');
 const { Buffer } = require('buffer');
-const { createHash, randomBytes } = require('crypto');
+const createHash = (...args) => require('crypto').createHash(...args), randomBytes = (...args) => require('crypto').randomBytes(...args);
 const { URL } = require('url');
 const host = require('internal/host');
 

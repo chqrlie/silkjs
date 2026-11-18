@@ -37,6 +37,7 @@ import silkjs.js_proxy_core as core
 import silkjs.js_runtime as runtime
 import ext.os_abi as abi
 import libs.core.host as host
+import libs.core.capabilities { Composition }
 import runtime.worker as worker
 import ext.worker_transport { Group, Registry, Thread, Endpoint, Message, Shared, Environment, Variable, LockRequest }
 import ext.worker_transport as transport
@@ -53,9 +54,9 @@ import ext.diagnostics_hub { Mailbox }
 import ext.diagnostics_fatal as fatalReport
 import ext.diagnostics_fatal { ReportingAllocator }
 import ext.fs_async as fs_async
-import ext.uv_os { uv_thread_setname }
-import ext.crypto_native as crypto_native
+import ext.library_hooks { ThreadSetup }
 import silk.io.reactor { Waker }
+import ext.thread_signals as threadSignals
 
 unsafe extern "C" fn pthread_attr_init(attributes: *mut u8) -> i32
 unsafe extern "C" fn pthread_attr_setstacksize(attributes: *mut u8, size: usize) -> i32
@@ -63,13 +64,38 @@ unsafe extern "C" fn pthread_attr_setdetachstate(attributes: *mut u8, state: i32
 unsafe extern "C" fn pthread_attr_destroy(attributes: *mut u8) -> i32
 @threadCallbacks("start")
 unsafe extern "C" fn pthread_create(thread: *mut usize, attributes: ?*const u8, start: extern "C" fn(?*mut u8) -> ?*mut u8, argument: ?*mut u8) -> i32
-pub struct State { pub group: Group, pub id: u32, pub control: u32, pub metadata: List<u8>, io: ?*mut fs_async.State, crypto: ?*mut crypto_native.State, held: bool, signalGuards: ?*mut SignalGuard, nextSignalGuard: u32, diagnostics: Option<Mailbox>, embedded: bool }
+// A thread's name, as libuv's uv_thread_setname sets it (the loop plan): at most 15 bytes on
+// Linux, whose pthread_setname_np takes the thread; on macOS, the calling thread's.
+static if Intrinsic.targetOperatingSystem() == "darwin" {
+  @foreign(noCapture: .("name"))
+  unsafe extern "C" fn pthread_setname_np(name: *const u8) -> i32
+} else {
+  unsafe extern "C" fn pthread_self() -> usize
+  @foreign(noCapture: .("name"))
+  unsafe extern "C" fn pthread_setname_np(thread: usize, name: *const u8) -> i32
+}
+unsafe fn setThreadName(name: &[u8; 64]) -> i32 {
+  let mut short: [u8; 64] = [0; 64]
+  let mut limit: usize = 15
+  static if Intrinsic.targetOperatingSystem() == "darwin" { limit = 63 }
+  let mut i: usize = 0
+  while i < limit && name[i] != 0 { short[i] = name[i] i = i + 1 }
+  static if Intrinsic.targetOperatingSystem() == "darwin" { return unsafe pthread_setname_np(Pointer.fromRef<u8>(&short[0])) }
+  else { return unsafe pthread_setname_np(unsafe pthread_self(), Pointer.fromRef<u8>(&short[0])) }
+}
+pub struct State { pub group: Group, pub id: u32, pub control: u32, pub metadata: List<u8>, io: ?*mut fs_async.State, setup: ThreadSetup, held: bool, signalGuards: ?*mut SignalGuard, nextSignalGuard: u32, diagnostics: Option<Mailbox>, embedded: bool }
 pub struct Start { pub group: Group, pub id: u32, pub control: u32, pub metadata: List<u8>, name: [u8; 64] }
 struct SignalGuard { next: ?*mut SignalGuard, id: u32, watcher: Arc<vm_interrupt.Service>, slot: vm_interrupt.Slot }
 fn equal(a: &[u8], b: &[u8]) -> bool { if a.length != b.length { return false } let mut i: usize = 0 while i < a.length { if a[i] != b[i] { return false } i = i + 1 } return true }
 unsafe fn nonnull<T>(pointer: ?*mut T) -> *mut T { return unsafe transport.nonnull(pointer) }
-pub effect fn mainState(process: &Process, domain: Domain) -> *mut State ! OutOfMemoryError {
-  let group = run Group.make(process, domain)
+/// The main thread's state, for a runtime with these capabilities: its worker threads start in
+/// the same specialization, with capabilities made from these.
+pub effect fn mainState<C: Composition>(process: &Process, domain: Domain, capabilities: &C) -> *mut State ! OutOfMemoryError {
+  let entry: extern "C" fn(?*mut u8) -> ?*mut u8 = (silkNodeWorkerEntry<C>)
+  let mut group = run Group.make(process, domain, entry)
+  let seed = run transport.allocate<C>(&group.resources)
+  unsafe Pointer.put<C>(seed, capabilities.forWorker())
+  group.seed = unsafe Intrinsic.pointerRequalify<*mut u8, ?*mut u8>(unsafe transport.raw(seed))
   let mut allocator = group.resources.clone()
   let cancellation = run CancellableDomain.make(domain) |> Effect.provideMut<Allocator>(&mut allocator)
   let thread = run transport.allocate<Thread>(&group.resources)
@@ -79,7 +105,7 @@ pub effect fn mainState(process: &Process, domain: Domain) -> *mut State ! OutOf
 }
 pub effect fn makeState(group: Group, id: u32, control: u32, metadata: List<u8>) -> *mut State ! OutOfMemoryError {
   let pointer = run transport.allocate<State>(&group.resources)
-  unsafe Pointer.put<State>(pointer, State { group: move group, id: id, control: control, metadata: move metadata, io: Pointer.null<fs_async.State>(), crypto: Pointer.null<crypto_native.State>(), held: false, signalGuards: Pointer.null<SignalGuard>(), nextSignalGuard: 1, diagnostics: Option<Mailbox>.none(), embedded: false }) return pointer
+  unsafe Pointer.put<State>(pointer, State { group: move group, id: id, control: control, metadata: move metadata, io: Pointer.null<fs_async.State>(), setup: ThreadSetup.none(), held: false, signalGuards: Pointer.null<SignalGuard>(), nextSignalGuard: 1, diagnostics: Option<Mailbox>.none(), embedded: false }) return pointer
 }
 /// Marks the main thread's runtime as embedded: it does not own the process, so its exit
 /// ends the runtime as a worker's does (requestExit) instead of the process.
@@ -142,9 +168,10 @@ pub unsafe effect fn configureRuntime(pointer: *mut State, rt: *mut HeapHeader, 
   unsafe runtime.setMaxStackSize(rt, size)
 }
 /// Connects the isolate to its runtime loop: messages and thread events for it wake `io`.
-pub unsafe effect fn attach(pointer: *mut State, io: *mut fs_async.State, crypto: *mut crypto_native.State) -> () ! OutOfMemoryError {
+/// `setup` runs before each worker thread starts (`Crypto.threadSetup`).
+pub unsafe effect fn attach(pointer: *mut State, io: *mut fs_async.State, setup: ThreadSetup) -> () ! OutOfMemoryError {
   let mut anchor = () let state = unsafe Pointer.borrowMut<(), State>(&mut anchor, pointer)
-  state.io = io state.crypto = crypto
+  state.io = io state.setup = setup
   let guard = state.group.registry.get().lock() let mut threadAnchor = ()
   let entry = unsafe Pointer.borrowMut<(), Thread>(&mut threadAnchor, unsafe nonnull(unsafe transport.thread(guard.get(), state.id))) entry.wake = Option<Waker>.some(unsafe fs_async.waker(io))
   drop entry drop guard
@@ -313,17 +340,26 @@ pub unsafe fn finished(group: &Group, id: u32, code: i32) -> () {
   if !abandoned { let owner = unsafe Pointer.borrow<(), Thread>(&anchor, unsafe nonnull(parentPointer)) abandoned = owner.exited }
   if abandoned { unsafe transport.retireThread(guard.getMut(), id) } else { unsafe transport.wake(guard.get(), parent) }
 }
-export "C" fn silkNodeWorkerEntry(raw: ?*mut u8) -> ?*mut u8 {
+/// The capabilities a worker thread of this group starts with, made from its main runtime's.
+pub fn threadCapabilities<C: Composition>(start: &Start) -> C {
+  let anchor = ()
+  let seed = unsafe Pointer.borrow<(), C>(&anchor, unsafe Intrinsic.pointerReinterpret<*mut u8, *mut C>(unsafe nonnull(start.group.seed)))
+  return seed.forWorker()
+}
+/// A worker thread's C entry, instantiated for the runtime's capabilities (the group's `entry`).
+pub export "C" fn silkNodeWorkerEntry<C: Composition>(raw: ?*mut u8) -> ?*mut u8 {
+  // A worker leaves process signals to the main thread's watch (ext/thread_signals), as in Node.
+  threadSignals.blockAsynchronous()
   let pointer = unsafe Intrinsic.pointerReinterpret<*mut u8, *mut Start>(unsafe nonnull(raw))
   let packet = unsafe Pointer.take<Start>(pointer) unsafe resources.release(raw)
-  let _ignored = unsafe uv_thread_setname(Pointer.fromRef<u8>(&packet.name[0]))
+  let _ignored = unsafe setThreadName(&packet.name)
   let group = packet.group.clone() let id = packet.id
   let cpu = unsafe Cpu.current()
   let guard = group.registry.get().lock() let mut anchor = ()
   let entry = unsafe Pointer.borrowMut<(), Thread>(&mut anchor, unsafe nonnull(unsafe transport.thread(guard.get(), id)))
   entry.cpu = cpu drop entry drop guard
   let mut allocator = Allocator.systemAllocatorProvider()
-  let outcome = run Effect.result(worker.executeThread(move packet)) |> Effect.provideMut<Allocator>(&mut allocator)
+  let outcome = run Effect.result(worker.executeThread<C>(move packet)) |> Effect.provideMut<Allocator>(&mut allocator)
   let code = match move outcome { Result<i32, OutOfMemoryError>.Success { value } => value _ => 1 }
   unsafe finished(&group, id, code) group.resources.threadFinished() return Pointer.null<u8>()
 }
@@ -370,7 +406,7 @@ unsafe effect fn spawn(state: &State, metadata: List<u8>, control: u32, stackSiz
   if status == 0 { status = unsafe pthread_attr_setstacksize(attr, nativeStack) }
   let mut detached: i32 = 1 static if Intrinsic.targetOperatingSystem() == "darwin" { detached = 2 }
   if status == 0 { status = unsafe pthread_attr_setdetachstate(attr, detached) }
-  if status == 0 { state.group.resources.threadStarted() status = unsafe pthread_create(Pointer.fromMutRef<usize>(&mut thread), attr, silkNodeWorkerEntry, unsafe transport.raw(packet)) if status != 0 { state.group.resources.threadFinished() } }
+  if status == 0 { state.group.resources.threadStarted() let saved = threadSignals.blockForStart() status = unsafe pthread_create(Pointer.fromMutRef<usize>(&mut thread), attr, state.group.entry, unsafe transport.raw(packet)) threadSignals.restore(move saved) if status != 0 { state.group.resources.threadFinished() } }
   if initialized == 0 { let _ignored = unsafe pthread_attr_destroy(attr) }
   if status != 0 {
     let owned = unsafe Pointer.take<Start>(packet) drop owned unsafe resources.release(unsafe transport.raw(packet))
@@ -778,7 +814,7 @@ unsafe effect fn reportSetting<'m, S: EngineServices>(engine: &mut Engine<'m, S>
 }
 fn resetZone(name: &[u8]) -> () { static if Intrinsic.targetOperatingSystem() != "windows" { if name.length == 3 && name[0] == 84 && name[1] == 90 { unsafe tzset() } } }
 unsafe fn byte(pointer: *mut u8, index: usize) -> u8 { return unsafe Pointer.read<u8>(unsafe Pointer.atMut<u8>(unsafe Pointer.assumeManyMut<u8>(pointer), index)) }
-unsafe effect fn environment<'m, S: EngineServices>(engine: &mut Engine<'m, S>, context: *mut HeapHeader, state: &State, op: &[u8], args: &owners.Scope, scope: &mut owners.Scope) -> ValueBits ! OutOfMemoryError | JsException ? &mut Allocator {
+unsafe effect fn environment<'m, C: Composition>(engine: &mut Engine<'m, host.Services<C>>, context: *mut HeapHeader, state: &State, op: &[u8], args: &owners.Scope, scope: &mut owners.Scope) -> ValueBits ! OutOfMemoryError | JsException ? &mut Allocator {
   let mut name = List<u8>.make() let mut value = List<u8>.make()
   if !equal(op, b"envKeys") { name = run unsafe host.text(&mut engine, context, args.values[0]) run name.append(0) }
   if equal(op, b"envSet") { value = run unsafe host.text(&mut engine, context, args.values[1]) run value.append(0) }
@@ -788,28 +824,32 @@ unsafe effect fn environment<'m, S: EngineServices>(engine: &mut Engine<'m, S>, 
   if !Pointer.isNull<Environment>(private) {
     drop guard return run unsafe privateEnvironment(&mut engine, context, state, unsafe nonnull(private), op, move name, move value, &mut scope)
   }
-  // node_env_var.cc RealEnvStore Set/Delete ignore uv_os_setenv's error (an empty name or
-  // one with "=" is EINVAL), so process.env[''] = '' stores nothing and does not throw.
-  if equal(op, b"envSet") { let _status = unsafe setenv(Pointer.fromRef(&name.asSlice()[0]), Pointer.fromRef(&value.asSlice()[0]), 1) resetZone(name.asSlice()) drop guard return ValueBits.Undefined }
-  if equal(op, b"envDelete") { let _status = unsafe unsetenv(Pointer.fromRef(&name.asSlice()[0])) resetZone(name.asSlice()) drop guard return ValueBits.Bool { value: true } }
+  // The process environment is the program's Platform's. node_env_var.cc RealEnvStore Set/Delete
+  // ignore uv_os_setenv's error (an empty name or one with "=" is EINVAL), so process.env[''] = ''
+  // stores nothing and does not throw; a Platform that refuses the change (EPERM) is reported to
+  // the caller, which throws.
+  // The name without its final NUL; envKeys has no name.
+  let key = if name.length() == 0 { name.asSlice() } else { Slice.view(name.asSlice(), 0, name.length() - 1) }
+  if equal(op, b"envSet") {
+    let status = run Composition.platformSetenv(&engine.*, key, Slice.view(value.asSlice(), 0, value.length() - 1)) resetZone(key) drop guard
+    return if status == -1 { ValueBits.Int { value: -1 } } else { ValueBits.Undefined }
+  }
+  if equal(op, b"envDelete") {
+    let status = run Composition.platformUnsetenv(&engine.*, key) resetZone(key) drop guard
+    return if status == -1 { ValueBits.Int { value: -1 } } else { ValueBits.Bool { value: true } }
+  }
   if equal(op, b"envGet") {
-    let pointer = unsafe getenv(Pointer.fromRef(&name.asSlice()[0])) if Pointer.isNull<u8>(pointer) { return ValueBits.Undefined }
-    let mut index: usize = 0 while unsafe byte(unsafe nonnull(pointer), index) != 0 { run value.append(unsafe byte(unsafe nonnull(pointer), index)) index = index + 1 } drop guard
+    let found = run Composition.platformGetenv(&engine.*, key, &mut value) drop guard
+    if !found { return ValueBits.Undefined }
     return run unsafe host.string(&mut engine, context, value.asSlice())
   }
+  let mut joined = List<u8>.make()
+  run Composition.platformNames(&engine.*, &mut joined)
   let mut names = List<List<u8>>.make()
-  let mut entries = Pointer.null<?*mut u8>()
-  static if Intrinsic.targetOperatingSystem() == "darwin" { entries = unsafe Pointer.read<?*mut ?*mut u8>(unsafe _NSGetEnviron()) }
-  else { unsafe { entries = environ } }
-  if !Pointer.isNull<?*mut u8>(entries) {
-    let mut index: usize = 0
-    while true {
-      let pointer = unsafe Pointer.read<?*mut u8>(unsafe Pointer.atMut<?*mut u8>(unsafe Pointer.assumeManyMut<?*mut u8>(unsafe nonnull(entries)), index))
-      if Pointer.isNull<u8>(pointer) { break }
-      let mut key = List<u8>.make() let mut at: usize = 0
-      while unsafe byte(unsafe nonnull(pointer), at) != 0 && unsafe byte(unsafe nonnull(pointer), at) != 61 { run key.append(unsafe byte(unsafe nonnull(pointer), at)) at = at + 1 }
-      run names.append(move key) index = index + 1
-    }
+  let mut start: usize = 0 let mut at: usize = 0
+  while at < joined.length() {
+    if joined.asSlice()[at] == 0 { let mut entry = List<u8>.make() run entry.appendBytes(Slice.view(joined.asSlice(), start, at - start)) run names.append(move entry) start = at + 1 }
+    at = at + 1
   }
   drop guard let memory = engine.memory scope.values[0] = run unsafe common.array(&mut engine, memory, context)
   let mut index: usize = 0 while index < names.length() { let name = run unsafe host.string(&mut engine, context, names.asSlice()[index].asSlice()) run unsafe common.defineIndex(&mut engine, context, scope.values[0], usize.toU32(index), name) index = index + 1 }
@@ -961,7 +1001,7 @@ unsafe effect fn broadcastPrepared<'m, S: EngineServices>(engine: &mut Engine<'m
   }
   return ValueBits.Undefined
 }
-unsafe effect fn invoke<'m, S: EngineServices>(engine: &mut Engine<'m, S>, context: *mut HeapHeader, pointer: *mut State, op: &[u8], args: &owners.Scope, scope: &mut owners.Scope) -> ValueBits ! OutOfMemoryError | JsException ? &mut Allocator {
+unsafe effect fn invoke<'m, C: Composition>(engine: &mut Engine<'m, host.Services<C>>, context: *mut HeapHeader, pointer: *mut State, op: &[u8], args: &owners.Scope, scope: &mut owners.Scope) -> ValueBits ! OutOfMemoryError | JsException ? &mut Allocator {
   let anchor = () let state = unsafe Pointer.borrow<(), State>(&anchor, pointer)
   let memory = engine.memory let id = number(args.values[0])
   if equal(op, b"info") || equal(op, b"bootstrap") {
@@ -1122,6 +1162,8 @@ unsafe effect fn invoke<'m, S: EngineServices>(engine: &mut Engine<'m, S>, conte
     let id = unsafe transport.newEndpoint(guard.getMut(), endpoint, state.id, 0, move name, true)
     return ValueBits.number(u32.toF64(id))
   }
+  // Starting a thread is the Workers capability's; without it the start is not compiled.
+  static if Composition.workersPresent() {
   if equal(op, b"startWorker") {
     let mut allocator = state.group.resources.clone()
     let metadata = run unsafe host.text(&mut engine, context, args.values[0]) |> Effect.provideMut<Allocator>(&mut allocator)
@@ -1130,10 +1172,11 @@ unsafe effect fn invoke<'m, S: EngineServices>(engine: &mut Engine<'m, S>, conte
     if !f64.isFinite(stack) || stack < 1.0 || stack > 9007199246286848.0 || f64.floor(stack) != stack { return run core.error(&mut engine, unsafe lendRealm(&context, context), b"invalid Worker stack limit") }
     if !args.values[3].isString() { return run core.error(&mut engine, unsafe lendRealm(&context, context), b"invalid Worker thread name") }
     // OpenSSL providers are configured before a second thread can use them.
-    match Pointer.nonNullMut<crypto_native.State>(state.crypto) { Option<*mut crypto_native.State>.Some { value: crypto } => { unsafe crypto_native.configure(crypto) } _ => () }
+    let setup = state.setup let prepare = setup.prepare unsafe prepare(setup.data)
     // resourceLimits.maxOldGenerationSizeMb and maxYoungGenerationSizeMb, in bytes, or undefined.
     let limits = HeapLimits { heap: limitBytes(args.values[4]), young: limitBytes(args.values[5]) }
     return ValueBits.number(u32.toF64(run unsafe spawn(&state, move metadata, number(args.values[1]), f64.toUsize(stack), move limits, nativeThreadName(args.values[3]))))
+  }
   }
   let guard = state.group.registry.get().lock() let registry = guard.get() let mut mutable = ()
   if equal(op, b"workerStatus") {
@@ -1188,13 +1231,13 @@ unsafe effect fn invoke<'m, S: EngineServices>(engine: &mut Engine<'m, S>, conte
   if equal(op, b"close") || equal(op, b"unsubscribe") { drop endpoint unsafe transport.closeEndpoint(registry, unsafe nonnull(optional)) return ValueBits.Undefined }
   drop endpoint drop guard return run core.error(&mut engine, unsafe lendRealm(&context, context), b"unknown worker operation")
 }
-pub unsafe effect fn dispatch<'m, S: EngineServices>(engine: &mut Engine<'m, S>, context: *mut HeapHeader, pointer: *mut State, argc: i32, argv: &FrameSlots) -> ValueBits ! OutOfMemoryError | JsException ? &mut Allocator {
+pub unsafe effect fn dispatch<'m, C: Composition>(engine: &mut Engine<'m, host.Services<C>>, context: *mut HeapHeader, pointer: *mut State, argc: i32, argv: &FrameSlots) -> ValueBits ! OutOfMemoryError | JsException ? &mut Allocator {
   let mut args = Scope.make() let mut scope = Scope.make()
   let result = run Effect.result(unsafe dispatchInto(&mut engine, context, pointer, argv, &mut args, &mut scope))
   unsafe owners.cleanup(&mut engine, context, move args) unsafe owners.cleanup(&mut engine, context, move scope) unsafe updateRef(pointer)
   return match move result { Result<ValueBits, OutOfMemoryError | JsException>.Success { value } => value Result<ValueBits, OutOfMemoryError | JsException>.Failure { error } => { fail move error } }
 }
-unsafe effect fn dispatchInto<'m, S: EngineServices>(engine: &mut Engine<'m, S>, context: *mut HeapHeader, pointer: *mut State, argv: &FrameSlots, args: &mut owners.Scope, scope: &mut owners.Scope) -> ValueBits ! OutOfMemoryError | JsException ? &mut Allocator {
+unsafe effect fn dispatchInto<'m, C: Composition>(engine: &mut Engine<'m, host.Services<C>>, context: *mut HeapHeader, pointer: *mut State, argv: &FrameSlots, args: &mut owners.Scope, scope: &mut owners.Scope) -> ValueBits ! OutOfMemoryError | JsException ? &mut Allocator {
   let name = run unsafe host.text(&mut engine, context, unsafe common.argument(argv, 0))
   let array = unsafe common.argument(argv, 1) let mut index: u32 = 0
   let count: u32 = 6
@@ -1206,5 +1249,4 @@ unsafe effect fn dispatchInto<'m, S: EngineServices>(engine: &mut Engine<'m, S>,
 /// Takes each C export as a value, so that Silk emits it (see tools/keep_exports.py).
 pub fn keepExports() -> () {
   let _silkNodeFatalReport: extern "C" fn(*mut u8, *const u8, usize, *const u8, usize) -> () = silkNodeFatalReport
-  let _silkNodeWorkerEntry: extern "C" fn(?*mut u8) -> ?*mut u8 = silkNodeWorkerEntry
 }

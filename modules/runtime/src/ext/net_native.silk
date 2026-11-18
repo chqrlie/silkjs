@@ -60,7 +60,7 @@ import silkjs.js_string_types { StringLengthError }
 import silkjs.js_proxy_core as core
 import silkjs.js_strings { Strings }
 import silkjs.utf8 { Utf8 }
-import ext.tls_native as tls
+import ext.library_hooks { SecureOps }
 import silkjs.js_class_data as classes
 
 unsafe extern "C" fn calloc(count: usize, size: usize) -> ?*mut u8
@@ -217,7 +217,7 @@ fn descriptorOf(socket: &Socket) -> i32 {
 }
 
 // Queued events hold the loop (`queueHeld`), as libuv's pending requests did. `slots` maps reactor tokens to handles; a free slot is null and listed in `free`.
-pub struct State { io: *mut fs_async.State, dns: *mut dns.State, handles: ?*mut Handle, slots: List<?*mut Handle>, free: List<usize>, first: ?*mut Event, last: ?*mut Event, next: i32, scratch: *mut u8, closing: bool, oom: bool, polling: bool, collecting: bool, queueHeld: bool, dirty: ?*mut Handle, texts: [ValueBits; 64] }
+pub struct State { secureOps: SecureOps, io: *mut fs_async.State, dns: *mut dns.State, handles: ?*mut Handle, slots: List<?*mut Handle>, free: List<usize>, first: ?*mut Event, last: ?*mut Event, next: i32, scratch: *mut u8, closing: bool, oom: bool, polling: bool, collecting: bool, queueHeld: bool, dirty: ?*mut Handle, texts: [ValueBits; 64] }
 // `watched` is the descriptor in the reactor, or -1. `path` is the socket path of a pipe: its own
 // path when `pathIsLocal`, else its peer's. `terminal` is the mode that a terminal had before its
 // first mode change. `local`, `flags`, `noDelay` and `keepAlive` wait for the socket that a
@@ -258,13 +258,14 @@ fn event(handle: *mut Handle, kind: i32, code: i32, token: i32) -> Event {
   return Event { next: Pointer.null<Event>(), handle: handle, kind: kind, status: code, token: token, data: Pointer.null<u8>(), length: 0, from: Option<Endpoint>.none() }
 }
 
-pub effect fn open(io: *mut fs_async.State) -> *mut State ! OutOfMemoryError {
+/// `secureOps` runs the TLS sessions of sockets (`Tls.secureOps`).
+pub effect fn open(io: *mut fs_async.State, secureOps: SecureOps) -> *mut State ! OutOfMemoryError {
   let p = unsafe Intrinsic.pointerReinterpret<*mut u8, *mut State>(run allocate(Layout.of<State>().bytes))
   let scratched = run Effect.result(allocate(CHUNK))
   let scratch = match move scratched { Result<*mut u8, OutOfMemoryError>.Success { value } => value Result<*mut u8, OutOfMemoryError>.Failure { error } => { unsafe free(unsafe bytes(p)) fail move error } }
   let initialized = run Effect.result(dns.make(io))
   let resolver = match move initialized { Result<*mut dns.State, OutOfMemoryError>.Success { value } => value Result<*mut dns.State, OutOfMemoryError>.Failure { error } => { unsafe free(scratch) unsafe free(unsafe bytes(p)) fail move error } }
-  unsafe Pointer.put<State>(p, State { io: io, dns: resolver, handles: Pointer.null<Handle>(), slots: List<?*mut Handle>.make(), free: List<usize>.make(), first: Pointer.null<Event>(), last: Pointer.null<Event>(), next: 1, scratch: scratch, closing: false, oom: false, polling: false, collecting: false, queueHeld: false, dirty: Pointer.null<Handle>(), texts: [ValueBits.Undefined; 64] })
+  unsafe Pointer.put<State>(p, State { secureOps: secureOps, io: io, dns: resolver, handles: Pointer.null<Handle>(), slots: List<?*mut Handle>.make(), free: List<usize>.make(), first: Pointer.null<Event>(), last: Pointer.null<Event>(), next: 1, scratch: scratch, closing: false, oom: false, polling: false, collecting: false, queueHeld: false, dirty: Pointer.null<Handle>(), texts: [ValueBits.Undefined; 64] })
   return p
 }
 
@@ -2624,6 +2625,22 @@ const RETURNED: i32 = 2
 const SECURE_FAILED: i32 = -100000
 const NOT_SECURE: i32 = -100001
 
+// The TLS session operations of the handle's network (`State.secureOps`).
+unsafe fn opsOf(handle: *mut Handle) -> SecureOps {
+  let a = () let h = unsafe Pointer.borrow<(), Handle>(&a, handle) let state = h.state drop h
+  let b = () let s = unsafe Pointer.borrow<(), State>(&b, state) return s.secureOps
+}
+unsafe fn sessionDetach(handle: *mut Handle, session: *mut u8) -> () { let ops = unsafe opsOf(handle) let f = ops.detach unsafe f(session) }
+unsafe fn sessionQuiet(handle: *mut Handle, session: *mut u8) -> bool { let ops = unsafe opsOf(handle) let f = ops.quiet return unsafe f(session) == 1 }
+unsafe fn sessionFeed(handle: *mut Handle, session: *mut u8, data: *mut u8, count: usize) -> bool { let ops = unsafe opsOf(handle) let f = ops.feed return unsafe f(session, data, count) == 1 }
+unsafe fn sessionRead(handle: *mut Handle, session: *mut u8, out: *mut u8, room: usize) -> i32 { let ops = unsafe opsOf(handle) let f = ops.read return unsafe f(session, out, room) }
+unsafe fn sessionWrite(handle: *mut Handle, session: *mut u8, data: *mut u8, count: usize) -> bool { let ops = unsafe opsOf(handle) let f = ops.write return unsafe f(session, data, count) == 1 }
+unsafe fn sessionPending(handle: *mut Handle, session: *mut u8) -> usize { let ops = unsafe opsOf(handle) let f = ops.pending return unsafe f(session) }
+unsafe fn sessionTake(handle: *mut Handle, session: *mut u8, out: *mut u8, room: usize) -> usize { let ops = unsafe opsOf(handle) let f = ops.take return unsafe f(session, out, room) }
+unsafe fn attachSession(state: *mut State, sessions: ?*mut u8, id: i32) -> ?*mut u8 {
+  let a = () let s = unsafe Pointer.borrow<(), State>(&a, state) let ops = s.secureOps drop s
+  let f = ops.attach return unsafe f(sessions, id)
+}
 unsafe fn secureOf(handle: *mut Handle) -> ?*mut u8 { let a = () let h = unsafe Pointer.borrow<(), Handle>(&a, handle) return h.secure }
 unsafe fn forgetSecure(handle: *mut Handle) -> () {
   // Node mode over the session hands what it holds to JavaScript's parser first: the
@@ -2631,7 +2648,7 @@ unsafe fn forgetSecure(handle: *mut Handle) -> () {
   if unsafe nodeExchange(handle) { unsafe nodeFallback(handle) }
   let mut anchor = () let h = unsafe Pointer.borrowMut<(), Handle>(&mut anchor, handle)
   let session = h.secure h.secure = Pointer.null<u8>() drop h
-  if !Pointer.isNull<u8>(session) { unsafe tls.secureDetach(unsafe nn(session)) }
+  if !Pointer.isNull<u8>(session) { unsafe sessionDetach(handle, unsafe nn(session)) }
 }
 // Ends native mode: JavaScript gets the session back behind the events queued so far.
 unsafe fn returnSecure(handle: *mut Handle) -> () {
@@ -2645,16 +2662,16 @@ unsafe effect fn sendSecure(handle: *mut Handle, session: *mut u8, token: i32) -
   let scratch = unsafe scratchOf(handle) let mut anchor = ()
   let mut sentAll = true
   while true {
-    let pending = unsafe tls.securePending(session)
+    let pending = unsafe sessionPending(handle, session)
     if pending == 0 { break }
     let h = unsafe Pointer.borrowMut<(), Handle>(&mut anchor, handle)
-    if h.closing || h.writeShut { drop h let _dropped = unsafe tls.secureTake(session, scratch, if pending < CHUNK { pending } else { CHUNK }) return EPIPE() }
+    if h.closing || h.writeShut { drop h let _dropped = unsafe sessionTake(handle, session, scratch, if pending < CHUNK { pending } else { CHUNK }) return EPIPE() }
     let idle = Pointer.isNull<Write>(h.firstWrite) && !h.connecting
     if !idle {
       // Behind other writes: the rest goes to the queue as one copy.
       drop h
       let memory = run allocate(pending)
-      let taken = unsafe tls.secureTake(session, memory, pending)
+      let taken = unsafe sessionTake(handle, session, memory, pending)
       let allocated = run Effect.result(allocate(Layout.of<Write>().bytes))
       let raw = match move allocated { Result<*mut u8, OutOfMemoryError>.Success { value } => value Result<*mut u8, OutOfMemoryError>.Failure { error } => { unsafe free(unsafe Intrinsic.pointerRequalify<*mut u8, ?*mut u8>(memory)) fail move error } }
       let pointer = unsafe Intrinsic.pointerReinterpret<*mut u8, *mut Write>(raw)
@@ -2665,7 +2682,7 @@ unsafe effect fn sendSecure(handle: *mut Handle, session: *mut u8, token: i32) -
       unsafe refresh(handle)
       return 0
     }
-    let count = unsafe tls.secureTake(session, scratch, if pending < CHUNK { pending } else { CHUNK })
+    let count = unsafe sessionTake(handle, session, scratch, if pending < CHUNK { pending } else { CHUNK })
     let viewAnchor = ()
     let view = unsafe Pointer.borrowMany<(), u8>(&viewAnchor, unsafe Pointer.assumeMany<u8>(scratch), count)
     let result = writeOnce(&mut h.socket, view, Option<Endpoint>.none())
@@ -2676,7 +2693,7 @@ unsafe effect fn sendSecure(handle: *mut Handle, session: *mut u8, token: i32) -
       let rest = count - sent
       let memory = run allocate(rest)
       let _copied = unsafe memcpy(memory, unsafe Pointer.at<u8>(unsafe Pointer.assumeMany<u8>(scratch), sent), rest)
-      let more = unsafe tls.securePending(session)
+      let more = unsafe sessionPending(handle, session)
       let allocated = run Effect.result(allocate(Layout.of<Write>().bytes))
       let raw = match move allocated { Result<*mut u8, OutOfMemoryError>.Success { value } => value Result<*mut u8, OutOfMemoryError>.Failure { error } => { unsafe free(memory) fail move error } }
       let pointer = unsafe Intrinsic.pointerReinterpret<*mut u8, *mut Write>(raw)
@@ -2710,7 +2727,7 @@ unsafe effect fn secureReadReady(handle: *mut Handle) -> () ! OutOfMemoryError ?
     }
     drop h
     let cipher = i64.toUsize(count)
-    if !unsafe tls.secureFeed(session, scratch, cipher) { unsafe returnSecure(handle) return () }
+    if !unsafe sessionFeed(handle, session, scratch, cipher) { unsafe returnSecure(handle) return () }
     if !run unsafe secureDecrypt(handle, session, cipher) { return () }
     // A short read emptied the socket.
     if cipher < CHUNK { return () }
@@ -2725,7 +2742,7 @@ unsafe effect fn secureDecrypt(handle: *mut Handle, session: *mut u8, cipher: us
   let scratch = unsafe scratchOf(handle)
   let mut counted = usize.toI32(cipher) let mut last: i32 = 0
   while true {
-    last = unsafe tls.secureRead(session, scratch, CHUNK)
+    last = unsafe sessionRead(handle, session, scratch, CHUNK)
     if last <= 0 { break }
     let length = i32.toUsize(last)
     if unsafe nodeExchange(handle) {
@@ -2745,8 +2762,8 @@ unsafe effect fn secureDecrypt(handle: *mut Handle, session: *mut u8, cipher: us
   // Ciphertext that made no plaintext yet still counts as read.
   if counted > 0 { unsafe post(event(handle, READ, counted, PLAINTEXT)) }
   // Alerts, key update answers and tickets the session made while it read.
-  if unsafe tls.securePending(session) > 0 { let _sent = run unsafe sendSecure(handle, session, 0) }
-  if last < 0 || !unsafe tls.secureQuiet(session) { unsafe returnSecure(handle) return false }
+  if unsafe sessionPending(handle, session) > 0 { let _sent = run unsafe sendSecure(handle, session, 0) }
+  if last < 0 || !unsafe sessionQuiet(handle, session) { unsafe returnSecure(handle) return false }
   return true
 }
 // The bytes of a typed array or DataView (a Buffer), appended to `output`; false for another value.
@@ -2824,7 +2841,7 @@ unsafe effect fn secureSend(handle: *mut Handle, session: *mut u8, plain: *mut u
   let anchor = () let h = unsafe Pointer.borrow<(), Handle>(&anchor, handle)
   if h.writeShut || h.shutdownPending || h.closing { return EPIPE() } drop h
   if count == 0 { return 1 }
-  if !unsafe tls.secureWrite(session, plain, count) { unsafe forgetSecure(handle) return SECURE_FAILED }
+  if !unsafe sessionWrite(handle, session, plain, count) { unsafe forgetSecure(handle) return SECURE_FAILED }
   return run unsafe sendSecure(handle, session, token)
 }
 // host.secure(op, id, ...): 0 attach(id, tls id), 1 detach(id), 2 write(id, buffer, offset,
@@ -2834,7 +2851,7 @@ unsafe effect fn secureSend(handle: *mut Handle, session: *mut u8, plain: *mut u
 // returns its byte count * 2 + 1 when it was sent now, * 2 when queued, or a status; 4 is the
 // same write on a plain (not TLS) stream handle, also one whose reads go to a native HTTP
 // exchange, where a failure also comes as WRITTEN.
-pub unsafe effect fn secure<'m, S: EngineServices>(engine: &mut Engine<'m, S>, context: *mut HeapHeader, state: *mut State, sessions: *mut tls.State, argv: &FrameSlots) -> ValueBits ! OutOfMemoryError | JsException ? &mut Allocator {
+pub unsafe effect fn secure<'m, S: EngineServices>(engine: &mut Engine<'m, S>, context: *mut HeapHeader, state: *mut State, sessions: ?*mut u8, argv: &FrameSlots) -> ValueBits ! OutOfMemoryError | JsException ? &mut Allocator {
   let op = number(unsafe common.argument(argv, 0))
   let found = unsafe lookup(state, number(unsafe common.argument(argv, 1)))
   if Pointer.isNull<Handle>(found) { return ValueBits.Int { value: if op == 2 { NOT_SECURE } else { EBADF() } } }
@@ -2843,8 +2860,9 @@ pub unsafe effect fn secure<'m, S: EngineServices>(engine: &mut Engine<'m, S>, c
     let h = unsafe Pointer.borrow<(), Handle>(&anchor, handle)
     let usable = !h.closing && !h.writeShut && Pointer.isNull<u8>(h.secure) && Pointer.isNull<Peer>(h.peer) && Pointer.isNull<Exchange>(h.exchange) && (h.kind == TCP || h.kind == PIPE)
     drop h
-    if !usable { return ValueBits.Int { value: EINVAL() } }
-    let session = unsafe tls.secureAttach(sessions, number(unsafe common.argument(argv, 2)))
+    // Without TLS (Tls.empty) there are no sessions to attach.
+    if !usable || Pointer.isNull<u8>(sessions) { return ValueBits.Int { value: EINVAL() } }
+    let session = unsafe attachSession(state, sessions, number(unsafe common.argument(argv, 2)))
     if Pointer.isNull<u8>(session) { return ValueBits.Int { value: EINVAL() } }
     let attached = unsafe Pointer.borrowMut<(), Handle>(&mut anchor, handle) attached.secure = session drop attached
     // Records that came with the handshake's last flight wait in the session already.

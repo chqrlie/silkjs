@@ -33,10 +33,11 @@ jobs:
       - name: WAMR native call entry assembles for macOS
         run: |
           for target in arm64-apple-macos13 x86_64-apple-macos13; do
-            "$SILK_CLANG" --target=$target -c modules/runtime/vendor/wamr/invoke_native.c -o "$RUNNER_TEMP/invoke_native-$target.o"
+            "$SILK_CLANG" --target=$target -c modules/native/wamr/vendor/invoke_native.c -o "$RUNNER_TEMP/invoke_native-$target.o"
           done
       - name: Runtime compiles for aarch64-apple-darwin
-        working-directory: modules/runtime
+        # The executable: the core with every capability's package.
+        working-directory: modules/runtime/cli/silkjs
         run: |
           set +e
           silk build --optimization=none --target aarch64-apple-darwin --progress plain 2>&1 | tee "$RUNNER_TEMP/darwin.log"

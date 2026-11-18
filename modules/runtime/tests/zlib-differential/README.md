@@ -1,6 +1,6 @@
 # zlib differential harness
 
-The runtime's zlib is Silk code (`src/ext/zlib_stream.silk` over `src/stdlib_copy/compress`). These
+The runtime's zlib is Silk code (`compress/src/ext/zlib_stream.silk` over `compress/src/stdlib_copy/compress`). These
 programs link it next to a C zlib and give both the same calls. Two C zlibs are built: Node 24's
 (Chromium's, `deps/zlib` of Node v24.22.3, files pinned in `node-zlib.sha256`, with the defines of
 Node's x64 build), whose bytes the runtime writes, and zlib 1.3.1 from its pinned release, whose

@@ -49,6 +49,7 @@ function install(process) {
     }
   });
   for (const name of process.eventNames()) if (process.listenerCount(name)) add(name);
-  require('internal/child_process/ipc').installChild(process);
+  // Without child processes (Processes.empty) there is no parent channel to connect to.
+  if (require('internal/host').hasService('Processes')) require('internal/child_process/ipc').installChild(process);
 }
 module.exports = { install, signalNumber, signalName };

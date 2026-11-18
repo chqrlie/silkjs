@@ -52,24 +52,17 @@ import libs.core.host
 import ext.introspection
 import ext.fs_native
 import ext.fs_async
-import ext.crypto_native
 import ext.net_native
-import ext.tls_native
-import ext.compression_native
 import ext.vm_native
 import ext.process_native
 import ext.vm_global
 import ext.webstorage_native
-import ext.http2_native
 import ext.worker_native
-import ext.sqlite_native
-import ext.napi_native
 import ext.profile_native
-import ext.inspector_native
+import libs.core.capabilities { INSPECTOR_FIRST }
 import libs.core.intl as intl
-import ext.wasm_native
-import ext.wasi_native
-import ext.http_parser_native
+import libs.core.capabilities { Composition, checkCombination }
+import libs.core.capabilities as capabilities
 import ext.trace_native
 import ext.sea_native
 import runtime.embedded
@@ -312,13 +305,13 @@ unsafe effect fn observer(allocator: &RuntimeHeap, image: ?*mut u8) -> Allocatio
   // allocation and every free a write to a record line.
   return run allocator.observe()
 }
-unsafe effect fn contextFor<'m>(engine: &mut Engine<'m, Services>, rt: *mut HeapHeader, image: ?*mut u8) -> *mut HeapHeader ! OutOfMemoryError | JsException ? &mut Allocator {
+unsafe effect fn contextFor<'m, C: Composition>(engine: &mut Engine<'m, Services<C>>, rt: *mut HeapHeader, image: ?*mut u8) -> *mut HeapHeader ! OutOfMemoryError | JsException ? &mut Allocator {
   if !Pointer.isNull<u8>(image) { return (unsafe Pointer.read<ImageRoots>(unsafe rootsAt(image))).context }
   let memory = engine.memory
   return run unsafe intrinsics.create(&mut engine, memory, rt)
 }
 /// Ends the build of a heap image: saves the heap as it is now to path and leaves.
-unsafe effect fn writeImage<'m>(engine: &mut Engine<'m, Services>, rt: *mut HeapHeader, context: *mut HeapHeader, allocator: *mut RuntimeHeap, region: ?*mut u8, bootstrap: ValueBits, process: &Process, path: &[u8]) -> ()
+unsafe effect fn writeImage<'m, C: Composition>(engine: &mut Engine<'m, Services<C>>, rt: *mut HeapHeader, context: *mut HeapHeader, allocator: *mut RuntimeHeap, region: ?*mut u8, bootstrap: ValueBits, process: &Process, path: &[u8]) -> ()
   ! OutOfMemoryError | JsException ? &mut Allocator {
   // A start from the image then never reads a function body before calling it.
   let _finished = run unsafe binaryReader.finishAllDeferred(&mut engine, rt)
@@ -333,17 +326,17 @@ unsafe effect fn writeImage<'m>(engine: &mut Engine<'m, Services>, rt: *mut Heap
 }
 /// Whether a native service still has a handle whose id the heap may hold, and which
 /// prints the kind of each such service.
-unsafe fn openHandles<'m>(engine: &Engine<'m, Services>) -> bool {
+unsafe fn openHandles<'m, C: Composition>(engine: &Engine<'m, Services<C>>) -> bool {
   let services = &engine.services
   let mut open = false
-  if let Option<*mut net_native.State>.Some { value } = Pointer.nonNullMut<net_native.State>(services.network) { open = unsafe reportOpen(b"network and DNS", unsafe net_native.openHandles(value)) || open }
-  if let Option<*mut crypto_native.State>.Some { value } = Pointer.nonNullMut<crypto_native.State>(services.crypto) { open = unsafe reportOpen(b"crypto", unsafe crypto_native.openHandles(value)) || open }
-  if let Option<*mut tls_native.State>.Some { value } = Pointer.nonNullMut<tls_native.State>(services.tls) { open = unsafe reportOpen(b"TLS", unsafe tls_native.openHandles(value)) || open }
-  if let Option<*mut compression_native.State>.Some { value } = Pointer.nonNullMut<compression_native.State>(services.compression) { open = unsafe reportOpen(b"zlib", unsafe compression_native.openHandles(value)) || open }
+  static if Composition.networkPresent() { if let Option<*mut net_native.State>.Some { value } = Pointer.nonNullMut<net_native.State>(services.network) { open = unsafe reportOpen(b"network and DNS", unsafe net_native.openHandles(value)) || open } }
+  open = unsafe reportOpen(b"crypto", unsafe Composition.cryptoOpenHandles(&engine.*)) || open
+  open = unsafe reportOpen(b"TLS", unsafe Composition.tlsOpenHandles(&engine.*)) || open
+  open = unsafe reportOpen(b"zlib", unsafe Composition.compressionOpenHandles(&engine.*)) || open
   if let Option<*mut process_native.State>.Some { value } = Pointer.nonNullMut<process_native.State>(services.processes) { open = unsafe reportOpen(b"child process", unsafe process_native.openHandles(value)) || open }
-  if let Option<*mut http2_native.State>.Some { value } = Pointer.nonNullMut<http2_native.State>(services.http2) { open = unsafe reportOpen(b"HTTP/2", unsafe http2_native.openHandles(value)) || open }
-  if let Option<*mut sqlite_native.State>.Some { value } = Pointer.nonNullMut<sqlite_native.State>(services.sqlite) { open = unsafe reportOpen(b"SQLite", unsafe sqlite_native.openHandles(value)) || open }
-  if let Option<*mut wasi_native.State>.Some { value } = Pointer.nonNullMut<wasi_native.State>(services.wasi) { open = unsafe reportOpen(b"WASI", unsafe wasi_native.openHandles(value)) || open }
+  open = unsafe reportOpen(b"HTTP/2", unsafe Composition.http2OpenHandles(&engine.*)) || open
+  open = unsafe reportOpen(b"SQLite", unsafe Composition.databaseOpenHandles(&engine.*)) || open
+  open = unsafe reportOpen(b"WASI", unsafe Composition.wasmOpenHandles(&engine.*)) || open
   return open
 }
 unsafe fn reportOpen(kind: &[u8], count: usize) -> bool {
@@ -355,9 +348,9 @@ unsafe fn reportOpen(kind: &[u8], count: usize) -> bool {
 }
 /// Saves the heap as it is now to path, as an image of the given kind, and leaves with
 /// status, or with 14 (Node's kStartupSnapshotFailure) when it cannot be written.
-unsafe effect fn saveImage<'m>(engine: &mut Engine<'m, Services>, rt: *mut HeapHeader, context: *mut HeapHeader, allocator: *mut RuntimeHeap, region: ?*mut u8, bootstrap: ValueBits, process: &Process, path: &[u8], kind: u64, status: i32) -> ()
+unsafe effect fn saveImage<'m, C: Composition>(engine: &mut Engine<'m, Services<C>>, rt: *mut HeapHeader, context: *mut HeapHeader, allocator: *mut RuntimeHeap, region: ?*mut u8, bootstrap: ValueBits, process: &Process, path: &[u8], kind: u64, status: i32) -> ()
   ! OutOfMemoryError | JsException ? &mut Allocator {
-  if kind == IMAGE_SNAPSHOT && unsafe openHandles(&engine) {
+  if kind == IMAGE_SNAPSHOT && unsafe openHandles(&engine.*) {
     // node_snapshotable.cc refuses a BaseObject it cannot serialize the same way.
     let _reported = platform.writeAll(2, b"Cannot build a startup snapshot: native handles are still open when the event loop ends. Close them (or end them in a serialize callback) before the snapshot is taken.\n")
     unsafe leave(14)
@@ -368,9 +361,8 @@ unsafe effect fn saveImage<'m>(engine: &mut Engine<'m, Services>, rt: *mut HeapH
   let mut anchor = () let heap = unsafe Pointer.borrowMut<(), RuntimeHeap>(&mut anchor, allocator)
   heap.finishImage()
   let ledger = heap.ledgerPointer() drop heap
-  let wasm = unsafe Intrinsic.pointerRequalify<?*mut wasm_native.State, *mut wasm_native.State>(engine.services.wasm)
   unsafe Pointer.write<ImageRoots>(unsafe rootsAt(region), ImageRoots {
-    rt: rt, context: context, ledger: ledger, wasmClasses: unsafe wasm_native.classIds(wasm),
+    rt: rt, context: context, ledger: ledger, wasmClasses: unsafe Composition.wasmClassIds(&engine.*),
     bootstrap: bootstrap, normalize: engine.services.normalize, load: engine.services.load, moduleSource: engine.services.moduleSource, moduleError: engine.services.moduleError, importTrace: engine.services.importTrace, registerSource: engine.services.registerSource,
     rejection: engine.services.rejection, workerError: engine.services.workerError, meta: engine.services.meta,
     asyncEvent: engine.services.asyncEvent, asyncDestroyEvent: engine.services.asyncDestroyEvent,
@@ -379,15 +371,11 @@ unsafe effect fn saveImage<'m>(engine: &mut Engine<'m, Services>, rt: *mut HeapH
   })
   // What the bootstrap handed to native services stays behind with this process: closing
   // them gives up their hold on the heap, and hydrate hands the same things to the next ones.
-  if let Option<*mut napi_native.State>.Some { value: napi } = Pointer.nonNullMut<napi_native.State>(engine.services.napi) { unsafe napi_native.close(&mut engine, context, napi) }
+  unsafe Composition.addonsClose(&mut engine, context)
   let immediateQueue = unsafe host.immediatesState(&mut engine)
   unsafe immediates.close(&mut engine, rt, immediateQueue)
-  if let Option<*mut inspector_native.State>.Some { value: inspector } = Pointer.nonNullMut<inspector_native.State>(engine.services.inspector) {
-    engine.services.inspector = Pointer.null<inspector_native.State>()
-    unsafe inspector_native.dispose(&mut engine, context, inspector)
-  }
-  unsafe wasm_native.close(&mut engine, context, wasm)
-  engine.services.wasm = Pointer.null<wasm_native.State>()
+  unsafe Composition.inspectorDispose(&mut engine, context)
+  unsafe Composition.wasmClose(&mut engine, context)
   let written = unsafe heap_image.save(unsafe Intrinsic.pointerRequalify<?*mut u8, *mut u8>(region), path)
   if written { unsafe leave(status) }
   if kind == IMAGE_SNAPSHOT {
@@ -404,7 +392,7 @@ unsafe fn global(context: *mut HeapHeader) -> ValueBits {
   let anchor = () let state = unsafe HeapCell.payload<ContextState, ()>(&anchor, context)
   return state.globalObject.view()
 }
-unsafe effect fn function<'m>(engine: &mut Engine<'m, Services>, context: *mut HeapHeader, object: ValueBits, name: &[u8], id: u32) -> () ! JsException ? &mut Allocator {
+unsafe effect fn function<'m, C: Composition>(engine: &mut Engine<'m, Services<C>>, context: *mut HeapHeader, object: ValueBits, name: &[u8], id: u32) -> () ! JsException ? &mut Allocator {
   // The clock cannot throw, allocate or call JavaScript: the VM calls it without a
   // native frame. The async context accessors are the engine's own, which the VM
   // answers itself.
@@ -417,7 +405,7 @@ unsafe effect fn function<'m>(engine: &mut Engine<'m, Services>, context: *mut H
   let value = run functions.newFunction(&mut engine, memory, unsafe lendRealm(&context, context), native, name, 2, protocol, 0)
   run unsafe common.define(&mut engine, context, object, name, value, 7)
 }
-unsafe effect fn configure<'m>(engine: &mut Engine<'m, Services>, context: *mut HeapHeader, arguments: &List<Bytes>, process: &Process, image: bool, snapshot: u8, hosted: bool) -> ValueBits
+unsafe effect fn configure<'m, C: Composition>(engine: &mut Engine<'m, Services<C>>, context: *mut HeapHeader, arguments: &List<Bytes>, process: &Process, image: bool, snapshot: u8, hosted: bool) -> ValueBits
   ! OutOfMemoryError | JsException | StringLengthError | ModuleMetadataError ? &mut Allocator {
   let memory = engine.memory let rt = unsafe runtime.contextRuntime(context)
   unsafe runtime.setCanBlock(rt, true)
@@ -448,6 +436,35 @@ unsafe effect fn configure<'m>(engine: &mut Engine<'m, Services>, context: *mut 
   run unsafe function(&mut engine, context, native, b"pgRows", 39)
   run unsafe function(&mut engine, context, native, b"hideFrames", 40)
   run unsafe function(&mut engine, context, native, b"bufferOperation", 41)
+  run unsafe function(&mut engine, context, native, b"builtinService", 42)
+  // The services this runtime has (docs/composable-runtime.md): the bootstrap registers only
+  // their built-ins. Every one is here until each becomes a capability the embedder chooses.
+  // Files, Compression, Http2, Crypto, Tls, Database, NativeAddons, Processes, Network, Http, SystemInfo, TypeStripping, Inspector and Wasm are the embedder's choice (`Capabilities`); the rest are
+  // still always here.
+  let mut wasm: &[u8] = b"" static if capabilities.hasWasm<C>() { wasm = b"Wasm" }
+  let mut files: &[u8] = b"" static if capabilities.hasFiles<C>() { files = b"Files" }
+  let mut compression: &[u8] = b"" static if capabilities.hasCompression<C>() { compression = b"Compression" }
+  let mut http2: &[u8] = b"" static if capabilities.hasHttp2<C>() { http2 = b"Http2" }
+  let mut crypto: &[u8] = b"" static if capabilities.hasCrypto<C>() { crypto = b"Crypto" }
+  let mut tls: &[u8] = b"" static if capabilities.hasTls<C>() { tls = b"Tls" }
+  let mut database: &[u8] = b"" static if Composition.databasePresent() { database = b"Database" }
+  let mut addons: &[u8] = b"" static if Composition.addonsPresent() { addons = b"NativeAddons" }
+  let mut processes: &[u8] = b"" static if Composition.processesPresent() { processes = b"Processes" }
+  let mut network: &[u8] = b"" static if Composition.networkPresent() { network = b"Network" }
+  let mut http: &[u8] = b"" static if Composition.httpPresent() { http = b"Http" }
+  let mut systemInfo: &[u8] = b"" static if Composition.systemInfoPresent() { systemInfo = b"SystemInfo" }
+  let mut typeStripping: &[u8] = b"" static if Composition.typeStrippingPresent() { typeStripping = b"TypeStripping" }
+  let mut inspector: &[u8] = b"" static if Composition.inspectorPresent() { inspector = b"Inspector" }
+  let present = [b"Platform", b"ModuleResolver", files, network, processes, systemInfo, b"Workers", crypto, tls,
+    compression, http, http2, wasm, database, typeStripping, inspector, addons, b"HostApi"]
+  let services = run unsafe common.array(&mut engine, memory, context)
+  let mut named: usize = 0
+  while named < present.length {
+    let serviceName = run unsafe host.string(&mut engine, context, present[named])
+    run unsafe common.defineIndex(&mut engine, context, services, usize.toU32(named), serviceName)
+    named = named + 1
+  }
+  run unsafe common.define(&mut engine, context, native, b"services", services, 7)
   let started = engine.services.started
   let engineStarted = engine.services.engineStarted
   run unsafe common.define(&mut engine, context, native, b"runtimeStartTime", ValueBits.number(i64.toF64(started) / 1000000.0), 7)
@@ -455,9 +472,13 @@ unsafe effect fn configure<'m>(engine: &mut Engine<'m, Services>, context: *mut 
   run unsafe common.define(&mut engine, context, native, b"environmentTime", ValueBits.number(i64.toF64(clock.nowNanoseconds()) / 1000000.0), 7)
   let ioNames = [b"fsSync", b"submit", b"watch", b"watchControl", b"pollIO", b"hasPendingIO", b"fsTracking", b"resourceSnapshot"]
   at = 0
+  // The first four are fs's, there only with a file system; the rest are the loop's.
+  static if !capabilities.hasFiles<C>() { at = 4 }
   while at < ioNames.length { run unsafe function(&mut engine, context, native, ioNames[at], 2000 + usize.toU32(at)) at = at + 1 }
-  run unsafe function(&mut engine, context, native, b"crypto", 2100)
-  run unsafe function(&mut engine, context, native, b"cryptoAsync", 2101)
+  static if capabilities.hasCrypto<C>() {
+    run unsafe function(&mut engine, context, native, b"crypto", 2100)
+    run unsafe function(&mut engine, context, native, b"cryptoAsync", 2101)
+  }
   let asyncNames = [b"getAsyncContext", b"setAsyncContext", b"setAsyncHooksEnabled", b"asyncHookFatal"]
   at = 0
   while at < asyncNames.length { run unsafe function(&mut engine, context, native, asyncNames[at], 2200 + usize.toU32(at)) at = at + 1 }
@@ -472,20 +493,28 @@ unsafe effect fn configure<'m>(engine: &mut Engine<'m, Services>, context: *mut 
   let urlNames = [b"urlParse", b"urlCanParse", b"urlUpdate", b"urlFormParse", b"urlFormSerialize", b"urlDomainToASCII", b"urlDomainToUnicode", b"urlIdnaToASCII"]
   at = 0
   while at < urlNames.length { run unsafe function(&mut engine, context, native, urlNames[at], url_native.BASE + usize.toU32(at)) at = at + 1 }
-  run unsafe function(&mut engine, context, native, b"net", 2400)
-  run unsafe function(&mut engine, context, native, b"wsSend", 2401)
-  run unsafe function(&mut engine, context, native, b"httpRespond", 2402)
-  run unsafe function(&mut engine, context, native, b"httpChunk", 2403)
-  run unsafe function(&mut engine, context, native, b"httpRespondText", 2404)
-  run unsafe function(&mut engine, context, native, b"secure", 2405)
-  run unsafe function(&mut engine, context, native, b"tls", 2500)
-  run unsafe function(&mut engine, context, native, b"compression", 2600)
-  run unsafe function(&mut engine, context, native, b"compressionAsync", 2601)
+  static if Composition.networkPresent() {
+    run unsafe function(&mut engine, context, native, b"net", 2400)
+    run unsafe function(&mut engine, context, native, b"wsSend", 2401)
+    run unsafe function(&mut engine, context, native, b"httpRespond", 2402)
+    run unsafe function(&mut engine, context, native, b"httpChunk", 2403)
+    run unsafe function(&mut engine, context, native, b"httpRespondText", 2404)
+    run unsafe function(&mut engine, context, native, b"secure", 2405)
+  }
+  static if capabilities.hasTls<C>() { run unsafe function(&mut engine, context, native, b"tls", 2500) }
+  static if capabilities.hasCompression<C>() {
+    run unsafe function(&mut engine, context, native, b"compression", 2600)
+    run unsafe function(&mut engine, context, native, b"compressionAsync", 2601)
+  }
+  // The process executor serves signals too, which every runtime has; Processes leaves out its
+  // built-ins, not this.
   run unsafe function(&mut engine, context, native, b"processNative", 2700)
-  run unsafe function(&mut engine, context, native, b"http2", 5000)
+  static if capabilities.hasHttp2<C>() { run unsafe function(&mut engine, context, native, b"http2", 5000) }
   run unsafe function(&mut engine, context, native, b"workerNative", 6000)
-  run unsafe function(&mut engine, context, native, b"sqliteNative", 7000)
-  run unsafe function(&mut engine, context, native, b"napiNative", 14000)
+  static if Composition.databasePresent() { run unsafe function(&mut engine, context, native, b"sqliteNative", 7000) }
+  run unsafe function(&mut engine, context, native, b"moduleNative", 19000)
+  run unsafe function(&mut engine, context, native, b"platformNative", 19100)
+  static if Composition.addonsPresent() { run unsafe function(&mut engine, context, native, b"napiNative", 14000) }
   let inspectorNames = [
     b"inspectorNative0", b"inspectorNative1", b"inspectorNative2", b"inspectorNative3",
     b"inspectorNative4", b"inspectorNative5", b"inspectorNative6", b"inspectorNative7",
@@ -498,8 +527,9 @@ unsafe effect fn configure<'m>(engine: &mut Engine<'m, Services>, context: *mut 
     b"inspectorNative32",
   ]
   at = 0
+  static if !Composition.inspectorPresent() { at = inspectorNames.length }
   while at < inspectorNames.length {
-    run unsafe function(&mut engine, context, native, inspectorNames[at], inspector_native.BASE + usize.toU32(at))
+    run unsafe function(&mut engine, context, native, inspectorNames[at], INSPECTOR_FIRST + usize.toU32(at))
     at = at + 1
   }
   let mut profileOperation: u32 = 0
@@ -509,9 +539,11 @@ unsafe effect fn configure<'m>(engine: &mut Engine<'m, Services>, context: *mut 
   }
   run unsafe function(&mut engine, context, native, b"installPermissionGuard", 17000)
   run unsafe function(&mut engine, context, native, b"testCoverageNative", 16000)
-  run unsafe function(&mut engine, context, native, b"wasmNative", 9000)
-  run unsafe function(&mut engine, context, native, b"wasiNative", 10000)
-  run unsafe function(&mut engine, context, native, b"httpParserNative", 11000)
+  static if capabilities.hasWasm<C>() {
+    run unsafe function(&mut engine, context, native, b"wasmNative", 9000)
+    run unsafe function(&mut engine, context, native, b"wasiNative", 10000)
+  }
+  static if Composition.httpPresent() { run unsafe function(&mut engine, context, native, b"httpParserNative", 11000) }
   run unsafe function(&mut engine, context, native, b"traceNative", 12000)
   run unsafe function(&mut engine, context, native, b"seaNative", 13000)
   let vmClassId = run unsafe vm_global.install(rt, &process.namespace)
@@ -543,6 +575,10 @@ unsafe effect fn configure<'m>(engine: &mut Engine<'m, Services>, context: *mut 
   if snapshot == SNAPSHOT_BUILD { run unsafe common.define(&mut engine, context, native, b"snapshotBuild", ValueBits.Bool { value: true }, 7) }
   // An embedded runtime does not own the process (bootstrap.js rawStd.exit).
   if hosted { run unsafe common.define(&mut engine, context, native, b"embedded", ValueBits.Bool { value: true }, 7) }
+  // Whether new Worker() can start a thread (the Workers capability).
+  static if Composition.workersPresent() { run unsafe common.define(&mut engine, context, native, b"workerThreads", ValueBits.Bool { value: true }, 7) }
+  // Whether fs is the operating system's, unrooted, whose paths the engine's os module takes itself.
+  static if Composition.filesDirect() { run unsafe common.define(&mut engine, context, native, b"filesDirect", ValueBits.Bool { value: true }, 7) }
   at = 0
   while at < count {
     let value = run unsafe host.string(&mut engine, context, arguments.asSlice()[at].asSlice())
@@ -564,13 +600,13 @@ unsafe effect fn configure<'m>(engine: &mut Engine<'m, Services>, context: *mut 
   if promise.stateOf(unsafe lendFor(result)) == promise.REJECTED {
     let reason = promise.resultOf(unsafe lendFor(result)).intoBits()
     unsafe gc.release(&mut engine, rt, result)
-    return run unsafe exceptions.throwValue<ValueBits, Engine<'m, Services>>(&mut engine, rt, reason)
+    return run unsafe exceptions.throwValue<ValueBits, Engine<'m, Services<C>>>(&mut engine, rt, reason)
   }
   unsafe gc.release(&mut engine, rt, result)
   let bootstrap = run unsafe common.get(&mut engine, context, unsafe global(context), b"__silkRuntime")
   return bootstrap
 }
-unsafe effect fn execute<'m, D: Driver>(engine: &mut Engine<'m, Services>, context: *mut HeapHeader, arguments: &List<Bytes>, process: &Process, allocator: *mut RuntimeHeap, region: ?*mut u8, image: ?*mut u8, main: bool, snapshot: u8, blob: &[u8], mode: Mode, driver: &mut D) -> i32
+unsafe effect fn execute<'m, D: Driver, C: Composition>(engine: &mut Engine<'m, Services<C>>, context: *mut HeapHeader, arguments: &List<Bytes>, process: &Process, allocator: *mut RuntimeHeap, region: ?*mut u8, image: ?*mut u8, main: bool, snapshot: u8, blob: &[u8], mode: Mode, driver: &mut D) -> i32
   ! OutOfMemoryError | JsException | StringLengthError | ModuleMetadataError ? &mut Allocator {
   let intrinsicMemory = engine.memory
   let restored = !Pointer.isNull<u8>(image)
@@ -579,26 +615,26 @@ unsafe effect fn execute<'m, D: Driver>(engine: &mut Engine<'m, Services>, conte
     run unsafe intl.install(&mut engine, context, &process.namespace)
   }
   engine.services.io = run fs_async.make()
-  engine.services.crypto = run crypto_native.open(main)
+  run Composition.cryptoOpen(&mut engine, main)
   let io = unsafe Intrinsic.pointerRequalify<?*mut fs_async.State, *mut fs_async.State>(engine.services.io)
   let workers = unsafe Intrinsic.pointerRequalify<?*mut worker_native.State, *mut worker_native.State>(engine.services.workers)
-  let crypto = unsafe Intrinsic.pointerRequalify<?*mut crypto_native.State, *mut crypto_native.State>(engine.services.crypto)
-  run unsafe worker_native.attach(workers, io, crypto)
+  run unsafe worker_native.attach(workers, io, unsafe Composition.cryptoThreadSetup(&engine.*))
   let mailbox = match unsafe worker_native.mailbox(workers) { Option<Mailbox>.Some { value } => value _ => { Intrinsic.trap("worker diagnostics are not attached") } }
-  engine.services.inspector = run inspector_native.create(unsafe fs_async.wakerAddress(io), mailbox)
-  engine.services.network = run net_native.open(io)
-  engine.services.tls = run tls_native.open(allocator)
-  engine.services.compression = run compression_native.open()
+  run Composition.inspectorOpen(&mut engine, unsafe fs_async.wakerAddress(io), mailbox)
+  static if Composition.networkPresent() { engine.services.network = run net_native.open(io, Composition.tlsSecureOps(&engine.*)) }
+  run Composition.tlsOpen(&mut engine, allocator)
+  run Composition.compressionOpen(&mut engine)
+  Composition.typeStrippingLink(&engine.*)
   engine.services.processes = run process_native.make(io, workers)
-  engine.services.http2 = run http2_native.open()
-  engine.services.sqlite = run sqlite_native.open(allocator)
-  engine.services.napi = run napi_native.open(allocator, unsafe Intrinsic.pointerReinterpret<*mut worker_native.State, *mut u8>(workers), worker_native.silkNodeFatalReport, io)
-  let wasm = run wasm_native.open(allocator)
-  engine.services.wasm = wasm
-  if restored { unsafe wasm_native.adoptClasses(wasm, unsafe runtime.contextRuntime(context), (unsafe Pointer.read<ImageRoots>(unsafe rootsAt(image))).wasmClasses) }
-  else { run unsafe wasm_native.install(wasm, unsafe runtime.contextRuntime(context), &process.namespace) }
-  engine.services.wasi = run wasi_native.open(allocator)
-  engine.services.httpParser = run http_parser_native.open(allocator)
+  run Composition.http2Open(&mut engine)
+  run Composition.databaseOpen(&mut engine, allocator)
+  run Composition.addonsOpen(&mut engine, allocator, unsafe Intrinsic.pointerReinterpret<*mut worker_native.State, *mut u8>(workers), io)
+  static if capabilities.hasWasm<C>() {
+    run Composition.wasmOpen(&mut engine, allocator)
+    if restored { unsafe Composition.wasmAdoptClasses(&mut engine, unsafe runtime.contextRuntime(context), (unsafe Pointer.read<ImageRoots>(unsafe rootsAt(image))).wasmClasses) }
+    else { run unsafe Composition.wasmInstall(&mut engine, unsafe runtime.contextRuntime(context), &process.namespace) }
+  }
+  run Composition.httpOpen(&mut engine, allocator)
   engine.services.tracing = run trace_native.open(allocator)
   match Pointer.nonNullMut<trace_native.State>(engine.services.tracing) {
     Option<*mut trace_native.State>.Some { value: tracing } => { unsafe fs_async.setTracing(io, unsafe Intrinsic.pointerReinterpret<*mut trace_native.State, *mut u8>(tracing)) }
@@ -695,7 +731,7 @@ unsafe effect fn execute<'m, D: Driver>(engine: &mut Engine<'m, Services>, conte
 /// A worker that terminate() or process.exit() stopped still ends its profilers, as Node's
 /// EndStartedProfilers does in its environment cleanup: the bootstrap's `stopped` runs with
 /// the stop held. The interruption it unwound is dropped: a stopped worker reports nothing.
-unsafe effect fn stopped<'m>(engine: &mut Engine<'m, Services>, context: *mut HeapHeader, bootstrap: ValueBits) -> () ! OutOfMemoryError ? &mut Allocator {
+unsafe effect fn stopped<'m, C: Composition>(engine: &mut Engine<'m, Services<C>>, context: *mut HeapHeader, bootstrap: ValueBits) -> () ! OutOfMemoryError ? &mut Allocator {
   if !unsafe worker_native.shouldInterrupt(engine.services.workers) { return () }
   let rt = unsafe runtime.contextRuntime(context)
   let pending = unsafe exceptions.take(rt) unsafe gc.release(&mut engine, rt, pending)
@@ -712,7 +748,7 @@ unsafe effect fn stopped<'m>(engine: &mut Engine<'m, Services>, context: *mut He
   }
   engine.services.stopCleanup = false
 }
-unsafe effect fn realm<'m, D: Driver>(engine: &mut Engine<'m, Services>, rt: *mut HeapHeader, arguments: &List<Bytes>, process: &Process, allocator: *mut RuntimeHeap, region: ?*mut u8, image: ?*mut u8, snapshot: u8, blob: &[u8], mode: Mode, driver: &mut D) -> i32
+unsafe effect fn realm<'m, D: Driver, C: Composition>(engine: &mut Engine<'m, Services<C>>, rt: *mut HeapHeader, arguments: &List<Bytes>, process: &Process, allocator: *mut RuntimeHeap, region: ?*mut u8, image: ?*mut u8, snapshot: u8, blob: &[u8], mode: Mode, driver: &mut D) -> i32
   ! OutOfMemoryError | JsException ? &mut Allocator {
   let memory = engine.memory
   let context = run unsafe contextFor(&mut engine, rt, image)
@@ -747,17 +783,8 @@ unsafe effect fn realm<'m, D: Driver>(engine: &mut Engine<'m, Services>, rt: *mu
       unsafe gc.release(&mut engine, rt, exception)
     }
   }
-  match Pointer.nonNullMut<napi_native.State>(engine.services.napi) {
-    Option<*mut napi_native.State>.Some { value: napi } => { unsafe napi_native.close(&mut engine, context, napi) }
-    _ => ()
-  }
-  match Pointer.nonNullMut<inspector_native.State>(engine.services.inspector) {
-    Option<*mut inspector_native.State>.Some { value: inspector } => {
-      engine.services.inspector = Pointer.null<inspector_native.State>()
-      unsafe inspector_native.dispose(&mut engine, context, inspector)
-    }
-    _ => ()
-  }
+  unsafe Composition.addonsClose(&mut engine, context)
+  unsafe Composition.inspectorDispose(&mut engine, context)
   if !Pointer.isNull<worker_native.State>(engine.services.workers) {
     let workers = unsafe Intrinsic.pointerRequalify<?*mut worker_native.State, *mut worker_native.State>(engine.services.workers)
     status = unsafe worker_native.exitCode(workers, status)
@@ -772,6 +799,7 @@ unsafe effect fn realm<'m, D: Driver>(engine: &mut Engine<'m, Services>, rt: *mu
         }
         _ => ()
       }
+      static if Composition.networkPresent() {
       match Pointer.nonNullMut<net_native.State>(engine.services.network) {
         Option<*mut net_native.State>.Some { value: network } => {
           unsafe net_native.close(&mut engine, context, network)
@@ -779,59 +807,15 @@ unsafe effect fn realm<'m, D: Driver>(engine: &mut Engine<'m, Services>, rt: *mu
         }
         _ => ()
       }
-      match Pointer.nonNullMut<tls_native.State>(engine.services.tls) {
-        Option<*mut tls_native.State>.Some { value: tls } => {
-          unsafe tls_native.close(&mut engine, context, tls)
-          engine.services.tls = Pointer.null<tls_native.State>()
-        }
-        _ => ()
       }
-      match Pointer.nonNullMut<http2_native.State>(engine.services.http2) {
-        Option<*mut http2_native.State>.Some { value: http2 } => {
-          unsafe http2_native.close(http2)
-          engine.services.http2 = Pointer.null<http2_native.State>()
-        }
-        _ => ()
-      }
-      match Pointer.nonNullMut<sqlite_native.State>(engine.services.sqlite) {
-        Option<*mut sqlite_native.State>.Some { value: sqlite } => {
-          unsafe sqlite_native.close(&mut engine, context, sqlite)
-          engine.services.sqlite = Pointer.null<sqlite_native.State>()
-        }
-        _ => ()
-      }
-      match Pointer.nonNullMut<http_parser_native.State>(engine.services.httpParser) {
-        Option<*mut http_parser_native.State>.Some { value: parser } => {
-          unsafe http_parser_native.close(&mut engine, context, parser)
-          engine.services.httpParser = Pointer.null<http_parser_native.State>()
-        }
-        _ => ()
-      }
-      match Pointer.nonNullMut<wasi_native.State>(engine.services.wasi) {
-        Option<*mut wasi_native.State>.Some { value: wasi } => {
-          unsafe wasi_native.close(&mut engine, context, wasi)
-          engine.services.wasi = Pointer.null<wasi_native.State>()
-        }
-        _ => ()
-      }
-      match Pointer.nonNullMut<wasm_native.State>(engine.services.wasm) {
-        Option<*mut wasm_native.State>.Some { value: wasm } => {
-          unsafe wasm_native.close(&mut engine, context, wasm)
-          engine.services.wasm = Pointer.null<wasm_native.State>()
-        }
-        _ => ()
-      }
-      match Pointer.nonNullMut<compression_native.State>(engine.services.compression) {
-        Option<*mut compression_native.State>.Some { value: compression } => {
-          unsafe compression_native.close(&mut engine, context, compression, io)
-          engine.services.compression = Pointer.null<compression_native.State>()
-        }
-        _ => ()
-      }
-      match Pointer.nonNullMut<crypto_native.State>(engine.services.crypto) {
-        Option<*mut crypto_native.State>.Some { value: crypto } => { unsafe crypto_native.close(&mut engine, context, crypto, io) engine.services.crypto = Pointer.null<crypto_native.State>() }
-        _ => ()
-      }
+      unsafe Composition.tlsClose(&mut engine, context)
+      unsafe Composition.http2Close(&mut engine)
+      unsafe Composition.databaseClose(&mut engine, context)
+      unsafe Composition.httpClose(&mut engine, context)
+      unsafe Composition.wasmCloseWasi(&mut engine, context)
+      unsafe Composition.wasmClose(&mut engine, context)
+      unsafe Composition.compressionClose(&mut engine, context, io)
+      unsafe Composition.cryptoClose(&mut engine, context, io)
       unsafe fs_async.close(&mut engine, context, io) engine.services.io = Pointer.null<fs_async.State>()
     }
     _ => ()
@@ -900,9 +884,9 @@ pub struct Mode {
   pub keepAlive: bool,
 }
 impl Copy for Mode {}
-unsafe effect fn runtimeBody<D: Driver>(workers: *mut worker_native.State, arguments: &List<Bytes>, process: &Process, mode: Mode, driver: &mut D) -> i32 ! OutOfMemoryError ? &mut Allocator {
+unsafe effect fn runtimeBody<D: Driver, C: Composition>(workers: *mut worker_native.State, arguments: &List<Bytes>, process: &Process, mode: Mode, driver: &mut D, capabilities: C) -> i32 ! OutOfMemoryError ? &mut Allocator {
   let exiting = mode.exiting
-  let mut services = Services.make(process.namespace.clone()) services.workers = workers
+  let mut services = Services<C>.make(process.namespace.clone(), move capabilities) services.workers = workers
   // Only the main thread's runtime starts from a heap image, or builds one.
   let mut region = Pointer.null<u8>() let mut image = Pointer.null<u8>()
   // Startup snapshots: bootstrap run() re-executes the process as
@@ -968,19 +952,12 @@ unsafe effect fn runtimeBody<D: Driver>(workers: *mut worker_native.State, argum
   drop allocationProfile
   // Addon finalizers are observable and run when the heap is destroyed; every other
   // native resource was closed with its service above.
-  let addons = match Pointer.nonNullMut<napi_native.State>(engine.services.napi) {
-    Option<*mut napi_native.State>.Some { value: napi } => unsafe napi_native.loaded(napi)
-    _ => false
-  }
+  let addons = unsafe Composition.addonsLoaded(&engine)
   if !exiting || addons {
     unsafe events.freeHandlers(&mut engine, rt)
     run unsafe gc.destroyRuntime(&mut engine, rt) |> Effect.provideMut<Allocator>(&mut allocator)
   }
-  match Pointer.nonNullMut<napi_native.State>(engine.services.napi) {
-    Option<*mut napi_native.State>.Some { value: napi } => { unsafe napi_native.dispose(napi) }
-    _ => ()
-  }
-  engine.services.napi = Pointer.null<napi_native.State>()
+  unsafe Composition.addonsDispose(&mut engine)
   match Pointer.nonNullMut<trace_native.State>(engine.services.tracing) {
     Option<*mut trace_native.State>.Some { value: tracing } => { unsafe trace_native.close(tracing) }
     _ => ()
@@ -993,8 +970,8 @@ unsafe effect fn runtimeBody<D: Driver>(workers: *mut worker_native.State, argum
   engine.services.sea = Pointer.null<sea_native.State>()
   return match move executed { Result<i32, OutOfMemoryError | JsException>.Success { value } => value Result<i32, OutOfMemoryError | JsException>.Failure { .. } => 1 }
 }
-unsafe effect fn executeRuntime<D: Driver>(workers: *mut worker_native.State, arguments: &List<Bytes>, process: &Process, mode: Mode, driver: &mut D) -> i32 ! OutOfMemoryError ? &mut Allocator {
-  let outcome = run Effect.result(unsafe runtimeBody(workers, arguments, process, mode, &mut driver.*))
+unsafe effect fn executeRuntime<D: Driver, C: Composition>(workers: *mut worker_native.State, arguments: &List<Bytes>, process: &Process, mode: Mode, driver: &mut D, capabilities: C) -> i32 ! OutOfMemoryError ? &mut Allocator {
+  let outcome = run Effect.result(unsafe runtimeBody(workers, arguments, process, mode, &mut driver.*, move capabilities))
   // The system allocator aborts when it fails (ReportingAllocator), so in a worker
   // with a heap budget an OutOfMemoryError while starting is that budget running
   // out: it ends with ERR_WORKER_OUT_OF_MEMORY rather than a fatal report.
@@ -1007,24 +984,29 @@ unsafe effect fn executeRuntime<D: Driver>(workers: *mut worker_native.State, ar
     Result<i32, OutOfMemoryError>.Failure { error } => { fail move error }
   }
 }
-/// Runs a main runtime with these arguments (process.argv) under `driver`, and returns its
-/// exit status. `mode.exiting` is for the executable alone: the process ends with it.
-pub effect fn executeMain<D: Driver>(arguments: &List<Bytes>, mode: Mode, driver: &mut D) -> i32 ! OutOfMemoryError | SynchronizationError ? &mut Allocator {
+/// Runs a main runtime with these arguments (process.argv) under `driver`, with the embedder's
+/// capabilities, and returns its exit status. `mode.exiting` is for the executable alone: the
+/// process ends with it.
+pub effect fn executeMain<D: Driver, C: Composition>(arguments: &List<Bytes>, mode: Mode, driver: &mut D, capabilities: C) -> i32 ! OutOfMemoryError | SynchronizationError ? &mut Allocator {
+  checkCombination<C>()
   let namespace = run ClassIdAllocator.make()
   let process = run Process.make(&namespace)
   let domain = run WaiterDomain.make()
-  let workers = run worker_native.mainState(&process, domain.handle())
-  return run unsafe executeRuntime(workers, arguments, &process, mode, &mut driver.*)
+  // Worker threads of this runtime start in its own specialization.
+  let workers = run worker_native.mainState(&process, domain.handle(), &capabilities)
+  return run unsafe executeRuntime(workers, arguments, &process, mode, &mut driver.*, move capabilities)
 }
 /// The executable's runtime: it owns the process and runs Node's loop.
-pub effect fn executeProgram(arguments: &List<Bytes>) -> i32 ! OutOfMemoryError | SynchronizationError ? &mut Allocator {
+pub effect fn executeProgram<C: Composition>(arguments: &List<Bytes>, capabilities: C) -> i32 ! OutOfMemoryError | SynchronizationError ? &mut Allocator {
   let mut driver = session.NodeLoop {}
-  return run executeMain(arguments, Mode { main: true, exiting: true, embedded: false, keepAlive: false }, &mut driver)
+  return run executeMain(arguments, Mode { main: true, exiting: true, embedded: false, keepAlive: false }, &mut driver, move capabilities)
 }
-pub effect fn executeThread(start: worker_native.Start) -> i32 ! OutOfMemoryError ? &mut Allocator {
+/// A worker thread's runtime, with the capabilities a new thread starts with.
+pub effect fn executeThread<C: Composition>(start: worker_native.Start) -> i32 ! OutOfMemoryError ? &mut Allocator {
   let process = start.group.process.clone()
+  let fresh: C = worker_native.threadCapabilities<C>(&start)
   let workers = run worker_native.makeState(move start.group, start.id, start.control, move start.metadata)
   let arguments = List<Bytes>.make()
   let mut driver = session.NodeLoop {}
-  return run unsafe executeRuntime(workers, &arguments, &process, Mode { main: false, exiting: false, embedded: false, keepAlive: false }, &mut driver)
+  return run unsafe executeRuntime(workers, &arguments, &process, Mode { main: false, exiting: false, embedded: false, keepAlive: false }, &mut driver, move fresh)
 }

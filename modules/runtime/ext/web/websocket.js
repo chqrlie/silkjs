@@ -1,7 +1,8 @@
 'use strict';
 
 const { Buffer } = require('buffer');
-const { randomBytes, createHash } = require('crypto');
+// crypto loads with the first handshake: without it (Crypto.empty) that fails with ERR_NO_CRYPTO.
+const randomBytes = (...args) => require('crypto').randomBytes(...args), createHash = (...args) => require('crypto').createHash(...args);
 const { Event, EventTarget, DOMException } = require('internal/path_events/event_target');
 const { URL } = require('internal/url');
 const { Blob } = require('internal/web/blob');

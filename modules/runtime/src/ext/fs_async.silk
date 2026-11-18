@@ -1,6 +1,10 @@
-//! One libuv loop per runtime. C callbacks only publish native completion state;
-//! all JavaScript calls occur in poll after unlinking work and dropping borrows.
-//! close drains native requests without calling JS, then releases every owner.
+//! The runtime's loop: a `silk.io.reactor` Reactor, its only blocking wait, and the blocking pool
+//! for file requests. Executors add their descriptors to the reactor and find their events in
+//! their own poll; file watchers (ext/file_watch, and a stat timer for fs.watchFile) live here.
+//! No libuv (the loop plan, step 7, in docs/composable-runtime.md): an N-API addon that asks for
+//! a libuv loop gets one from silkjsruntime-napi, which runs it as this loop's `Guest`.
+//! Workers only publish completion state; all JavaScript calls occur in poll after unlinking work
+//! and dropping borrows. close drains requests without calling JS, then releases every owner.
 import ext.system_errors as systemErrors
 import silk.mem.allocator { Allocator, OutOfMemoryError }
 import silkjs.js_owned_value { Value,  lendFor }
@@ -39,36 +43,55 @@ import ext.uv_fs as uv
 import ext.fs_native as fs
 import ext.fs_descriptors as descriptors
 import libs.core.common as common
-import ext.os_abi as osabi
 import silk.core.option { Option }
 import silk.io.reactor { Interest, ReadyEvent, Reactor, ReactorError, Waker }
 import ext.blocking_pool as pool
 import ext.blocking_pool { Pool }
 import ext.fs_ops as ops
+import libs.core.host as runtimeHost
+import libs.core.capabilities { Composition }
 import silk.concurrency.thread_native { SpawnError }
 import silk.platform.native.clock { NativeClock }
 import silk.system.system_clock { SystemClock }
-import ext.uv_loop as uvl
-import ext.uv_os { uv_hrtime }
+import ext.file_watch { Change, FileWatch }
 
 unsafe extern "C" fn calloc(count: usize, size: usize) -> ?*mut u8
 // ext.trace_native's writer of Node's threadpoolwork events: phase is b, B, E or e.
 unsafe extern "C" fn silkThreadpoolTrace(tracing: *mut u8, kind: u8, phase: u8, id: u64, nanoseconds: u64, thread: u64) -> ()
 unsafe extern "C" fn free(pointer: ?*mut u8) -> ()
-// The token of libuv's backend descriptor in the runtime reactor.
-const LIBUV_TOKEN: u64 = 1
+// The reactor token of a guest loop's descriptor.
+const GUEST_TOKEN: u64 = 1
+/// The first reactor token of the file watchers: this base plus the watch's id. Below the process
+/// handles' tokens, above DNS's descriptor tokens.
+pub const WATCH_TOKENS: u64 = 1152921504606846976
 
-// The reactor is the loop's only blocking wait. libuv runs as a guest: its backend descriptor is
-// registered in the reactor, and each turn runs libuv without blocking.
-// `waker` ends a reactor wait from any thread. `held` counts the sources, such as worker message
-// ports, that keep the loop alive while they wait for a wake. `anchor` is an unreferenced libuv async
-// handle whose reference poll borrows so that libuv runs while only JavaScript timers are pending.
-// `ready` keeps the events of the last reactor wait, for the executors whose descriptors are in it.
+/// A loop that runs inside this one: an N-API addon's libuv loop (silkjsruntime-napi), the one loop
+/// of a runtime that is not the reactor's. Its descriptor waits in the reactor, each turn runs it
+/// without blocking, and a wait ends no later than its next timer. Each function is given `context`.
+pub struct Guest {
+  pub context: *mut u8,
+  /// The loop's descriptor, readable when it has events (libuv's backend descriptor).
+  pub descriptor: i32,
+  /// Milliseconds until its next timer, 0 when it has work now, or -1 for none.
+  pub timeout: extern "C" fn(*mut u8) -> i32,
+  /// Runs what is due, without blocking.
+  pub poll: extern "C" fn(*mut u8) -> (),
+  /// Nonzero while it has referenced handles or requests, which keep the runtime alive.
+  pub alive: extern "C" fn(*mut u8) -> i32,
+  /// Closes it, when the runtime closes.
+  pub close: extern "C" fn(*mut u8) -> (),
+}
+impl Copy for Guest {}
+
+// The reactor is the loop's only blocking wait. `waker` ends a reactor wait from any thread. `held`
+// counts the sources, such as worker message ports, referenced watchers, children and signals,
+// that keep the loop alive while they wait. `ready` keeps the events of the last reactor wait, for
+// the executors whose descriptors are in it. `guest` is an addon's libuv loop, when one asked.
 /// uv_metrics_t for the runtime's loop: turns of the loop, the events its waits found, and the
 /// events that were already waiting when a wait that could not block began.
 pub struct LoopMetrics { pub loopCount: u64, pub events: u64, pub eventsWaiting: u64 }
 impl Copy for LoopMetrics {}
-pub struct State { loop: *mut u8, reactor: Reactor, pool: Pool, waker: Waker, anchor: *mut u8, held: usize, due: u64, idle: u64, ready: [ReadyEvent; 64], readyCount: usize, waitBlocked: bool, guest: i32, shared: bool, skipped: bool, guestRan: u64, inflight: usize, first: ?*mut Request, delivering: ?*mut Request, watches: ?*mut Watch, nextWatch: i32, closing: bool, polling: bool, turn: u64, descriptors: descriptors.State, tracing: ?*mut u8, metrics: LoopMetrics }
+pub struct State { reactor: Reactor, pool: Pool, waker: Waker, held: usize, due: u64, idle: u64, ready: [ReadyEvent; 64], readyCount: usize, waitBlocked: bool, guest: Option<Guest>, inflight: usize, first: ?*mut Request, delivering: ?*mut Request, watches: ?*mut Watch, nextWatch: i32, closing: bool, polling: bool, turn: u64, descriptors: descriptors.State, tracing: ?*mut u8, metrics: LoopMetrics }
 // A request is native memory that the loop owns. While it is queued or running, a worker reads
 // `call` and writes `result`; the loop reads them again only after the pool returns `job`.
 struct Request {
@@ -80,7 +103,10 @@ struct Request {
   offset: u64, bigint: bool,
   // read/write of an ordinary buffer use its bytes in place: the lease keeps them
   // alive through detach or resize until the request is released.
-  lease: Option<buffers.BufferReadLease>
+  lease: Option<buffers.BufferReadLease>,
+  // The runtime's capabilities (a `C`, alive until the executor closes, which waits for every
+  // running job), and how to close a descriptor of its file system when an open is abandoned.
+  capabilities: *const u8, closer: extern "C" fn(*const u8, i32) -> (),
 }
 unsafe fn nonnull<T>(pointer: ?*mut T) -> *mut T { return unsafe Intrinsic.pointerRequalify<?*mut T, *mut T>(pointer) }
 effect fn allocate(size: usize) -> *mut u8 ! OutOfMemoryError {
@@ -93,36 +119,21 @@ fn equal(a: &[u8], b: &[u8]) -> bool {
   let mut i: usize = 0 while i < a.length { if a[i] != b[i] { return false } i = i + 1 } return true
 }
 pub effect fn make() -> *mut State ! OutOfMemoryError ? &mut Allocator {
-  let loop = run allocate(unsafe uvl.uv_loop_size())
-  if unsafe uvl.uv_loop_init(loop) != 0 { unsafe free(loop) fail OutOfMemoryError {} }
-  if unsafe uvl.uv_loop_configure(loop, 1, 0) != 0 {
-    let _ignored = unsafe uvl.uv_loop_close(loop) unsafe free(loop)
-    Intrinsic.trap("libuv idle-time metrics are unavailable")
-  }
-  let allocated = run Effect.result(allocate(Layout.of<State>().bytes))
-  let raw = match move allocated {
-    Result<*mut u8, OutOfMemoryError>.Success { value } => value
-    Result<*mut u8, OutOfMemoryError>.Failure { error } => { let _ignored = unsafe uvl.uv_loop_close(loop) unsafe free(loop) fail move error }
-  }
+  let raw = run allocate(Layout.of<State>().bytes)
   let made = run Effect.result(Reactor.make())
-  let mut reactor = match move made {
+  let reactor = match move made {
     Result<Reactor, ReactorError | OutOfMemoryError>.Success { value } => move value
-    Result<Reactor, ReactorError | OutOfMemoryError>.Failure { .. } => Intrinsic.trap("the runtime reactor cannot be opened")
+    // Out of descriptors (EMFILE, as a worker started under a low `ulimit -n` can be): the
+    // runtime cannot start, which a worker reports as ERR_WORKER_INIT_FAILED.
+    Result<Reactor, ReactorError | OutOfMemoryError>.Failure { .. } => { unsafe free(raw) fail OutOfMemoryError {} }
   }
-  let registered = run Effect.result(reactor.register(unsafe uvl.uv_backend_fd(loop), LIBUV_TOKEN, Interest.readOnly()))
-  if let Result<(), ReactorError>.Failure { .. } = move registered { Intrinsic.trap("libuv's backend descriptor cannot join the runtime reactor") }
-  let anchorMemory = unsafe calloc(1, unsafe uvl.uv_handle_size(1))
-  if Pointer.isNull<u8>(anchorMemory) { let _ignored = unsafe uvl.uv_loop_close(loop) unsafe free(loop) unsafe free(raw) fail OutOfMemoryError {} }
-  let loopAnchor = unsafe nonnull(anchorMemory)
-  if unsafe uvl.uv_async_init(loop, loopAnchor, silkLoopAnchor) != 0 { Intrinsic.trap("libuv cannot initialize the loop anchor") }
-  unsafe uvl.uv_unref(loopAnchor)
   let made2 = run Effect.result(Pool.make(reactor.waker()))
   let workers = match move made2 {
     Result<Pool, OutOfMemoryError>.Success { value } => move value
-    Result<Pool, OutOfMemoryError>.Failure { error } => { unsafe uvl.uv_close(loopAnchor, silkLoopAnchorClosed) let _drained = unsafe uvl.uv_run(loop, 0) let _ignored = unsafe uvl.uv_loop_close(loop) unsafe free(loop) unsafe free(raw) fail move error }
+    Result<Pool, OutOfMemoryError>.Failure { error } => { unsafe free(raw) fail move error }
   }
   let state = unsafe Intrinsic.pointerReinterpret<*mut u8, *mut State>(raw)
-  unsafe Pointer.put<State>(state, State { loop: loop, waker: reactor.waker(), reactor: move reactor, pool: move workers, anchor: loopAnchor, held: 0, due: 0, idle: 0, ready: [ReadyEvent.empty(); 64], readyCount: 0, waitBlocked: true, guest: 0, shared: false, skipped: false, guestRan: 0, inflight: 0, first: Pointer.null<Request>(), delivering: Pointer.null<Request>(), watches: Pointer.null<Watch>(), nextWatch: 1, closing: false, polling: false, turn: 0, descriptors: descriptors.make(), tracing: Pointer.null<u8>(), metrics: LoopMetrics { loopCount: 0, events: 0, eventsWaiting: 0 } })
+  unsafe Pointer.put<State>(state, State { waker: reactor.waker(), reactor: move reactor, pool: move workers, held: 0, due: 0, idle: 0, ready: [ReadyEvent.empty(); 64], readyCount: 0, waitBlocked: true, guest: Option<Guest>.none(), inflight: 0, first: Pointer.null<Request>(), delivering: Pointer.null<Request>(), watches: Pointer.null<Watch>(), nextWatch: 1, closing: false, polling: false, turn: 0, descriptors: descriptors.make(), tracing: Pointer.null<u8>(), metrics: LoopMetrics { loopCount: 0, events: 0, eventsWaiting: 0 } })
   return state
 }
 pub unsafe fn descriptorState(pointer: *mut State) -> *mut descriptors.State {
@@ -133,8 +144,6 @@ pub unsafe fn trackDescriptors(pointer: *mut State, enabled: bool) -> () {
   let mut anchor = () let state = unsafe Pointer.borrowMut<(), State>(&mut anchor, pointer)
   state.descriptors.enabled = enabled
 }
-export "C" fn silkLoopAnchor(handle: *mut u8) -> () {}
-export "C" fn silkLoopAnchorClosed(handle: *mut u8) -> () { unsafe free(handle) }
 /// A waker that ends the loop's current or next reactor wait, from any thread.
 pub unsafe fn waker(pointer: *mut State) -> Waker {
   let anchor = () let state = unsafe Pointer.borrow<(), State>(&anchor, pointer)
@@ -206,43 +215,23 @@ pub unsafe fn loopMetrics(pointer: *mut State) -> LoopMetrics {
 }
 pub unsafe fn idleNanoseconds(pointer: *mut State) -> u64 {
   let anchor = () let state = unsafe Pointer.borrow<(), State>(&anchor, pointer)
-  return unsafe uvl.uv_metrics_idle_time(state.loop) + state.idle
+  return state.idle
 }
 
-struct ResourceWalk { handles: ?*mut *mut u8, count: usize }
-export "C" fn inspectResource(handle: *mut u8, data: *mut u8) -> () {
-  let pointer = unsafe Intrinsic.pointerReinterpret<*mut u8, *mut ResourceWalk>(data)
-  let mut anchor = () let walk = unsafe Pointer.borrowMut<(), ResourceWalk>(&mut anchor, pointer)
-  if !Pointer.isNull<*mut u8>(walk.handles) {
-    let many = unsafe Pointer.assumeManyMut<*mut u8>(unsafe nonnull(walk.handles))
-    unsafe Pointer.put<*mut u8>(unsafe Pointer.atMut<*mut u8>(many, walk.count), handle)
-  }
-  walk.count = walk.count + 1
-}
-/// One libuv handle of a loop, as diagnostic reports list it. `fd` is -1 when
-/// the handle has none.
+/// One handle of the loop, as diagnostic reports list libuv's handles. `fd` is -1 when the handle
+/// has none.
 pub struct LoopHandle { pub kind: i32, pub active: bool, pub referenced: bool, pub closing: bool, pub address: usize, pub fd: i32 }
 impl Copy for LoopHandle {}
-struct HandleWalk { list: *mut List<LoopHandle>, at: usize }
-export "C" fn describeHandle(handle: *mut u8, data: *mut u8) -> () {
-  let mut anchor = () let walk = unsafe Pointer.borrowMut<(), HandleWalk>(&mut anchor, unsafe Intrinsic.pointerReinterpret<*mut u8, *mut HandleWalk>(data))
-  let mut listAnchor = () let list = unsafe Pointer.borrowMut<(), List<LoopHandle>>(&mut listAnchor, walk.list)
-  if walk.at >= list.length() { return () }
-  let mut fd: i32 = -1
-  if unsafe uvl.uv_fileno(handle, Pointer.fromMutRef<i32>(&mut fd)) != 0 { fd = -1 }
-  list.set(walk.at, LoopHandle { kind: unsafe uvl.uv_handle_get_type(handle), active: unsafe uvl.uv_is_active(handle) != 0, referenced: unsafe uvl.uv_has_ref(handle) != 0, closing: unsafe uvl.uv_is_closing(handle) != 0, address: Pointer.address<u8>(handle), fd: fd })
-  walk.at = walk.at + 1
-}
-/// Every handle of `loop`, in libuv's walk order.
-pub unsafe effect fn handles(loop: *mut u8) -> List<LoopHandle> ! OutOfMemoryError ? &mut Allocator {
-  let mut counter = ResourceWalk { handles: Pointer.null<*mut u8>(), count: 0 }
-  unsafe uvl.uv_walk(loop, inspectResource, unsafe Intrinsic.pointerReinterpret<*mut ResourceWalk, *mut u8>(Pointer.fromMutRef<ResourceWalk>(&mut counter)))
+/// The loop's file watchers, as libuv's fs_event (3) and fs_poll (4) handles.
+pub unsafe effect fn handles(pointer: *mut State) -> List<LoopHandle> ! OutOfMemoryError ? &mut Allocator {
   let mut list = List<LoopHandle>.make()
-  run list.appendRepeated(LoopHandle { kind: 0, active: false, referenced: false, closing: false, address: 0, fd: -1 }, counter.count)
-  let mut walk = HandleWalk { list: Pointer.fromMutRef<List<LoopHandle>>(&mut list), at: 0 }
-  unsafe uvl.uv_walk(loop, describeHandle, unsafe Intrinsic.pointerReinterpret<*mut HandleWalk, *mut u8>(Pointer.fromMutRef<HandleWalk>(&mut walk)))
-  let filled = walk.at
-  list.truncate(filled)
+  let anchor = () let state = unsafe Pointer.borrow<(), State>(&anchor, pointer) let mut current = state.watches drop state
+  while !Pointer.isNull<Watch>(current) {
+    let owner = unsafe nonnull(current) let watch = unsafe Pointer.borrow<(), Watch>(&anchor, owner)
+    current = watch.next
+    if watch.closed { continue }
+    run list.append(LoopHandle { kind: if watch.stat { 4 } else { 3 }, active: !watch.closing, referenced: watch.referenced && !watch.closing, closing: watch.closing, address: Pointer.address<Watch>(owner), fd: watch.fd })
+  }
   return move list
 }
 /// libuv's name for a handle type.
@@ -251,17 +240,6 @@ pub fn handleTypeName(kind: i32) -> &'static [u8] {
   let names: [&'static [u8]; 17] = [b"unknown", b"async", b"check", b"fs_event", b"fs_poll", b"handle", b"idle", b"pipe", b"poll", b"prepare", b"process", b"stream", b"tcp", b"timer", b"tty", b"udp", b"signal"]
   if kind <= 0 || kind >= 17 { return b"unknown" }
   return names[i32.toUsize(kind)]
-}
-fn resourceName(kind: i32) -> &'static [u8] {
-  // async/check/idle/prepare/timer are scheduler machinery, not public resources.
-  if kind == 1 || kind == 2 || kind == 6 || kind == 9 || kind == 13 { return b"" }
-  if kind == 3 { return b"FSEventWrap" }
-  if kind == 4 { return b"StatWatcher" }
-  // The runtime creates uv_poll handles only for child-process IPC sockets.
-  if kind == 8 { return b"PipeWrap" }
-  if kind == 10 { return b"ProcessWrap" }
-  if kind == 16 { return b"SignalWrap" }
-  return b"HandleWrap"
 }
 unsafe effect fn requestResource<'m, S: EngineServices>(engine: &mut Engine<'m, S>, context: *mut HeapHeader, array: ValueBits, index: &mut u32, pointer: *mut Request) -> () ! JsException ? &mut Allocator {
   let anchor = () let entry = unsafe Pointer.borrow<(), Request>(&anchor, pointer)
@@ -274,23 +252,15 @@ unsafe effect fn requestResource<'m, S: EngineServices>(engine: &mut Engine<'m, 
 }
 unsafe effect fn resourceSnapshotBody<'m, S: EngineServices>(engine: &mut Engine<'m, S>, context: *mut HeapHeader, pointer: *mut State, scope: &mut Scope) -> ValueBits ! OutOfMemoryError | JsException ? &mut Allocator {
   let anchor = () let state = unsafe Pointer.borrow<(), State>(&anchor, pointer)
-  let loop = state.loop let mut request = state.first let delivering = state.delivering drop state
-  let mut walk = ResourceWalk { handles: Pointer.null<*mut u8>(), count: 0 }
-  let data = unsafe Intrinsic.pointerReinterpret<*mut ResourceWalk, *mut u8>(Pointer.fromMutRef<ResourceWalk>(&mut walk))
-  unsafe uvl.uv_walk(loop, inspectResource, data)
-  let allocation = run osabi.allocate((walk.count + 1) * Layout.of<*mut u8>().bytes)
-  walk.handles = unsafe Intrinsic.pointerReinterpret<*mut u8, *mut *mut u8>(allocation.pointer)
-  walk.count = 0 unsafe uvl.uv_walk(loop, inspectResource, data)
+  let mut request = state.first let delivering = state.delivering let mut current = state.watches drop state
   let memory = engine.memory scope.values[0] = run unsafe common.array(&mut engine, memory, context)
-  let many = unsafe Pointer.assumeMany<*mut u8>(unsafe nonnull(walk.handles))
-  let mut index: u32 = 0 let mut cursor: usize = 0
-  while cursor < walk.count {
-    let handle = unsafe Pointer.read<*mut u8>(unsafe Pointer.at<*mut u8>(many, cursor))
-    cursor = cursor + 1
-    let kind = unsafe uvl.uv_handle_get_type(handle)
-    // Network owners retain their role and lifetime through JS close delivery.
-    if kind == 7 || kind == 12 || kind == 14 || kind == 15 { continue }
-    run unsafe resources.appendHandle(&mut engine, context, scope.values[0], &mut index, handle, resourceName(kind), ValueBits.Undefined)
+  let mut index: u32 = 0
+  while !Pointer.isNull<Watch>(current) {
+    let owner = unsafe nonnull(current) let watch = unsafe Pointer.borrow<(), Watch>(&anchor, owner)
+    current = watch.next
+    if watch.closed { continue }
+    let stat = watch.stat let closing = watch.closing let referenced = watch.referenced && !closing let fd = watch.fd drop watch
+    run unsafe resources.appendNativeHandle(&mut engine, context, scope.values[0], &mut index, unsafe Intrinsic.pointerReinterpret<*mut Watch, *mut u8>(owner), if stat { b"fs_poll" } else { b"fs_event" }, if stat { b"StatWatcher" } else { b"FSEventWrap" }, !closing, referenced, closing, fd)
   }
   while !Pointer.isNull<Request>(request) {
     let pointer = unsafe nonnull(request)
@@ -309,11 +279,22 @@ pub unsafe effect fn resourceSnapshot<'m, S: EngineServices>(engine: &mut Engine
   unsafe owners.cleanup(&mut engine, context, move scope)
   return match move outcome { Result<ValueBits, OutOfMemoryError | JsException>.Success { value } => value Result<ValueBits, OutOfMemoryError | JsException>.Failure { error } => { fail move error } }
 }
-// Runs on a blocking worker.
-export "C" fn runRequest(data: ?*mut u8) -> () {
+unsafe fn capabilitiesOf<'a, C: Composition>(anchor: &'a (), capabilities: *const u8) -> &'a C {
+  return unsafe Pointer.borrow<(), C>(anchor, unsafe Intrinsic.pointerReinterpret<*mut u8, *mut C>(unsafe Intrinsic.pointerRequalify<*const u8, *mut u8>(capabilities)))
+}
+/// Runs a request on a blocking worker, with the runtime's file system.
+pub export "C" fn runRequest<C: Composition>(data: ?*mut u8) -> () {
   let request = unsafe Intrinsic.pointerReinterpret<*mut u8, *mut Request>(unsafe nonnull(data))
   let mut anchor = () let entry = unsafe Pointer.borrowMut<(), Request>(&mut anchor, request)
-  unsafe ops.execute(&entry.call, &mut entry.result)
+  let held = () let capabilities = unsafe capabilitiesOf<C>(&held, entry.capabilities)
+  unsafe capabilities.filesExecute(&entry.call, &mut entry.result)
+}
+/// Closes `fd` of the runtime's file system: an open that finished after nobody waited for it.
+pub export "C" fn closeOpened<C: Composition>(capabilities: *const u8, fd: i32) -> () {
+  let held = () let owner = unsafe capabilitiesOf<C>(&held, capabilities)
+  let mut call = ops.call(ops.CLOSE) call.fd = fd
+  let mut out = ops.outcome()
+  unsafe owner.filesExecute(&call, &mut out)
 }
 unsafe fn owner(job: *mut pool.Job) -> *mut Request {
   let anchor = () let entry = unsafe Pointer.borrow<(), pool.Job>(&anchor, job)
@@ -393,7 +374,7 @@ unsafe fn release<'m, S: EngineServices>(engine: &mut Engine<'m, S>, context: *m
   // A successful open may complete after termination, without reaching JS.
   // Successful closes must also leave the registry even when delivery is skipped.
   if !request.descriptorSettled && request.done && request.status >= 0 {
-    if request.call.op == ops.OPEN { unsafe descriptors.close(i64.toI32(request.result.count)) }
+    if request.call.op == ops.OPEN { let close = request.closer unsafe close(request.capabilities, i64.toI32(request.result.count)) }
     else if request.call.op == ops.CLOSE { let _held = unsafe descriptors.release(request.tracking, request.call.fd) }
   }
   if request.lease.isNone() { unsafe free(request.call.buffer) }
@@ -458,12 +439,12 @@ unsafe effect fn prepare<'m, S: EngineServices>(engine: &mut Engine<'m, S>, cont
     }
   }
 }
-pub unsafe effect fn submit<'m, S: EngineServices>(engine: &mut Engine<'m, S>, context: *mut HeapHeader, pointer: *mut State, operation: ValueBits, args: ValueBits, callback: ValueBits, requestKind: i32) -> ValueBits ! OutOfMemoryError | JsException ? &mut Allocator {
+pub unsafe effect fn submit<'m, C: Composition>(engine: &mut Engine<'m, runtimeHost.Services<C>>, context: *mut HeapHeader, pointer: *mut State, operation: ValueBits, args: ValueBits, callback: ValueBits, requestKind: i32) -> ValueBits ! OutOfMemoryError | JsException ? &mut Allocator {
   let anchor = () let state = unsafe Pointer.borrow<(), State>(&anchor, pointer) let closing = state.closing let turn = state.turn drop state
   if closing { return run engine.throwError(unsafe lendRealm(&context, context), NativeErrorKind.Internal, b"filesystem executor is closed") }
   let raw = run allocate(Layout.of<Request>().bytes)
   let request = unsafe Intrinsic.pointerReinterpret<*mut u8, *mut Request>(raw)
-  unsafe Pointer.put<Request>(request, Request { next: Pointer.null<Request>(), job: pool.job(runRequest, finishRequest, raw, pool.KIND_NONE), done: false, turn: turn, status: 0, requestKind: requestKind, tracking: unsafe descriptorState(pointer), descriptorSettled: false, callback: unsafe callback.retained(), args: [ValueBits.Undefined; 5], operation: List<u8>.make(), call: ops.call(0), result: ops.outcome(), offset: 0, bigint: false, lease: Option<buffers.BufferReadLease>.none() })
+  unsafe Pointer.put<Request>(request, Request { next: Pointer.null<Request>(), job: pool.job((runRequest<C>), finishRequest, raw, pool.KIND_NONE), done: false, turn: turn, status: 0, requestKind: requestKind, tracking: unsafe descriptorState(pointer), descriptorSettled: false, callback: unsafe callback.retained(), args: [ValueBits.Undefined; 5], operation: List<u8>.make(), call: ops.call(0), result: ops.outcome(), offset: 0, bigint: false, lease: Option<buffers.BufferReadLease>.none(), capabilities: unsafe Intrinsic.pointerReinterpret<*const C, *const u8>(Pointer.fromRef<C>(&engine.services.capabilities)), closer: (closeOpened<C>) })
   let mut mutable = () let entry = unsafe Pointer.borrowMut<(), Request>(&mut mutable, request)
   let prepared = run Effect.result(unsafe prepare(&mut engine, context, &mut entry, operation, args)) drop entry
   match move prepared { Result<(), OutOfMemoryError | JsException>.Success { .. } => () Result<(), OutOfMemoryError | JsException>.Failure { error } => { unsafe release(&mut engine, context, request) fail move error } }
@@ -477,7 +458,8 @@ pub unsafe effect fn submit<'m, S: EngineServices>(engine: &mut Engine<'m, S>, c
   }
   // A read the kernel answers at once (cached file data) skips the blocking threads: their two
   // thread wakeups cost more than the copy. It is delivered in the next turn, as a finished job is.
-  if unsafe ops.readWithoutWaiting(&entry2.call, &mut entry2.result) { entry2.done = true return ValueBits.Undefined }
+  // Only the operating system's descriptors can be read that way.
+  static if Composition.filesNative() { if unsafe ops.readWithoutWaiting(&entry2.call, &mut entry2.result) { entry2.done = true return ValueBits.Undefined } }
   let job = Pointer.fromMutRef<pool.Job>(&mut entry2.job) drop entry2 drop state2
   let status = run unsafe queueWork(pointer, job)
   if status < 0 { let entry3 = unsafe Pointer.borrowMut<(), Request>(&mut entryAnchor, request) entry3.status = status entry3.done = true }
@@ -553,7 +535,8 @@ unsafe effect fn deliver<'m, S: EngineServices>(engine: &mut Engine<'m, S>, cont
 }
 pub unsafe fn hasPending(pointer: *mut State) -> bool {
   let anchor = () let state = unsafe Pointer.borrow<(), State>(&anchor, pointer)
-  return !Pointer.isNull<Request>(state.first) || state.inflight > 0 || state.held > 0 || unsafe uvl.uv_loop_alive(state.loop) != 0
+  if !Pointer.isNull<Request>(state.first) || state.inflight > 0 || state.held > 0 { return true }
+  return match state.guest { Option<Guest>.Some { value } => { let alive = value.alive unsafe alive(value.context) != 0 } Option<Guest>.None => false }
 }
 unsafe effect fn deliverCompleted<'m, S: EngineServices>(engine: &mut Engine<'m, S>, context: *mut HeapHeader, pointer: *mut State, request: *mut Request) -> () ! OutOfMemoryError | JsException ? &mut Allocator {
   let mut anchor = () let state = unsafe Pointer.borrowMut<(), State>(&mut anchor, pointer)
@@ -567,11 +550,9 @@ unsafe effect fn deliverCompleted<'m, S: EngineServices>(engine: &mut Engine<'m,
 // `timeout` is in nanoseconds: 0 polls without waiting, a negative value waits while native work is
 // pending, and a positive value also waits for that long, for the next JavaScript timer.
 unsafe effect fn pollInner<'m, S: EngineServices>(engine: &mut Engine<'m, S>, context: *mut HeapHeader, pointer: *mut State, timeout: i64) -> bool ! OutOfMemoryError | JsException ? &mut Allocator {
-  let anchor = () let state = unsafe Pointer.borrow<(), State>(&anchor, pointer) let loop = state.loop let pollAnchor = state.anchor drop state
-  // Process already-completed submissions before any potentially blocking run.
+  // Process already-completed submissions before any potentially blocking wait.
   let mut ran = false
-  let mut mode: i32 = 2
-  if timeout > 0 || (timeout < 0 && unsafe hasPending(pointer)) { mode = 1 }
+  let mut wait = timeout > 0 || (timeout < 0 && unsafe hasPending(pointer))
   // As libuv's uv__work_done: a turn delivers the work that finished before its callbacks ran.
   // Work submitted from this turn's callbacks waits for the next turn, after the check phase,
   // even when a worker finishes it first (readFile with an AbortSignal aborted by setImmediate).
@@ -581,24 +562,11 @@ unsafe effect fn pollInner<'m, S: EngineServices>(engine: &mut Engine<'m, S>, co
   let immediate = unsafe takeCompleted(pointer, turn)
   if !Pointer.isNull<Request>(immediate) {
     run unsafe deliverCompleted(&mut engine, context, pointer, unsafe nonnull(immediate))
-    ran = true mode = 2
+    ran = true wait = false
   }
   // A turn that must not block still checks the reactor once, so the executors see their events.
-  // After a turn that skipped libuv, this wait does not block: libuv runs before the loop sleeps.
-  let p = () let peek = unsafe Pointer.borrow<(), State>(&p, pointer) let skipped = peek.skipped drop peek
-  run unsafe waitReady(pointer, loop, if mode == 1 && !skipped { timeout } else { 0 }) mode = 2
-  // JS timers can keep the runtime alive while every libuv handle is unrefed.
-  // UV_RUN_NOWAIT otherwise skips polling entirely. Borrow the loop anchor's
-  // reference only across native callbacks, never across JS delivery.
-  let now = unsafe uv_hrtime()
-  let idle = unsafe guestIdle(pointer, loop, now)
-  let mut mark = () let m = unsafe Pointer.borrowMut<(), State>(&mut mark, pointer) m.skipped = idle if !idle { m.guestRan = now } drop m
-  if !idle {
-    let borrowedRef = mode == 2 && unsafe uvl.uv_has_ref(pollAnchor) == 0
-    if borrowedRef { unsafe uvl.uv_ref(pollAnchor) }
-    let _ignored = unsafe uvl.uv_run(loop, mode)
-    if borrowedRef { unsafe uvl.uv_unref(pollAnchor) }
-  }
+  run unsafe waitReady(pointer, if wait { timeout } else { 0 })
+  unsafe runGuest(pointer)
   unsafe collectFinished(pointer)
   while true {
     let entry = unsafe takeCompleted(pointer, turn) if Pointer.isNull<Request>(entry) { break }
@@ -608,38 +576,32 @@ unsafe effect fn pollInner<'m, S: EngineServices>(engine: &mut Engine<'m, S>, co
   if run unsafe pollWatches(&mut engine, context, pointer) { ran = true }
   return ran
 }
-// Whether this turn may skip libuv's uv_run, and so its own epoll call, while other descriptors
-// keep the loop busy. libuv would have nothing to deliver: its descriptor was not ready, nothing is
-// pending or closing (a nonzero backend timeout), and no timer is due by the real clock (libuv's
-// clock moves only in uv_run). What uv_run would still do is apply watchers that handles started
-// since, and run prepare, check and idle handles, which the runtime never starts (an addon that has
-// the loop may, so then it always runs). So it runs at least every millisecond, and before any wait
-// that may block (poll makes the wait after a skipped turn a non-blocking one).
-unsafe fn guestIdle(pointer: *mut State, loop: *mut u8, now: u64) -> bool {
+/// Lets `guest` run inside this loop. Returns 0, or the errno when its descriptor cannot join the
+/// reactor or a guest is already there.
+pub unsafe fn attachGuest(pointer: *mut State, guest: Guest) -> i32 {
+  let mut anchor = () let state = unsafe Pointer.borrowMut<(), State>(&mut anchor, pointer)
+  if state.guest.isSome() { return 17 }
+  let registered = run Effect.result(state.reactor.register(guest.descriptor, GUEST_TOKEN, Interest.readOnly()))
+  if let Result<(), ReactorError>.Failure { error } = move registered { return error.code }
+  state.guest = Option<Guest>.some(guest)
+  return 0
+}
+/// The `context` of the attached guest, or null.
+pub unsafe fn guestContext(pointer: *mut State) -> ?*mut u8 {
   let anchor = () let state = unsafe Pointer.borrow<(), State>(&anchor, pointer)
-  // After a wait that could block and found nothing, a libuv timer may be what ended it.
-  if state.shared || state.guest == 0 || (state.readyCount == 0 && state.waitBlocked) || state.readyCount >= 64 { return false }
-  if now - state.guestRan >= 1000000 { return false }
-  let mut index: usize = 0
-  while index < state.readyCount { if state.ready[index].token == LIBUV_TOKEN { return false } index = index + 1 }
-  if state.guest < 0 { return true }
-  return unsafe uvl.uv_now(loop) + i32.toU64(state.guest) > now / 1000000
+  return match state.guest { Option<Guest>.Some { value } => value.context Option<Guest>.None => Pointer.null<u8>() }
 }
-/// The loop for code outside the runtime (an N-API addon), which may start any libuv handle on it.
-pub unsafe fn shareLoop(pointer: *mut State) -> *mut u8 {
-  let mut anchor = () let state = unsafe Pointer.borrowMut<(), State>(&mut anchor, pointer) state.shared = true return state.loop
+/// Runs the attached guest once, without blocking.
+pub unsafe fn runGuest(pointer: *mut State) -> () {
+  let anchor = () let state = unsafe Pointer.borrow<(), State>(&anchor, pointer)
+  if let Option<Guest>.Some { value } = state.guest { drop state let poll = value.poll unsafe poll(value.context) }
 }
-// Blocks in the reactor until a descriptor is ready, a waker fires, libuv's next timer is due, or
-// `timeout` nanoseconds pass (a negative `timeout` waits without a JavaScript limit).
-unsafe effect fn waitReady(pointer: *mut State, loop: *mut u8, timeout: i64) -> () {
-  // libuv reports a 0 timeout while nothing holds a reference on it, so borrow the anchor's
-  // reference to learn when its next timer is due (or -1 for none).
-  let c = () let peek = unsafe Pointer.borrow<(), State>(&c, pointer) let pollAnchor = peek.anchor drop peek
-  let borrowed = unsafe uvl.uv_has_ref(pollAnchor) == 0
-  if borrowed { unsafe uvl.uv_ref(pollAnchor) }
-  let guest = unsafe uvl.uv_backend_timeout(loop)
-  if borrowed { unsafe uvl.uv_unref(pollAnchor) }
-  let mut keep = () let note = unsafe Pointer.borrowMut<(), State>(&mut keep, pointer) note.guest = guest drop note
+// Blocks in the reactor until a descriptor is ready, a waker fires, a guest loop's next timer is
+// due, or `timeout` nanoseconds pass (a negative `timeout` waits without a JavaScript limit).
+unsafe effect fn waitReady(pointer: *mut State, timeout: i64) -> () {
+  let c = () let peek = unsafe Pointer.borrow<(), State>(&c, pointer)
+  let guest = match peek.guest { Option<Guest>.Some { value } => { let next = value.timeout unsafe next(value.context) } Option<Guest>.None => -1 }
+  drop peek
   let mut limit = timeout
   let guestNanoseconds = i32.toI64(guest) * 1000000
   if guest >= 0 && (limit < 0 || guestNanoseconds < limit) { limit = guestNanoseconds }
@@ -678,28 +640,37 @@ pub unsafe effect fn poll<'m, S: EngineServices>(engine: &mut Engine<'m, S>, con
 
 @foreign(noCapture: .("dest", "source"))
 unsafe extern "C" fn memcpy(dest: *mut u8, source: *const u8, count: usize) -> *mut u8
+// A watcher: fs.watch's `files` (inotify or kqueue, in the reactor under WATCH_TOKENS + id, `fd`
+// its descriptor), or fs.watchFile's stat timer: `path`, `interval` milliseconds, the time of the
+// next stat (`due`, NativeClock nanoseconds), the last status `seen`, and `busy`, libuv fs_poll's
+// busy_polling (0 before the first stat, 1 after a stat, or the error of the last one). `holding`
+// says it holds the loop, which a referenced watcher that is not closing does.
 struct Watch {
-  next: ?*mut Watch, id: i32, native: *mut u8, callback: ValueBits,
+  next: ?*mut Watch, id: i32, callback: ValueBits,
   stat: bool, bigint: bool, closing: bool, closed: bool, failure: i32,
-  first: ?*mut Event, last: ?*mut Event
+  first: ?*mut Event, last: ?*mut Event,
+  files: Option<FileWatch>, fd: i32,
+  path: List<u8>, interval: u64, due: u64, seen: uv.UvStat, busy: i32,
+  referenced: bool, holding: bool,
 }
 struct Event {
   next: ?*mut Event, status: i32, kind: i32,
   name: ?*mut u8, previous: ?*mut u8, current: ?*mut u8
-}
-pub unsafe fn loopPointer(pointer: *mut State) -> *mut u8 {
-  let anchor = () let state = unsafe Pointer.borrow<(), State>(&anchor, pointer) return state.loop
-}
-unsafe fn watchOwner(handle: *mut u8) -> *mut Watch {
-  return unsafe Intrinsic.pointerReinterpret<*mut u8, *mut Watch>(unsafe nonnull(unsafe uvl.uv_handle_get_data(handle)))
 }
 unsafe fn freeEvent(pointer: *mut Event) -> () {
   let event = unsafe Pointer.take<Event>(pointer)
   unsafe free(event.name) unsafe free(event.previous) unsafe free(event.current)
   unsafe free(unsafe Intrinsic.pointerReinterpret<*mut Event, *mut u8>(pointer))
 }
-unsafe fn enqueueEvent(handle: *mut u8, status: i32, kind: i32, name: ?*const u8, previous: ?*const uv.UvStat, current: ?*const uv.UvStat) -> () {
-  let owner = unsafe watchOwner(handle) let mut anchor = ()
+unsafe fn copyStat(stat: &uv.UvStat) -> ?*mut u8 {
+  let copy = unsafe calloc(1, Layout.of<uv.UvStat>().bytes)
+  if !Pointer.isNull<u8>(copy) { let _copied = unsafe memcpy(unsafe nonnull(copy), unsafe Intrinsic.pointerReinterpret<*const uv.UvStat, *const u8>(Pointer.fromRef<uv.UvStat>(stat)), Layout.of<uv.UvStat>().bytes) }
+  return copy
+}
+// Queues a change for the watcher's callback: `name` for fs.watch, the two statuses for
+// fs.watchFile; an allocation failure becomes the watcher's ENOMEM.
+unsafe fn enqueueEvent(owner: *mut Watch, status: i32, kind: i32, name: &[u8], previous: ?*const uv.UvStat, current: ?*const uv.UvStat) -> () {
+  let mut anchor = ()
   let watch = unsafe Pointer.borrowMut<(), Watch>(&mut anchor, owner)
   if watch.closing { return () }
   let raw = unsafe calloc(1, Layout.of<Event>().bytes)
@@ -707,21 +678,17 @@ unsafe fn enqueueEvent(handle: *mut u8, status: i32, kind: i32, name: ?*const u8
   let pointer = unsafe Intrinsic.pointerReinterpret<*mut u8, *mut Event>(unsafe nonnull(raw))
   let mut event = Event { next: Pointer.null<Event>(), status: status, kind: kind, name: Pointer.null<u8>(), previous: Pointer.null<u8>(), current: Pointer.null<u8>() }
   let mut failed = false
-  if !Pointer.isNull<u8>(name) {
-    let source = unsafe Intrinsic.pointerRequalify<?*const u8, [*]const u8>(name)
-    let mut length: usize = 0 while unsafe Pointer.read<u8>(unsafe Pointer.at<u8>(source, length)) != 0 { length = length + 1 }
-    event.name = unsafe calloc(1, length + 1)
+  if name.length > 0 {
+    event.name = unsafe calloc(1, name.length + 1)
     if Pointer.isNull<u8>(event.name) { failed = true }
-    else { let _ignored = unsafe memcpy(unsafe nonnull(event.name), unsafe Intrinsic.pointerRequalify<?*const u8, *const u8>(name), length) }
+    else { let _ignored = unsafe memcpy(unsafe nonnull(event.name), Pointer.fromRef<u8>(&name[0]), name.length) }
   }
   if !Pointer.isNull<uv.UvStat>(previous) && !Pointer.isNull<uv.UvStat>(current) {
-    event.previous = unsafe calloc(1, Layout.of<uv.UvStat>().bytes)
-    event.current = unsafe calloc(1, Layout.of<uv.UvStat>().bytes)
+    let statAnchor = ()
+    let before = unsafe Pointer.borrow<(), uv.UvStat>(&statAnchor, unsafe Intrinsic.pointerRequalify<?*const uv.UvStat, *mut uv.UvStat>(previous))
+    let after = unsafe Pointer.borrow<(), uv.UvStat>(&statAnchor, unsafe Intrinsic.pointerRequalify<?*const uv.UvStat, *mut uv.UvStat>(current))
+    event.previous = unsafe copyStat(&before) event.current = unsafe copyStat(&after)
     if Pointer.isNull<u8>(event.previous) || Pointer.isNull<u8>(event.current) { failed = true }
-    else {
-      let _ignored1 = unsafe memcpy(unsafe nonnull(event.previous), unsafe Intrinsic.pointerReinterpret<*const uv.UvStat, *const u8>(unsafe Intrinsic.pointerRequalify<?*const uv.UvStat, *const uv.UvStat>(previous)), Layout.of<uv.UvStat>().bytes)
-      let _ignored2 = unsafe memcpy(unsafe nonnull(event.current), unsafe Intrinsic.pointerReinterpret<*const uv.UvStat, *const u8>(unsafe Intrinsic.pointerRequalify<?*const uv.UvStat, *const uv.UvStat>(current)), Layout.of<uv.UvStat>().bytes)
-    }
   }
   unsafe Pointer.put<Event>(pointer, move event)
   if failed { watch.failure = -12 drop watch unsafe freeEvent(pointer) return () }
@@ -729,51 +696,136 @@ unsafe fn enqueueEvent(handle: *mut u8, status: i32, kind: i32, name: ?*const u8
   else { let mut other = () let last = unsafe Pointer.borrowMut<(), Event>(&mut other, unsafe nonnull(watch.last)) last.next = pointer }
   watch.last = pointer
 }
-export "C" fn changed(handle: *mut u8, name: ?*const u8, events: i32, status: i32) -> () {
-  unsafe enqueueEvent(handle, status, events, name, Pointer.null<uv.UvStat>(), Pointer.null<uv.UvStat>())
+// A referenced watcher that is not closing holds the loop, as an active referenced libuv handle did.
+unsafe fn holdWatch(pointer: *mut State, owner: *mut Watch) -> () {
+  let mut anchor = () let watch = unsafe Pointer.borrowMut<(), Watch>(&mut anchor, owner)
+  let want = watch.referenced && !watch.closing
+  if want == watch.holding { return () }
+  watch.holding = want drop watch
+  if want { unsafe hold(pointer) } else { unsafe unhold(pointer) }
 }
-export "C" fn statChanged(handle: *mut u8, status: i32, previous: *const uv.UvStat, current: *const uv.UvStat) -> () {
-  // libuv does not promise valid stat pointers on an error.
-  if status < 0 { unsafe enqueueEvent(handle, status, 0, Pointer.null<u8>(), Pointer.null<uv.UvStat>(), Pointer.null<uv.UvStat>()) }
-  else { unsafe enqueueEvent(handle, status, 0, Pointer.null<u8>(), previous, current) }
-}
-export "C" fn watchClosed(handle: *mut u8) -> () {
-  let mut anchor = () let watch = unsafe Pointer.borrowMut<(), Watch>(&mut anchor, unsafe watchOwner(handle)) watch.closed = true
-}
-unsafe fn stopWatch(pointer: *mut Watch) -> () {
-  let mut anchor = () let watch = unsafe Pointer.borrowMut<(), Watch>(&mut anchor, pointer)
+unsafe fn stopWatch(pointer: *mut State, owner: *mut Watch) -> () {
+  let mut anchor = () let watch = unsafe Pointer.borrowMut<(), Watch>(&mut anchor, owner)
   if watch.closing { return () } watch.closing = true
-  let native = watch.native let stat = watch.stat drop watch
-  if stat { let _ignored = unsafe uvl.uv_fs_poll_stop(native) } else { let _ignored = unsafe uvl.uv_fs_event_stop(native) }
-  unsafe uvl.uv_close(native, watchClosed)
+  let fd = watch.fd watch.fd = -1
+  let files = Intrinsic.replace(watch.files, Option<FileWatch>.none()) drop watch
+  if fd >= 0 { unsafe forgetDescriptor(pointer, fd) }
+  drop files
+  let closed = unsafe Pointer.borrowMut<(), Watch>(&mut anchor, owner) closed.closed = true drop closed
+  unsafe holdWatch(pointer, owner)
+}
+fn sameTime(a: &uv.UvTimespec, b: &uv.UvTimespec) -> bool { return a.tv_sec == b.tv_sec && a.tv_nsec == b.tv_nsec }
+// libuv's statbuf_eq.
+fn sameStatus(a: &uv.UvStat, b: &uv.UvStat) -> bool {
+  return sameTime(&a.st_ctim, &b.st_ctim) && sameTime(&a.st_mtim, &b.st_mtim) && sameTime(&a.st_birthtim, &b.st_birthtim)
+    && a.st_size == b.st_size && a.st_mode == b.st_mode && a.st_uid == b.st_uid && a.st_gid == b.st_gid
+    && a.st_ino == b.st_ino && a.st_dev == b.st_dev && a.st_flags == b.st_flags && a.st_gen == b.st_gen
+}
+fn emptyStatus() -> uv.UvStat {
+  let zero = uv.UvTimespec { tv_sec: 0, tv_nsec: 0 }
+  return uv.UvStat { st_dev: 0, st_mode: 0, st_nlink: 0, st_uid: 0, st_gid: 0, st_rdev: 0, st_ino: 0, st_size: 0, st_blksize: 0, st_blocks: 0, st_flags: 0, st_gen: 0, st_atim: zero, st_mtim: zero, st_ctim: zero, st_birthtim: zero }
+}
+effect fn nowNanoseconds() -> u64 {
+  let now = run NativeClock.now(true)
+  return i64.toU64(SystemClock.seconds(&now)) * 1000000000 + i64.toU64(SystemClock.nanoseconds(&now))
+}
+// One fs.watchFile turn, as libuv's fs_poll: a stat when it is due, a change reported when the
+// status differs from the last one (or a stat follows an error), and an error reported once.
+unsafe effect fn pollStat(pointer: *mut State, owner: *mut Watch, now: u64) -> () ? &mut Allocator {
+  let mut anchor = () let watch = unsafe Pointer.borrowMut<(), Watch>(&mut anchor, owner)
+  if now < watch.due { let due = watch.due drop watch unsafe wakeAt(pointer, due) return () }
+  let mut call = ops.call(ops.STAT)
+  let appended = run Effect.result(call.path.appendSlice(watch.path.asSlice()))
+  let mut out = ops.outcome()
+  if let Result<(), OutOfMemoryError>.Failure { .. } = move appended { out.code = -12 } else { unsafe ops.execute(&call, &mut out) }
+  let previous = watch.seen let busy = watch.busy
+  // As libuv: the next stat is an interval after this one began.
+  watch.due = now + watch.interval * 1000000 let due = watch.due
+  if out.code != 0 {
+    if busy != out.code { watch.busy = out.code drop watch unsafe enqueueEvent(owner, out.code, 0, b"", Pointer.null<uv.UvStat>(), Pointer.null<uv.UvStat>()) }
+    else { drop watch }
+  } else {
+    let current = ops.record(&out.status)
+    watch.seen = current watch.busy = 1 drop watch
+    if busy != 0 && (busy < 0 || !sameStatus(&previous, &current)) {
+      unsafe enqueueEvent(owner, 0, 0, b"", Pointer.fromRef<uv.UvStat>(&previous), Pointer.fromRef<uv.UvStat>(&current))
+    }
+  }
+  unsafe wakeAt(pointer, due)
+}
+// Takes the changes of the watchers that the last reactor wait found ready, and runs the stat
+// timers that are due.
+unsafe effect fn collectWatches(pointer: *mut State) -> () ? &mut Allocator {
+  let anchor = () let state = unsafe Pointer.borrow<(), State>(&anchor, pointer) let count = state.readyCount let mut current = state.watches drop state
+  let mut index: usize = 0
+  while index < count {
+    let event = unsafe readyAt(pointer, index) index = index + 1
+    if event.token <= WATCH_TOKENS || event.token >= WATCH_TOKENS + 4294967296 { continue }
+    let id = u64.toI32(event.token - WATCH_TOKENS)
+    let mut cursor = current
+    while !Pointer.isNull<Watch>(cursor) {
+      let owner = unsafe nonnull(cursor) let mut held = () let watch = unsafe Pointer.borrowMut<(), Watch>(&mut held, owner)
+      cursor = watch.next
+      if watch.id != id || watch.closing { continue }
+      let mut changes = List<Change>.make()
+      let mut status: i32 = 0
+      if let Option<FileWatch>.Some { value } = &mut watch.files {
+        let read = run Effect.result(value.read(&mut changes))
+        status = match move read { Result<i32, OutOfMemoryError>.Success { value: code } => code Result<i32, OutOfMemoryError>.Failure { .. } => -12 }
+      }
+      drop watch
+      let list = changes.asSlice()
+      let mut i: usize = 0
+      while i < list.length { unsafe enqueueEvent(owner, 0, list[i].events, list[i].name.asSlice(), Pointer.null<uv.UvStat>(), Pointer.null<uv.UvStat>()) i = i + 1 }
+      if status < 0 { unsafe enqueueEvent(owner, status, 0, b"", Pointer.null<uv.UvStat>(), Pointer.null<uv.UvStat>()) }
+      break
+    }
+  }
+  let mut now: u64 = 0
+  while !Pointer.isNull<Watch>(current) {
+    let owner = unsafe nonnull(current) let watch = unsafe Pointer.borrow<(), Watch>(&anchor, owner)
+    current = watch.next
+    if !watch.stat || watch.closing { continue }
+    drop watch
+    if now == 0 { now = run nowNanoseconds() }
+    run unsafe pollStat(pointer, owner, now)
+  }
 }
 pub unsafe effect fn watch<'m, S: EngineServices>(engine: &mut Engine<'m, S>, context: *mut HeapHeader, pointer: *mut State, filename: ValueBits, stat: bool, flags: u32, bigint: bool, callback: ValueBits) -> ValueBits ! OutOfMemoryError | JsException ? &mut Allocator {
-  let mut path = run host.text(&mut engine, unsafe lendRealm(&context, context), unsafe lendFor(filename)) run path.append(0)
-  let anchor = () let state = unsafe Pointer.borrow<(), State>(&anchor, pointer) let loop = state.loop let closing = state.closing drop state
+  let mut path = run host.text(&mut engine, unsafe lendRealm(&context, context), unsafe lendFor(filename))
+  let anchor = () let state = unsafe Pointer.borrow<(), State>(&anchor, pointer) let closing = state.closing drop state
   if closing { return run engine.throwError(unsafe lendRealm(&context, context), NativeErrorKind.Internal, b"filesystem executor is closed") }
-  let mut kind: i32 = 3 if stat { kind = 4 }
-  let native = run allocate(unsafe uvl.uv_handle_size(kind))
-  let allocated = run Effect.result(allocate(Layout.of<Watch>().bytes))
-  let raw = match move allocated { Result<*mut u8, OutOfMemoryError>.Success { value } => value Result<*mut u8, OutOfMemoryError>.Failure { error } => { unsafe free(native) fail move error } }
+  let raw = run allocate(Layout.of<Watch>().bytes)
   let owner = unsafe Intrinsic.pointerReinterpret<*mut u8, *mut Watch>(raw)
+  let mut files = Option<FileWatch>.none()
   let mut status: i32 = 0
-  if stat { status = unsafe uvl.uv_fs_poll_init(loop, native) } else { status = unsafe uvl.uv_fs_event_init(loop, native) }
+  if !stat {
+    let mut terminated = List<u8>.make() run terminated.appendSlice(path.asSlice()) run terminated.append(0)
+    let opened = run FileWatch.open(terminated.asSlice(), &mut status)
+    files = Option<FileWatch>.some(move opened)
+  }
   if status < 0 {
-    unsafe free(native) unsafe free(raw)
+    drop files unsafe free(raw)
     let error = run unsafe fs.error(&mut engine, context, status, b"watch", filename, ValueBits.Undefined)
     return run unsafe exceptions.throwValue<ValueBits, Engine<'m, S>>(&mut engine, unsafe runtime.contextRuntime(context), error)
   }
+  let fd = match &files { Option<FileWatch>.Some { value } => value.descriptor() Option<FileWatch>.None => -1 }
   let mut mutable = () let state2 = unsafe Pointer.borrowMut<(), State>(&mut mutable, pointer)
   let id = state2.nextWatch state2.nextWatch = state2.nextWatch + 1
-  unsafe Pointer.put<Watch>(owner, Watch { next: state2.watches, id: id, native: native, callback: unsafe callback.retained(), stat: stat, bigint: bigint, closing: false, closed: false, failure: 0, first: Pointer.null<Event>(), last: Pointer.null<Event>() })
-  state2.watches = owner drop state2 unsafe uvl.uv_handle_set_data(native, raw)
-  if stat { status = unsafe uvl.uv_fs_poll_start(native, statChanged, host.pointer(&path), flags) }
-  else { status = unsafe uvl.uv_fs_event_start(native, changed, host.pointer(&path), flags) }
-  if status < 0 {
-    unsafe stopWatch(owner)
-    let error = run unsafe fs.error(&mut engine, context, status, b"watch", filename, ValueBits.Undefined)
-    return run unsafe exceptions.throwValue<ValueBits, Engine<'m, S>>(&mut engine, unsafe runtime.contextRuntime(context), error)
+  // fs.watchFile's first stat is due at once; it reports nothing but an error.
+  unsafe Pointer.put<Watch>(owner, Watch { next: state2.watches, id: id, callback: unsafe callback.retained(), stat: stat, bigint: bigint, closing: false, closed: false, failure: 0, first: Pointer.null<Event>(), last: Pointer.null<Event>(), files: move files, fd: -1, path: move path, interval: u32.toU64(flags), due: 0, seen: emptyStatus(), busy: 0, referenced: true, holding: false })
+  state2.watches = owner drop state2
+  if fd >= 0 {
+    let registered = unsafe watchDescriptor(pointer, fd, WATCH_TOKENS + i32.toU64(id), Interest.readOnly())
+    if registered != 0 {
+      unsafe stopWatch(pointer, owner)
+      let error = run unsafe fs.error(&mut engine, context, 0 - registered, b"watch", filename, ValueBits.Undefined)
+      return run unsafe exceptions.throwValue<ValueBits, Engine<'m, S>>(&mut engine, unsafe runtime.contextRuntime(context), error)
+    }
+    let mut held = () let watch = unsafe Pointer.borrowMut<(), Watch>(&mut held, owner) watch.fd = fd drop watch
   }
+  unsafe holdWatch(pointer, owner)
+  if stat { unsafe wakeAt(pointer, 1) }
   return ValueBits.Int { value: id }
 }
 pub unsafe fn watchControl(pointer: *mut State, id: i32, operation: i32) -> bool {
@@ -782,11 +834,14 @@ pub unsafe fn watchControl(pointer: *mut State, id: i32, operation: i32) -> bool
     let owner = unsafe nonnull(current) let watch = unsafe Pointer.borrow<(), Watch>(&anchor, owner)
     current = watch.next
     if watch.id != id || watch.closing { continue }
-    let native = watch.native drop watch
-    if operation == 0 { unsafe stopWatch(owner) return false }
-    if operation == 1 { unsafe uvl.uv_ref(native) }
-    if operation == 2 { unsafe uvl.uv_unref(native) }
-    return unsafe uvl.uv_has_ref(native) != 0
+    drop watch
+    if operation == 0 { unsafe stopWatch(pointer, owner) return false }
+    let mut held = () let changed = unsafe Pointer.borrowMut<(), Watch>(&mut held, owner)
+    if operation == 1 { changed.referenced = true }
+    if operation == 2 { changed.referenced = false }
+    let referenced = changed.referenced drop changed
+    unsafe holdWatch(pointer, owner)
+    return referenced
   }
   return false
 }
@@ -796,7 +851,8 @@ unsafe fn releaseWatch<'m, S: EngineServices>(engine: &mut Engine<'m, S>, contex
     let current = unsafe nonnull(event) let anchor = () let entry = unsafe Pointer.borrow<(), Event>(&anchor, current) event = entry.next drop entry
     unsafe freeEvent(current)
   }
-  unsafe owners.release(&mut engine, context, watch.callback) unsafe free(watch.native)
+  unsafe owners.release(&mut engine, context, watch.callback)
+  drop watch
   unsafe free(unsafe Intrinsic.pointerReinterpret<*mut Watch, *mut u8>(pointer))
 }
 unsafe effect fn deliverEvent<'m, S: EngineServices>(engine: &mut Engine<'m, S>, context: *mut HeapHeader, event: &Event, callback: ValueBits, stat: bool, bigint: bool) -> () ! OutOfMemoryError | JsException ? &mut Allocator {
@@ -826,6 +882,7 @@ unsafe effect fn eventValues<'m, S: EngineServices>(engine: &mut Engine<'m, S>, 
   }
 }
 unsafe effect fn pollWatches<'m, S: EngineServices>(engine: &mut Engine<'m, S>, context: *mut HeapHeader, pointer: *mut State) -> bool ! OutOfMemoryError | JsException ? &mut Allocator {
+  run unsafe collectWatches(pointer)
   let mut ran = false let mut anchor = ()
   let state = unsafe Pointer.borrowMut<(), State>(&mut anchor, pointer)
   let mut link = Pointer.fromMutRef<?*mut Watch>(&mut state.watches) drop state
@@ -861,14 +918,13 @@ unsafe effect fn pollWatches<'m, S: EngineServices>(engine: &mut Engine<'m, S>, 
     unsafe owners.release(&mut engine, context, callback)
     match move delivered { Result<(), OutOfMemoryError | JsException>.Success { .. } => () Result<(), OutOfMemoryError | JsException>.Failure { error } => { fail move error } }
     ran = true
-    // Callback may prepend watchers, but existing nodes cannot be freed until
-    // this function resumes and observes libuv's close callback on a later run.
+    // Callback may prepend or stop watchers; a stopped one is freed on a later run.
   }
   return ran
 }
 pub unsafe fn close<'m, S: EngineServices>(engine: &mut Engine<'m, S>, context: *mut HeapHeader, pointer: *mut State) -> () {
   let mut anchor = () let state = unsafe Pointer.borrowMut<(), State>(&mut anchor, pointer)
-  state.closing = true let loop = state.loop let loopAnchor = state.anchor let mut watch = state.watches drop state
+  state.closing = true let mut watch = state.watches drop state
   // Jobs that no worker started are cancelled; running ones finish below.
   let cancelling = unsafe Pointer.borrowMut<(), State>(&mut anchor, pointer)
   while true {
@@ -884,35 +940,24 @@ pub unsafe fn close<'m, S: EngineServices>(engine: &mut Engine<'m, S>, context: 
   while !unsafe allFinished(pointer) { run unsafe waitWork(pointer) }
 
   while !Pointer.isNull<Watch>(watch) {
-    let owner = unsafe nonnull(watch) let entry = unsafe Pointer.borrow<(), Watch>(&anchor, owner) watch = entry.next drop entry unsafe stopWatch(owner)
+    let owner = unsafe nonnull(watch) let entry = unsafe Pointer.borrow<(), Watch>(&anchor, owner) watch = entry.next drop entry unsafe stopWatch(pointer, owner)
   }
-  // Cancellation cannot interrupt a running syscall. Drain until every request
-  // and handle has completed before freeing native memory or JS roots.
-  unsafe uvl.uv_close(loopAnchor, silkLoopAnchorClosed)
-  let _ignored = unsafe uvl.uv_run(loop, 0)
+  // Cancellation cannot interrupt a running syscall: every request has completed by now.
+  let guest = unsafe Pointer.borrow<(), State>(&anchor, pointer)
+  if let Option<Guest>.Some { value } = guest.guest { drop guest let close = value.close unsafe close(value.context) }
   while true { let entry = unsafe takeCompleted(pointer, 0xffffffffffffffff) if Pointer.isNull<Request>(entry) { break } unsafe release(&mut engine, context, unsafe nonnull(entry)) }
   let state2 = unsafe Pointer.take<State>(pointer) watch = state2.watches
   while !Pointer.isNull<Watch>(watch) {
     let owner = unsafe nonnull(watch) let entry = unsafe Pointer.borrow<(), Watch>(&anchor, owner) watch = entry.next drop entry unsafe releaseWatch(&mut engine, context, owner)
   }
-  // Dropping the reactor closes its kernel queue, which also forgets libuv's backend descriptor.
+  // Dropping the reactor closes its kernel queue.
   drop state2
-  let status = unsafe uvl.uv_loop_close(loop)
-  if status != 0 { Intrinsic.trap("filesystem loop still owns foreign handles at close") }
-  unsafe free(loop) unsafe free(unsafe Intrinsic.pointerReinterpret<*mut State, *mut u8>(pointer))
+  unsafe free(unsafe Intrinsic.pointerReinterpret<*mut State, *mut u8>(pointer))
 }
 
 // Generated by tools/keep_exports.py; do not edit below.
 /// Takes each C export as a value, so that Silk emits it (see tools/keep_exports.py).
 pub fn keepExports() -> () {
-  let _silkLoopAnchor: extern "C" fn(*mut u8) -> () = silkLoopAnchor
-  let _silkLoopAnchorClosed: extern "C" fn(*mut u8) -> () = silkLoopAnchorClosed
   let _silk_runtime_wake: extern "C" fn(*mut u8) -> () = silk_runtime_wake
-  let _inspectResource: extern "C" fn(*mut u8, *mut u8) -> () = inspectResource
-  let _describeHandle: extern "C" fn(*mut u8, *mut u8) -> () = describeHandle
-  let _runRequest: extern "C" fn(?*mut u8) -> () = runRequest
   let _finishRequest: extern "C" fn(?*mut u8) -> () = finishRequest
-  let _changed: extern "C" fn(*mut u8, ?*const u8, i32, i32) -> () = changed
-  let _statChanged: extern "C" fn(*mut u8, i32, *const uv.UvStat, *const uv.UvStat) -> () = statChanged
-  let _watchClosed: extern "C" fn(*mut u8) -> () = watchClosed
 }

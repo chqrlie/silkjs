@@ -6,6 +6,9 @@ const rawOS = { ...osNamespace };
 
 const native = globalThis.__silkNative;
 delete globalThis.__silkNative;
+// The program's Platform (platformNative): the environment, the working directory and exit, the
+// process's own or fixed by the embedder. A failure is a negative errno.
+const platformNative = native.platformNative;
 // Every exit path ends here. Node's exit handler stops and joins every worker
 // before exit(): libc exit handlers (OpenSSL's cleanup among them) must not tear
 // down shared native state while a worker thread still runs.
@@ -14,7 +17,7 @@ delete globalThis.__silkNative;
 rawStd.exit = code => {
   native.workerNative('stopThreads', []);
   if (native.embedded) native.workerNative('requestExit', [(Number(code) | 0) >>> 0]);
-  stdNamespace.exit(code);
+  platformNative(6, Number(code) | 0);
 };
 const factories = new Map();
 const modules = new Map();
@@ -77,7 +80,16 @@ function internalRequire(request, parent = '') {
   catch (error) { moduleDelete(request); throw error; }
   return module.exports;
 }
-for (let index = 0, count = native.builtinCount(); index < count; index++) define(native.builtinName(index), index);
+// The services this program has (docs/composable-runtime.md): a built-in of another service is
+// not registered, so it is not in builtinModules and requiring it fails as in a Node build
+// without it. The core's built-ins and the executable's own are always there.
+const presentServices = new Set(native.services);
+presentServices.add('Core'); presentServices.add('Executable');
+const absentBuiltins = new Map();
+for (let index = 0, count = native.builtinCount(); index < count; index++) {
+  const name = native.builtinName(index), service = native.builtinService(index);
+  if (presentServices.has(service)) define(name, index); else absentBuiltins.set(name, service);
+}
 // tools/build.py runs the freshly linked executable once this way to get the
 // built-ins' bytecode, which it then links in. Nothing else of the runtime is up yet.
 if (native.argv.length === 2 && native.argv[1] === '--silk-write-builtin-cache') rawStd.exit(native.writeBuiltinCache() ? 0 : 1);
@@ -86,6 +98,40 @@ for (const name of ['dispose', 'asyncDispose']) {
   if (Symbol[name] === undefined) Object.defineProperty(Symbol, name, { value: Symbol.for('nodejs.' + name) });
 }
 const host = { ...native, rawOS, rawStd };
+// A file system other than the operating system's (MemoryFiles): the engine's os calls on files,
+// which fs and this bootstrap make directly, go through it too as fsSync calls, keeping the os
+// module's conventions (a negative errno, or [value, errno]). Descriptors 0 to 2 stay the process's.
+if (!native.filesDirect) {
+  // Without a file system (Files.empty) there is no fsSync: every call fails with ENOSYS.
+  const fsSync = native.fsSync ?? (() => { throw Object.assign(new Error('ENOSYS'), { errno: rawOS.platform === 'darwin' ? -78 : -38 }); });
+  const status = (name, args) => {
+    try { const result = fsSync(name, args); return result === undefined ? 0 : result; }
+    catch (error) { if (typeof error?.errno === 'number') return error.errno; throw error; }
+  };
+  const pair = (name, args) => {
+    try { return [fsSync(name, args), 0]; }
+    catch (error) { if (typeof error?.errno === 'number') return [undefined, error.errno]; throw error; }
+  };
+  const statOf = name => path => {
+    const [s, errno] = pair(name, [path]);
+    if (errno) return [undefined, errno];
+    return [{ dev: s.dev, ino: s.ino, mode: s.mode, nlink: s.nlink, uid: s.uid, gid: s.gid, rdev: s.rdev, size: s.size, blocks: s.blocks, atime: s.atimeMs, mtime: s.mtimeMs, ctime: s.ctimeMs }, 0];
+  };
+  const { read, write, close } = rawOS;
+  Object.assign(rawOS, {
+    open: (path, flags, mode = 0o666) => status('open', [path, flags, mode]),
+    close: fd => fd <= 2 ? close(fd) : status('close', [fd]),
+    read: (fd, buffer, offset, length) => fd <= 2 ? read(fd, buffer, offset, length) : status('pread', [fd, buffer, offset, length, -1]),
+    write: (fd, buffer, offset, length) => fd <= 2 ? write(fd, buffer, offset, length) : status('pwrite', [fd, buffer, offset, length, -1]),
+    stat: statOf('stat'), lstat: statOf('lstat'),
+    mkdir: (path, mode = 0o777) => status('mkdir', [path, mode]),
+    rename: (from, to) => status('rename', [from, to]),
+    readlink: path => pair('readlink', [path]),
+    realpath: path => pair('realpath', [path]),
+    symlink: (target, path) => status('symlink', [target, path]),
+    utimes: (path, atime, mtime) => status('utimes', [path, atime / 1000, mtime / 1000]),
+  });
+}
 // Node's internals keep SharedArrayBuffer when the global is left out
 // (--enable-sharedarraybuffer-per-context): a Worker still shares its cwd counter.
 host.SharedArrayBuffer = SharedArrayBuffer;
@@ -111,6 +157,18 @@ host.builtinLoaded = moduleHas;
 // This bootstrap is one, as Node's internal/bootstrap modules are.
 const hasFactory = Map.prototype.has.bind(factories);
 host.builtinExists = id => id === 'internal/bootstrap/silk' || hasFactory(id);
+// Whether a service is part of this program, for code that offers a feature only with it.
+host.hasService = service => presentServices.has(service);
+// The error a Node build without the module throws for it, or undefined when it is there or is
+// no built-in at all: crypto's modules throw ERR_NO_CRYPTO and the inspector's
+// ERR_INSPECTOR_NOT_AVAILABLE, as in Node built --without-ssl or --without-inspector.
+host.absentBuiltin = name => {
+  const service = absentBuiltins.get(name);
+  if (service === undefined || name.startsWith('internal/')) return undefined;
+  if (service === 'Crypto' || service === 'Tls') return 'ERR_NO_CRYPTO';
+  if (service === 'Inspector' && (name === 'inspector' || name === 'inspector/promises')) return 'ERR_INSPECTOR_NOT_AVAILABLE';
+  return 'ERR_UNKNOWN_BUILTIN_MODULE';
+};
 // Source maps are off until something loads the module to switch them on, so
 // registering a source before that only matters when coverage wants every map.
 host.registerSource = (filename, source, metadata) => {
@@ -125,7 +183,8 @@ const fileHref = path => host.platform !== 'win32' && plainPath.test(path) && !d
 const inspectorNativeOperations = Array.from({ length: 33 }, (_, index) => native['inspectorNative' + index]);
 const reflectApply = Reflect.apply;
 host.inspectorNative = (operation, ...args) => reflectApply(inspectorNativeOperations[operation], undefined, args);
-host.inspectorEntry = wrapper => host.inspectorNative(15, wrapper);
+// The loader marks the main module's entry for --inspect-brk, when there is an inspector.
+host.inspectorEntry = presentServices.has('Inspector') ? wrapper => host.inspectorNative(15, wrapper) : undefined;
 host.typeScriptMode = 'strip';
 // libm lgamma and erfc for the histogram statistics (internal/histogram_native).
 host.lgamma = x => native.mathSpecial(0, x);
@@ -134,12 +193,12 @@ host.testCoverageStart = () => native.testCoverageNative(0);
 host.testCoverageTake = () => native.testCoverageNative(1);
 host.testCoverageStop = () => native.testCoverageNative(2);
 host.processFeatures = {
-  debug: native.debugBuild, uv: true, ipv6: true, inspector: true,
+  debug: native.debugBuild, uv: true, ipv6: true, inspector: presentServices.has('Inspector'),
   openssl_is_boringssl: false, quic: false,
-  tls: true, tls_alpn: true, tls_sni: true, tls_ocsp: false,
+  tls: presentServices.has('Tls'), tls_alpn: presentServices.has('Tls'), tls_sni: presentServices.has('Tls'), tls_ocsp: false,
   cached_builtins: false,
   get require_module() { return !host.requireModuleDisabled; },
-  get typescript() { return host.typeScriptMode; }
+  get typescript() { return presentServices.has('TypeStripping') ? host.typeScriptMode : false; }
 };
 // Node's kFirstModuleParent: the module that first required a module, for require stacks.
 host.kFirstModuleParent = Symbol('kFirstModuleParent');
@@ -153,7 +212,13 @@ internalRequire('internal/error_stack').install(globalThis);
 // QuickJS's InternalError is no Node global; the engine still throws its errors.
 delete globalThis.InternalError;
 let warnedTransformTypes = false;
+// Node's assertTypeScript: a build without TypeScript stripping (the TypeStripping service) throws
+// ERR_NO_TYPESCRIPT for a TypeScript file.
+host.assertTypeScript = () => {
+  if (!presentServices.has('TypeStripping')) throw new (internalRequire('internal/errors').codes.ERR_NO_TYPESCRIPT)();
+};
 host.stripTypeScriptModuleTypes = (source, filename, sourceURL = filename) => {
+  host.assertTypeScript();
   const transform = host.typeScriptMode === 'transform';
   if (transform && !warnedTransformTypes) {
     warnedTransformTypes = true;
@@ -178,7 +243,9 @@ host.rebindRealmBuiltins = (previous, global) => {
   wasmCallbacks.set(global, callbacks);
 };
 const wasmResolver = global => wasmCallbacks.get(global);
-native.wasmNative('register', wasmResolver);
+// Without the Wasm capability there are no Wasm natives, and no WebAssembly global below.
+const hasWasm = typeof native.wasmNative === 'function';
+if (hasWasm) native.wasmNative('register', wasmResolver);
 // --disable-proto=delete|throw, for the main realm and each new one.
 function disableProto(global) {
   const prototype = global.Object.prototype;
@@ -225,7 +292,7 @@ host.initializeRealmBuiltins = (handle, global, wasmCodeGeneration, isolated = f
     privateSymbols: host.privateSymbols,
     errorStackState: host.errorStackState,
     builtinLoaded: moduleHas,
-    wasmNative: native.vmWasmNative(handle),
+    wasmNative: hasWasm ? native.vmWasmNative(handle) : undefined,
     wasmRealmState: host.wasmRealmState,
     wasmCodeGeneration,
     registerWasmRealm(_global, callbacks) {
@@ -247,7 +314,7 @@ host.initializeRealmBuiltins = (handle, global, wasmCodeGeneration, isolated = f
     return module.exports;
   }
   load('internal/error_stack').install(global, isolated);
-  if (!host.jitless) Object.defineProperty(global, 'WebAssembly', {
+  if (!host.jitless && hasWasm) Object.defineProperty(global, 'WebAssembly', {
     value: load('internal/web/wasm').WebAssembly, writable: true, configurable: true,
   });
   return load;
@@ -277,9 +344,9 @@ host.strerror = number => rawStd.strerror(number);
 function pair(result, syscall, path) { if (result[1] !== 0) throw systemError(result[1], syscall, path); return result[0]; }
 // node_process_methods.cc Cwd: a uv_cwd UVException, worded for a removed directory.
 host.cwd = () => {
-  const result = rawOS.getcwd();
-  if (result[1] === 0) return result[0];
-  const error = systemError(result[1], 'uv_cwd');
+  const result = platformNative(4);
+  if (typeof result === 'string') return result;
+  const error = systemError(result, 'uv_cwd');
   if (error.code === 'ENOENT') {
     error.message = 'ENOENT: process.cwd failed with error ' + (errnoMessages.get(2) || rawStd.strerror(2)) +
       ', the current working directory was likely removed without changing the working directory, uv_cwd';
@@ -289,7 +356,15 @@ host.cwd = () => {
 // Node's tryGetCwd (lib/internal/process/execution.js): getcwd fails once the
 // directory is removed, so names fall back to the executable's directory.
 host.tryGetCwd = () => { try { return host.cwd(); } catch { return host.path.dirname(process.execPath); } };
-host.realpath = path => pair(rawOS.realpath(path), 'realpath', path);
+// The loader's reads of module files go to the program's ModuleResolver (moduleNative): the
+// operating system's files, or a module graph bundled into the program. Each answer is a
+// value or a negative errno.
+const moduleNative = native.moduleNative;
+host.realpath = path => {
+  const result = moduleNative(1, path, 0);
+  if (typeof result === 'number') throw systemError(-result, 'realpath', path);
+  return result;
+};
 function statResult(result, syscall, path) {
   const value = pair(result, syscall, path);
   value.isFile = () => (value.mode & 0o170000) === 0o100000;
@@ -298,35 +373,44 @@ function statResult(result, syscall, path) {
 }
 host.stat = (path, follow = true) =>
   statResult((follow ? rawOS.stat : rawOS.lstat)(path), follow ? 'stat' : 'lstat', path);
-// Node's resolver may probe existence without granting access to file contents.
-const moduleStat = osNamespace.stat, moduleLstat = osNamespace.lstat;
 // A path's file type bits, or 0 for a path that is not there: the resolver asks
 // about many of those.
 host.moduleType = (path, follow) => {
-  const result = (follow ? moduleStat : moduleLstat)(path);
-  if (result[1] === 0) return result[0].mode & 0o170000;
-  const code = errnoNames.get(Math.abs(result[1]));
+  const result = moduleNative(0, path, follow ? 1 : 0);
+  if (result >= 0) return result;
+  const code = errnoNames.get(-result);
   if (code === 'ENOENT' || code === 'ENOTDIR') return 0;
-  throw systemError(result[1], follow ? 'stat' : 'lstat', path);
+  throw systemError(-result, follow ? 'stat' : 'lstat', path);
 };
 // node_file.cc InternalModuleStat: 1 for a directory, 0 for anything else that is
 // there, and the negative errno of a failed stat. Like moduleType, it needs no read grant.
 host.internalModuleStat = path => {
-  const result = moduleStat(path);
-  if (result[1] !== 0) return -Math.abs(result[1]);
-  return (result[0].mode & 0o170000) === 0o040000 ? 1 : 0;
+  const result = moduleNative(0, path, 1);
+  if (result < 0) return result;
+  return result === 0o040000 ? 1 : 0;
 };
 // Built-ins read the environment where it lives: nothing of it is kept here.
+const getenv = key => platformNative(0, key);
 const environmentHandler = {
-  get(target, key) { return typeof key === 'string' ? rawStd.getenv(key) : undefined; },
-  has(target, key) { return typeof key === 'string' && rawStd.getenv(key) !== undefined; },
-  ownKeys() { return Object.keys(rawStd.getenviron()); },
+  get(target, key) { return typeof key === 'string' ? getenv(key) : undefined; },
+  has(target, key) { return typeof key === 'string' && getenv(key) !== undefined; },
+  ownKeys() { return platformNative(3); },
   getOwnPropertyDescriptor(target, key) {
-    const value = typeof key === 'string' ? rawStd.getenv(key) : undefined;
+    const value = typeof key === 'string' ? getenv(key) : undefined;
     if (value !== undefined) return { value, writable: true, enumerable: true, configurable: true };
   },
-  set(target, key, value) { if (typeof key === 'symbol') throw new TypeError('Cannot convert a Symbol value to a string'); rawStd.setenv(key, String(value)); return true; },
-  deleteProperty(target, key) { if (typeof key === 'string') rawStd.unsetenv(key); return true; },
+  set(target, key, value) {
+    if (typeof key === 'symbol') throw new TypeError('Cannot convert a Symbol value to a string');
+    const code = platformNative(1, key, String(value));
+    if (code < 0) throw systemError(code, 'setenv', key);
+    return true;
+  },
+  deleteProperty(target, key) {
+    if (typeof key !== 'string') return true;
+    const code = platformNative(2, key);
+    if (code < 0) throw systemError(code, 'unsetenv', key);
+    return true;
+  },
 };
 // A heap image is this bootstrap's result, saved at build time and started from
 // by later processes (src/ext/heap_image.silk). Whatever the bootstrap takes from
@@ -751,6 +835,12 @@ const copyBytes = bytes => bytes.buffer === readBuffer.buffer ? Buffer.from(byte
 const decodeBytes = bytes => bytes.toString('utf8');
 host.readFile = path => readInto(path, copyBytes);
 host.readText = path => readInto(path, decodeBytes);
+// A module's source, from the ModuleResolver. A directory fails as its read does.
+host.readModule = path => {
+  const result = moduleNative(2, path, 0);
+  if (typeof result === 'number') throw systemError(-result, errnoNames.get(-result) === 'EISDIR' ? 'read' : 'open', path);
+  return result;
+};
 function output(fd) {
   return { fd, isTTY: !!rawOS.isatty(fd), writable: true, write(chunk, encoding, callback) {
     if (typeof encoding === 'function') { callback = encoding; encoding = undefined; }
@@ -840,14 +930,28 @@ const nodeVersion = '24.22.1';
 // first, the rest by name. The libraries answer for themselves; the bundled
 // JavaScript and vendored C sources carry the version of their pinned copy.
 function componentVersions() {
-  const [uv, openssl, zlib, brotli, zstd, nghttp2, sqlite] = native.osNative('componentVersions', []);
+  const [uv] = native.osNative('componentVersions', []);
+  const openssl = presentServices.has('Crypto') ? native.crypto() : undefined;
+  // The libraries of a capability answer only when it is there.
+  const [zlib, brotli, zstd] = presentServices.has('Compression') ? native.compression() : [];
+  const nghttp2 = presentServices.has('Http2') ? native.http2() : undefined;
+  const sqlite = presentServices.has('Database') ? native.sqliteNative('version', []) : undefined;
   const versions = {
     node: nodeVersion, acorn: '8.18.0', amaro: '1.1.11',
-    brotli: `${brotli >>> 24}.${(brotli >>> 12) & 0xfff}.${brotli & 0xfff}`,
-    llhttp: '9.4.3', napi: '10', nghttp2, openssl, quickjs: '2026-06-04', silkjs: '0.1.0', sqlite,
+    // A packed number from the brotli library; an implementation without it names itself.
+    brotli: typeof brotli === 'number' ? `${brotli >>> 24}.${(brotli >>> 12) & 0xfff}.${brotli & 0xfff}` : brotli,
+    llhttp: presentServices.has('Http') ? native.httpParserNative(11) : undefined, napi: '10', nghttp2, openssl, quickjs: '2026-06-04', silkjs: '0.1.0', sqlite,
     uv, uvwasi: '0.0.23', zlib, zstd,
   };
   if (zlib === undefined) delete versions.zlib;
+  if (brotli === undefined) delete versions.brotli;
+  if (zstd === undefined) delete versions.zstd;
+  if (nghttp2 === undefined) delete versions.nghttp2;
+  if (sqlite === undefined) delete versions.sqlite;
+  if (openssl === undefined) delete versions.openssl;
+  if (!presentServices.has('Http')) delete versions.llhttp;
+  if (!presentServices.has('TypeStripping')) delete versions.amaro;
+  if (!hasWasm) delete versions.uvwasi;
   return versions;
 }
 // process.config describes the build the way Node's config.gypi does, for the
@@ -863,7 +967,7 @@ function buildConfig() {
     },
     variables: {
       asan: 0, ubsan: 0, napi_build_version: '10', node_builtin_shareable_builtins: [], node_module_version: 137, node_shared: false,
-      node_shared_openssl: false, node_shared_sqlite: false, node_shared_zstd: false, node_use_amaro: true,
+      node_shared_openssl: false, node_shared_sqlite: false, node_shared_zstd: false, node_use_amaro: presentServices.has('TypeStripping'),
       node_use_openssl: true, node_without_node_options: false, node_quic: false, shlib_suffix: host.platform === 'darwin' ? 'dylib' : 'so',
       single_executable_application: true, icu_small: false, v8_enable_i18n_support: 1, v8_enable_inspector: 1,
     },
@@ -883,7 +987,7 @@ function reallyExit(code) {
 const processMethods = host.processMethods = {
   cwd: host.cwd,
   chdir(directory) {
-    const code = rawOS.chdir(directory);
+    const code = platformNative(5, directory);
     // Node reports the directory it was in as the path and the target as dest.
     if (code < 0) throw systemError(code, 'chdir', host.cwd(), directory);
   },
@@ -1045,11 +1149,14 @@ process.setSourceMapsEnabled = function setSourceMapsEnabled(enabled) {
 };
 process.moduleLoadList = moduleLoadList;
 define('process', module => { module.exports = process; });
-internalRequire('internal/napi').install(host, process);
+// Without native addons (NativeAddons.empty) process.dlopen fails as it does with --no-addons.
+if (presentServices.has('NativeAddons')) internalRequire('internal/napi').install(host, process);
+else process.dlopen = function dlopen() { throw Object.assign(new Error('Cannot load native addon because loading addons is disabled.'), { code: 'ERR_DLOPEN_DISABLED' }); };
 const eventGlobals = internalRequire('internal/path_events/event_target');
 for (const name of ['Event', 'CustomEvent', 'EventTarget', 'AbortController', 'AbortSignal', 'DOMException'])
   Object.defineProperty(globalThis, name, { value: eventGlobals[name], writable: true, enumerable: false, configurable: true });
-const asyncFS = internalRequire('internal/fs_async')(native);
+// fs's executor (internal/fs_async), when the program has a file system.
+const asyncFS = presentServices.has('Files') ? internalRequire('internal/fs_async')(native) : null;
 host.submitIO = (operation, args, callback, requestKind) => {
   const scope = resource(requestKind === 1 ? 'FSREQPROMISE' : requestKind === 2 ? 'FILEHANDLECLOSEREQ' : 'FSREQCALLBACK');
   hidePromises(1);
@@ -1076,7 +1183,7 @@ host.watch = (filename, options, callback) => {
   return handle;
 };
 // Worker bootstrap decodes Wasm host objects through the realm's wrap callbacks.
-Object.defineProperty(globalThis, 'WebAssembly', {
+if (hasWasm) Object.defineProperty(globalThis, 'WebAssembly', {
   value: internalRequire('internal/web/wasm').WebAssembly, writable: true, configurable: true,
 });
 const workerThreads = internalRequire('internal/worker');
@@ -1101,9 +1208,14 @@ webGlobals.install(globalThis);
 webGlobals.defineLazy(globalThis, 'console', () => ({ console: internalRequire('console') }), false);
 // Register the trusted dispatcher before preloads or any other guest code can
 // connect to this isolate (including through a parent Worker inspector).
-const inspectorBackend = internalRequire('internal/inspector');
-webGlobals.defineLazy(globalThis, 'crypto', () => ({ crypto: internalRequire('crypto').webcrypto }), true);
-for (const name of ['Crypto', 'SubtleCrypto', 'CryptoKey']) {
+// Without the inspector (Inspector.empty) its startup hooks do nothing.
+const inspectorBackend = presentServices.has('Inspector') ? internalRequire('internal/inspector') : {
+  _atExit() {}, _breakFirstLine() { return false; }, _armStartup() {}, _start() {}, _installProcess() {}, _waitForWorker() {},
+};
+// Without the Crypto service there is no webcrypto. (The design keeps getRandomValues and
+// randomUUID in the core over the platform's entropy; that split comes with the Crypto service.)
+if (presentServices.has('Crypto')) webGlobals.defineLazy(globalThis, 'crypto', () => ({ crypto: internalRequire('crypto').webcrypto }), true);
+if (presentServices.has('Crypto')) for (const name of ['Crypto', 'SubtleCrypto', 'CryptoKey']) {
   Object.defineProperty(globalThis, name, {
     get() {
       const value = internalRequire('internal/crypto/webcrypto')[name];
@@ -1140,6 +1252,7 @@ function exposedInternal(name) {
 const runtimeModules = { __proto__: null, 'silk:serve': 'internal/web/serve' };
 const publicBuiltins = {
   has: name => runtimeModules[name] !== undefined || publicBuiltin(name),
+  absent: host.absentBuiltin,
   get: name => internalRequire(runtimeModules[name] ?? name),
   runtime: name => typeof name === 'string' && runtimeModules[name] !== undefined,
   // Whether names() lists name, without building the list.
@@ -1293,7 +1406,7 @@ function runtimeFlag(arg) {
   try {
     if (internalRequire('internal/permission').applyOption(arg) ||
         internalRequire('internal/startup_controls').applyOption(arg) ||
-        internalRequire('internal/tls/options').applyOption(arg) ||
+        (presentServices.has('Tls') && internalRequire('internal/tls/options').applyOption(arg)) ||
         internalRequire('internal/heap_prof').applyOption(arg) ||
         internalRequire('internal/options').applyInspectorOption(arg)) return true;
   }
@@ -1543,14 +1656,14 @@ function installRuntimeOptions(args, entrypoints = [], preloadEntrypoints = true
   host.initialExecArgv = process.execArgv.slice();
   host.workerRuntimeArgs = args.slice();
   if (host.exposeGC) Object.defineProperty(globalThis, 'gc', { value: host.makeGC(), writable: true, enumerable: true });
-  if (host.experimentalEventSource) Object.defineProperty(globalThis, 'EventSource', {
+  if (host.experimentalEventSource && hasFactory('internal/web/eventsource')) Object.defineProperty(globalThis, 'EventSource', {
     value: internalRequire('internal/web/eventsource').EventSource, writable: true, configurable: true,
   });
   if (host.experimentalWebSocket === false) {
     delete globalThis.WebSocket;
     delete globalThis.CloseEvent;
   }
-  if (host.experimentalWebStorage) internalRequire('internal/web/storage').install(globalThis, { localStorageFile: host.localStorageFile, inspect: !!host.experimentalStorageInspection });
+  if (host.experimentalWebStorage && hasFactory('internal/web/storage')) internalRequire('internal/web/storage').install(globalThis, { localStorageFile: host.localStorageFile, inspect: !!host.experimentalStorageInspection });
   if (host.experimentalStreamIter) { internalRequire('fs/promises'); internalRequire('internal/fs/iter').install(); }
   // http is in the heap image, whose global agent was made without this process's options.
   // node_options.cc: NODE_USE_ENV_PROXY=1 sets it, and the flags override that.
@@ -1657,6 +1770,24 @@ function installCommonJSInputGlobals(filename, id) {
   globalThis.require = loader.requireFor(filename, module);
   globalThis.module = module; globalThis.exports = module.exports;
   globalThis.__filename = id; globalThis.__dirname = '.';
+}
+// The options each capability brings: the name itself, or the name followed by `-` and more.
+const capabilityOptions = [
+  ['Inspector', ['--inspect', '--cpu-prof', '--heap-prof', '--experimental-network-inspection',
+    '--experimental-worker-inspection', '--experimental-storage-inspection']],
+  ['TypeStripping', ['--experimental-strip-types', '--experimental-transform-types']],
+  ['Wasm', ['--experimental-wasm-modules', '--experimental-wasi-unstable-preview1']],
+  ['Database', ['--experimental-sqlite', '--experimental-webstorage', '--localstorage-file']],
+  ['Crypto', ['--openssl-config', '--openssl-legacy-provider', '--openssl-shared-config', '--use-openssl-ca',
+    '--use-bundled-ca', '--use-system-ca', '--force-fips', '--enable-fips', '--secure-heap']],
+  ['Tls', ['--tls-cipher-list', '--tls-keylog', '--tls-max', '--tls-min']],
+];
+function absentOption(name) {
+  for (const [service, options] of capabilityOptions) {
+    if (presentServices.has(service)) continue;
+    for (const option of options) if (name === option || name.startsWith(option + '-')) return true;
+  }
+  return false;
 }
 function cliError(messages) {
   if (typeof messages === 'string') messages = [messages];
@@ -1773,6 +1904,9 @@ function run(restored = false) {
   applyEnvironmentOptions();
   for (const entry of host.cliOptionEntries) {
     const { name, value } = entry;
+    // An option of a capability this program leaves out is unknown, as --inspect is in a Node built
+    // --without-inspector.
+    if (absentOption(name)) return cliError('bad option: ' + entry.raw);
     switch (name) {
       case '--watch': watchMode = value; continue;
       case '--run': runName = value; continue;
@@ -1837,7 +1971,7 @@ function run(restored = false) {
   const tlsErrors = tlsOptions ? internalRequire('internal/tls/options').validate() : [];
   if (tlsErrors.length) return cliError(tlsErrors);
   // Only an OpenSSL option or OPENSSL_CONF initializes OpenSSL at startup.
-  const opensslError = tlsOptions || process.env.OPENSSL_CONF ? internalRequire('internal/tls/options').processOpenSSLOptions() : undefined;
+  const opensslError = presentServices.has('Tls') && (tlsOptions || process.env.OPENSSL_CONF) ? internalRequire('internal/tls/options').processOpenSSLOptions() : undefined;
   if (opensslError !== undefined) {
     host.writeStartupDiagnostic(process.execPath + ': ' + opensslError + '\n');
     return process.exit(1);
@@ -1913,7 +2047,7 @@ function run(restored = false) {
     if (!fromStdin && inputTypeSet) throw Object.assign(new Error('--input-type can only be used with string input via --eval, --print, or STDIN'), { code: 'ERR_INPUT_TYPE_NOT_ALLOWED' });
     const resolved = fromStdin ? null : loader.resolveMain(host.path.resolve(filename));
     const name = fromStdin ? host.path.join(host.tryGetCwd(), '[stdin]') : resolved.filename;
-    const source = loader.cleanSource(fromStdin ? rawStd.in.readAsString() : host.Buffer.from(host.readFile(name)).toString('utf8'));
+    const source = loader.cleanSource(fromStdin ? rawStd.in.readAsString() : host.readModule(name));
     const module = fromStdin ? inputType === 'module' || (!inputTypeSet && !host.detectModuleDisabled && native.detectModuleSyntax(source)) : resolved.format === 'module';
     // node:internal/main/check_syntax names piped source [stdin].
     const scriptName = fromStdin ? '[stdin]' : name;
@@ -1927,7 +2061,7 @@ function run(restored = false) {
   if (native.embedded && expression === undefined && filename === undefined && !interactive) return;
   // As node.cc, ask whether descriptor 0 is a terminal without making process.stdin:
   // that stream would make the descriptor nonblocking before a piped script is read.
-  if (expression === undefined && filename === undefined && (interactive || internalRequire('tty').isatty(0))) {
+  if (expression === undefined && filename === undefined && (interactive || (presentServices.has('Network') ? internalRequire('tty').isatty(0) : !!rawOS.isatty(0)))) {
     if (inputTypeSet) {
       console.error('Cannot specify --input-type for REPL');
       process.exitCode = 9;
@@ -2097,7 +2231,7 @@ function checkUnsettledTopLevelAwait() {
       const { 0: name, 1: line, 2: column } = stalled[index];
       if (!sources.has(name)) {
         let text = name === entry.name ? entry.source : undefined;
-        if (text === undefined) { try { text = host.readText(name.startsWith('file:') ? url.fileURLToPath(name) : name); } catch {} }
+        if (text === undefined) { try { text = host.readModule(name.startsWith('file:') ? url.fileURLToPath(name) : name); } catch {} }
         sources.set(name, typeof text === 'string' ? text.split(/\r\n|[\n\r\u2028\u2029]/) : []);
       }
       const sourceLine = sources.get(name)[line - 1] ?? '';
@@ -2289,23 +2423,27 @@ globalThis.__silkRuntime = {
   seal() {
     // Built-ins most programs load run here, so that a start from the image finds
     // them loaded. None of them keeps anything of the process when it loads.
-    for (const name of imageModules) internalRequire(name);
-    // And they find the way to a main script warm (loader.warmMain).
-    const fs = internalRequire('fs'), directory = fs.mkdtempSync('/tmp/silkjs-image-');
-    try {
-      fs.writeFileSync(directory + '/main.js', "require('./dependency.js');\n");
-      fs.writeFileSync(directory + '/dependency.js', 'module.exports = 1;\n');
-      loader.warmMain(directory + '/main.js');
-    } finally { fs.rmSync(directory, { recursive: true, force: true }); }
-    // And a first console.log of text, here written to /dev/null.
-    const saved = rawOS.dup(1), sink = rawOS.open('/dev/null', rawOS.O_WRONLY);
-    try {
-      if (saved < 0 || sink < 0) throw new Error('No /dev/null to warm console.log against');
-      rawOS.dup2(sink, 1);
-      globalThis.console.log('silkjs heap image');
-    } finally {
-      if (saved >= 0) { rawOS.dup2(saved, 1); rawOS.close(saved); }
-      if (sink >= 0) rawOS.close(sink);
+    // Only those of the program's capabilities are there (an embedder's image).
+    for (const name of imageModules) if (factoryGet(name) !== undefined) internalRequire(name);
+    // On the host's files (the executable, an embedder with OsFiles), they find the way to a
+    // main script warm (loader.warmMain), and console.log has written once, to /dev/null. A
+    // program whose files are its own has neither /tmp nor /dev/null there.
+    if (native.filesDirect) {
+      const fs = internalRequire('fs'), directory = fs.mkdtempSync('/tmp/silkjs-image-');
+      try {
+        fs.writeFileSync(directory + '/main.js', "require('./dependency.js');\n");
+        fs.writeFileSync(directory + '/dependency.js', 'module.exports = 1;\n');
+        loader.warmMain(directory + '/main.js');
+      } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+      const saved = rawOS.dup(1), sink = rawOS.open('/dev/null', rawOS.O_WRONLY);
+      try {
+        if (saved < 0 || sink < 0) throw new Error('No /dev/null to warm console.log against');
+        rawOS.dup2(sink, 1);
+        globalThis.console.log('silkjs heap image');
+      } finally {
+        if (saved >= 0) { rawOS.dup2(saved, 1); rawOS.close(saved); }
+        if (sink >= 0) rawOS.close(sink);
+      }
     }
     // Read again by hydrate, or (NODE_V8_COVERAGE) read again on every use.
     const hydrated = new Set(['HOME', 'NODE_PATH', 'NODE_CHANNEL_FD', 'NODE_UNIQUE_ID', 'WATCH_REPORT_DEPENDENCIES', 'NODE_V8_COVERAGE']);
@@ -2329,11 +2467,11 @@ globalThis.__silkRuntime = {
     host.performanceTimeOrigin = Date.now() - (native.now() - startTime);
     process.argv = argv.slice(); process.argv0 = argv[0];
     process.execPath = native.osNative('execPath', []); process.pid = rawOS.getpid();
-    native.wasmNative('register', wasmResolver);
+    if (hasWasm) native.wasmNative('register', wasmResolver);
     loader.Module._initPaths();
-    internalRequire('internal/child_process/ipc').installChild(process);
+    if (presentServices.has('Processes')) internalRequire('internal/child_process/ipc').installChild(process);
     internalRequire('internal/watch_mode/dependencies').initialize();
-    if (process.env.NODE_UNIQUE_ID !== undefined) setupClusterWorker();
+    if (process.env.NODE_UNIQUE_ID !== undefined && presentServices.has('Processes')) setupClusterWorker();
     for (const refresh of hydrations) refresh();
     performanceMilestones.bootstrapComplete = native.now() - startTime;
   }

@@ -5,8 +5,8 @@ import silk.num.i64
 import ext.uv_loop as uvl
 import ext.uv_api_loop as api
 import ext.uv_api_abi as abi
-import ext.process_abi { Options, Stdio }
-import ext.uv_fs { UvStat }
+import ext.uv_shapes { Options, Stdio }
+import silkjsruntime.ext.uv_fs { UvStat }
 
 unsafe extern "C" fn calloc(count: usize, size: usize) -> ?*mut u8
 static if Intrinsic.targetOperatingSystem() == "darwin" { const SIGNAL_USR1: i32 = 30 const SIGNAL_USR2: i32 = 31 }

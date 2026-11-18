@@ -1,31 +1,22 @@
 [package]
 name = "silkjs-runtime"
 version = "0.1.0"
-# The embedding API (src/runtime/embed.silk), the loop it turns, and the hook for an embedder's own
-# native functions (src/libs/core/embedder.silk). src/main.silk is the
-# executable, the first embedder; src/embed_smoke.silk is the embedding API's smoke test.
-exports = ["runtime.embed", "runtime.session", "libs.core.embedder", "libs.core.host", "embed_smoke"]
+# The runtime's core (docs/composable-runtime.md): the embedding API (src/runtime/embed.silk), the
+# loop it turns, and the capabilities an embedder chooses (src/libs/core/capabilities.silk). The
+# real Wasm capability is ./wamr, the real Compression ./compress, the real Http2 ./http2, the real Http ./llhttp, the real Database ./sqlite, the real Crypto and Tls ./openssl, the real Inspector ./inspector, the real TypeStripping ./amaro, the real NativeAddons ./napi; the executable, which provides every real one, is ./cli.
+# src/embed_smoke.silk is the embedding API's smoke test, here without WebAssembly.
+exports = ["runtime.embed", "runtime.session", "runtime.worker", "libs.core.capabilities", "libs.core.module_sources", "libs.core.platforms", "libs.core.files", "libs.core.host", "libs.core.common",
+  "libs.core.owners", "ext.diagnostics_fatal", "ext.library_hooks", "ext.fs_ops", "ext.script_metadata", "ext.diagnostics_hub", "ext.inspector_debugger", "ext.inspector_evaluate", "ext.inspector_values", "ext.fs_async", "ext.blocking_pool", "ext.resource_snapshot", "ext.vm_native", "ext.keep_exports", "ext.worker_native", "ext.uv_fs", "ext.uv_errno", "ext.process_abi", "embed_smoke"]
+kind = "library"
 silk-version = "0.1.0-dev.86+c9d19330761b"
 
 [dependencies]
-benchkit = { path = "../benchkit" }
-# The engine, from this repository's modules/engine.
+# The engine, from this repository's modules/engine. The core links no C library: its loop is
+# silk.io.reactor's (docs/composable-runtime.md, the loop plan); libuv's C API (in Silk) is ./napi's, for addons.
 silkjs = { path = "../engine", package = "silkjs-engine" }
-# The package manager, from this repository's modules/pm: `silkjs install` and the other commands.
-pm = { path = "../pm" }
-# SQLite 3 compiled from the amalgamation that silk-lang/lib-sqlite pins, with the features Node builds.
-sqlite = { git = "https://github.com/silk-lang/lib-sqlite", rev = "7fbab9dbfbb696097f2dbecc065e21b7204eb974", package = "db-sqlite" }
-# The C libraries Node builds with, each compiled by Silk from its pinned release (../native).
-# uvwasi only: it is compiled against a uv.h whose functions src/ext/uvwasi_host.silk defines. No libuv.
-uvwasi = { path = "../native/uvwasi", package = "silkjs-uvwasi" }
-openssl = { path = "../native/openssl", package = "silkjs-openssl" }
-nghttp2 = { path = "../native/nghttp2", package = "silkjs-nghttp2" }
-# Zstandard is Silk: the port of 1.5.7 in ../zstd (ZSTD_NOTES.md).
-zstd = { path = "../zstd", package = "silkjs-zstd" }
-brotli = { path = "../native/brotli", package = "silkjs-brotli" }
-
 # The benchmark tasks (bench/README.md) are written with the package of ../benchkit.
-[native.archive.silkjs-simde]
-url = "https://codeload.github.com/simd-everywhere/simde/tar.gz/71fd833d9666141edcd1d3c109a80e228303d8d7"
-sha256 = "72b2c14a487560b7eb203795f2c2fead5c7499662e639944cca2a9bb19f09029"
-strip = 1
+benchkit = { path = "../benchkit" }
+
+# The runtime's own C is in build.silk: builtin_sources.c embeds the built-in JavaScript, which
+# tools/embed.py rewrites when a built-in is added or removed. tools/build.py links the executable
+# with the built-ins' bytecode and a build identity besides.

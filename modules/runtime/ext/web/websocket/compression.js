@@ -1,7 +1,9 @@
 'use strict';
 
 const { Buffer } = require('buffer');
-const constants = require('internal/compression/constants');
+// Loaded when a connection negotiates permessage-deflate.
+const lazy = name => { let loaded; return new Proxy({}, { get(target, key) { return (loaded ??= require(name))[key]; } }); };
+const constants = lazy('internal/compression/constants');
 const { failure, MAX_MESSAGE } = require('internal/web/websocket/framing');
 const tail = Buffer.from([0, 0, 255, 255]);
 const offer = 'permessage-deflate; client_max_window_bits';

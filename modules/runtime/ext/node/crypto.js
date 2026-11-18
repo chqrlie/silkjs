@@ -27,7 +27,7 @@
 const c = require('internal/crypto_core');
 const { Buffer, call, submit, packed, bytes, binary, integer, callback, error, invalid, output, attach, handle, release, name, kHandle } = c;
 const { Transform, Writable } = require('stream');
-const constants = Object.freeze({ __proto__: null, SSL_OP_ALL: 2147485776, SSL_OP_ALLOW_NO_DHE_KEX: 1024, SSL_OP_ALLOW_UNSAFE_LEGACY_RENEGOTIATION: 262144, SSL_OP_CIPHER_SERVER_PREFERENCE: 4194304, SSL_OP_CISCO_ANYCONNECT: 32768, SSL_OP_COOKIE_EXCHANGE: 8192, SSL_OP_CRYPTOPRO_TLSEXT_BUG: 2147483648, SSL_OP_DONT_INSERT_EMPTY_FRAGMENTS: 2048, SSL_OP_LEGACY_SERVER_CONNECT: 4, SSL_OP_NO_COMPRESSION: 131072, SSL_OP_NO_ENCRYPT_THEN_MAC: 524288, SSL_OP_NO_QUERY_MTU: 4096, SSL_OP_NO_RENEGOTIATION: 1073741824, SSL_OP_NO_SESSION_RESUMPTION_ON_RENEGOTIATION: 65536, SSL_OP_NO_SSLv2: 0, SSL_OP_NO_SSLv3: 33554432, SSL_OP_NO_TICKET: 16384, SSL_OP_NO_TLSv1: 67108864, SSL_OP_NO_TLSv1_1: 268435456, SSL_OP_NO_TLSv1_2: 134217728, SSL_OP_NO_TLSv1_3: 536870912, SSL_OP_PRIORITIZE_CHACHA: 2097152, SSL_OP_TLS_ROLLBACK_BUG: 8388608, RSA_PKCS1_PADDING: 1, RSA_NO_PADDING: 3, RSA_PKCS1_OAEP_PADDING: 4, RSA_X931_PADDING: 5, RSA_PKCS1_PSS_PADDING: 6, RSA_PSS_SALTLEN_DIGEST: -1, RSA_PSS_SALTLEN_MAX_SIGN: -2, RSA_PSS_SALTLEN_AUTO: -2, POINT_CONVERSION_COMPRESSED: 2, POINT_CONVERSION_UNCOMPRESSED: 4, POINT_CONVERSION_HYBRID: 6, DH_CHECK_P_NOT_PRIME: 1, DH_CHECK_P_NOT_SAFE_PRIME: 2, DH_UNABLE_TO_CHECK_GENERATOR: 4, DH_NOT_SUITABLE_GENERATOR: 8, ENGINE_METHOD_RSA: 1, ENGINE_METHOD_DSA: 2, ENGINE_METHOD_DH: 4, ENGINE_METHOD_RAND: 8, ENGINE_METHOD_CIPHERS: 64, ENGINE_METHOD_DIGESTS: 128, ENGINE_METHOD_PKEY_METHS: 512, ENGINE_METHOD_PKEY_ASN1_METHS: 1024, ENGINE_METHOD_EC: 2048, ENGINE_METHOD_ALL: 65535, ENGINE_METHOD_NONE: 0, defaultCoreCipherList: require('internal/tls/options').DEFAULT_CIPHER_LIST, defaultCipherList: require('internal/tls/options').getOptionValue('--tls-cipher-list') });
+const constants = Object.freeze({ __proto__: null, SSL_OP_ALL: 2147485776, SSL_OP_ALLOW_NO_DHE_KEX: 1024, SSL_OP_ALLOW_UNSAFE_LEGACY_RENEGOTIATION: 262144, SSL_OP_CIPHER_SERVER_PREFERENCE: 4194304, SSL_OP_CISCO_ANYCONNECT: 32768, SSL_OP_COOKIE_EXCHANGE: 8192, SSL_OP_CRYPTOPRO_TLSEXT_BUG: 2147483648, SSL_OP_DONT_INSERT_EMPTY_FRAGMENTS: 2048, SSL_OP_LEGACY_SERVER_CONNECT: 4, SSL_OP_NO_COMPRESSION: 131072, SSL_OP_NO_ENCRYPT_THEN_MAC: 524288, SSL_OP_NO_QUERY_MTU: 4096, SSL_OP_NO_RENEGOTIATION: 1073741824, SSL_OP_NO_SESSION_RESUMPTION_ON_RENEGOTIATION: 65536, SSL_OP_NO_SSLv2: 0, SSL_OP_NO_SSLv3: 33554432, SSL_OP_NO_TICKET: 16384, SSL_OP_NO_TLSv1: 67108864, SSL_OP_NO_TLSv1_1: 268435456, SSL_OP_NO_TLSv1_2: 134217728, SSL_OP_NO_TLSv1_3: 536870912, SSL_OP_PRIORITIZE_CHACHA: 2097152, SSL_OP_TLS_ROLLBACK_BUG: 8388608, RSA_PKCS1_PADDING: 1, RSA_NO_PADDING: 3, RSA_PKCS1_OAEP_PADDING: 4, RSA_X931_PADDING: 5, RSA_PKCS1_PSS_PADDING: 6, RSA_PSS_SALTLEN_DIGEST: -1, RSA_PSS_SALTLEN_MAX_SIGN: -2, RSA_PSS_SALTLEN_AUTO: -2, POINT_CONVERSION_COMPRESSED: 2, POINT_CONVERSION_UNCOMPRESSED: 4, POINT_CONVERSION_HYBRID: 6, DH_CHECK_P_NOT_PRIME: 1, DH_CHECK_P_NOT_SAFE_PRIME: 2, DH_UNABLE_TO_CHECK_GENERATOR: 4, DH_NOT_SUITABLE_GENERATOR: 8, ENGINE_METHOD_RSA: 1, ENGINE_METHOD_DSA: 2, ENGINE_METHOD_DH: 4, ENGINE_METHOD_RAND: 8, ENGINE_METHOD_CIPHERS: 64, ENGINE_METHOD_DIGESTS: 128, ENGINE_METHOD_PKEY_METHS: 512, ENGINE_METHOD_PKEY_ASN1_METHS: 1024, ENGINE_METHOD_EC: 2048, ENGINE_METHOD_ALL: 65535, ENGINE_METHOD_NONE: 0, ...(require('internal/host').hasService('Tls') ? { defaultCoreCipherList: require('internal/tls/options').DEFAULT_CIPHER_LIST, defaultCipherList: require('internal/tls/options').getOptionValue('--tls-cipher-list') } : {}) });
 const { codes, validate, isAnyArrayBuffer, normalize } = c;
 // lib/internal/crypto/random.js
 const kMaxPossibleLength = Math.min(require('buffer').kMaxLength, 2 ** 31 - 1);
@@ -199,12 +199,15 @@ function getCipherInfo(nameOrNid, options) {
   }
   const info = cipherDetails(nameOrNid, keyLength, ivLength);
   if (info === undefined) return undefined;
-  const result = { name: info.name.toLowerCase(), keyLength: info.keyLength };
+  // Node's GetCipherInfo sets mode, name, nid, blockSize, ivLength and keyLength in that order.
+  const result = {};
   const modeName = cipherModes[info.mode];
   if (modeName !== undefined) result.mode = modeName;
+  result.name = info.name.toLowerCase();
   if (info.nid !== 0) result.nid = info.nid;
   if (info.mode !== 0) result.blockSize = info.blockSize;
   if (info.ivLength !== 0) result.ivLength = info.ivLength;
+  result.keyLength = info.keyLength;
   return result;
 }
 const cipherModes = { 0: 'stream', 1: 'ecb', 2: 'cbc', 3: 'cfb', 4: 'ofb', 5: 'ctr', 6: 'gcm', 7: 'ccm', 65537: 'xts', 65538: 'wrap', 65539: 'ocb', 65540: 'siv', 65541: 'gcm-siv' };
@@ -258,7 +261,7 @@ function isXof(algorithm) {
 }
 function hashState(algorithm, xofLen, existing) {
   const size = digestSize(algorithm), xof = isXof(algorithm);
-  if (xofLen !== undefined && !xof && xofLen !== size) throw error('ERR_OSSL_EVP_NOT_XOF_OR_INVALID_LENGTH', 'Invalid XOF digest length');
+  if (xofLen !== undefined && !xof && xofLen !== size) throw error('ERR_OSSL_EVP_NOT_XOF_OR_INVALID_LENGTH', 'error:030000B2:digital envelope routines::not XOF or invalid length');
   return { algorithm, length: xof ? xofLen ?? (/128$/.test(algorithm) ? 16 : 32) : -1, [kFinalized]: false, existing };
 }
 // The native half of Node's Hash (crypto::Hash): update() reports an OpenSSL
@@ -371,7 +374,7 @@ function Hmac(hmac, key, options) {
   if (encoding !== undefined && options !== null && typeof options === 'object') validate.string(encoding, 'options.encoding');
   key = prepareSecretKey(key, encoding);
   if (digestSize(hmac) === undefined) throw codes.ERR_CRYPTO_INVALID_DIGEST(hmac);
-  let id; try { id = call('hmacCreate', [hmac, packed(key)]); } catch (e) { if (e.library !== undefined) throw e; throw codes.ERR_CRYPTO_OPERATION_FAILED('Failed to initialize HMAC'); }
+  let id; try { id = call('hmacCreate', [hmac, packed(key)]); } catch (e) { if (e.library !== undefined) throw e; throw new Error('error:00000000:lib(0)::reason(0)'); } // HmacInit throws ERR_get_error() even when it is 0.
   attach(this, id); this[kState] = { [kFinalized]: false };
   LazyTransform.call(this, options);
 }
@@ -1134,12 +1137,14 @@ function keygenJob(type, options) {
   const encoding = keygenEncoding(type, options);
   return { args: keygenArgs(type, options), encoding };
 }
-function generateKeyPairSync(type, options) { const job = keygenJob(type, options); return keypair(call('keyGenerate', job.args), job.encoding); }
+// KeyPairGenJob reports an OpenSSL failure as a plain Error with its message only.
+function keygenError(e) { return e && e.library !== undefined ? new Error(e.message) : e; }
+function generateKeyPairSync(type, options) { const job = keygenJob(type, options); let id; try { id = call('keyGenerate', job.args); } catch (e) { throw keygenError(e); } return keypair(id, job.encoding); }
 function generateKeyPair(type, options, cb) {
   if (typeof options === 'function') { cb = options; options = undefined; }
   validate.function(cb, 'callback');
   const job = keygenJob(type, options);
-  submit('keyGenerate', job.args, (e, pair) => e ? cb(e) : cb(null, pair.publicKey, pair.privateKey), id => keypair(id, job.encoding));
+  submit('keyGenerate', job.args, (e, pair) => e ? cb(keygenError(e)) : cb(null, pair.publicKey, pair.privateKey), id => keypair(id, job.encoding));
 }
 Object.defineProperty(generateKeyPair, require('internal/util').customPromisifyArgs, { value: ['publicKey', 'privateKey'], enumerable: false });
 function secretKeygenLength(type, options) {

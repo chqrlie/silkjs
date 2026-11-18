@@ -123,7 +123,8 @@ function createContext(sandbox = {}, value) {
   // referrer script; without one, such an import() reports the missing callback.
   host.vmSetImportModuleDynamically(handle, importCallback(config.importModuleDynamically, result,
     require('path').join(host.tryGetCwd(), 'vm-context')), true);
-  require('internal/inspector_contexts').register(result, handle, config);
+  // Inspector sessions list the context, when there is an inspector.
+  if (process.features.inspector) require('internal/inspector_contexts').register(result, handle, config);
   return result;
 }
 // A Script takes a filename string in place of options; compileFunction does not.

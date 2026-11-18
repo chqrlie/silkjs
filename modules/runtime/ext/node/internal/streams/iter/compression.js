@@ -4,7 +4,11 @@
 // Adapt it to Silk's bounded native codec operations, retaining input in the
 // native provider between output-buffer turns rather than copying its suffix.
 const { Buffer } = require('buffer');
-const { call, asyncCall, decode, codecError } = require('internal/compression/binding');
+// The binding loads with the first codec call: a runtime without compression loads this module too.
+let binding;
+const codec = () => binding ??= require('internal/compression/binding');
+const call = (...args) => codec().call(...args), asyncCall = (...args) => codec().asyncCall(...args);
+const decode = (...args) => codec().decode(...args), codecError = (...args) => codec().codecError(...args);
 
 function backing(view) {
   if (view === undefined) return undefined;
