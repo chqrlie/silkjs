@@ -31,7 +31,7 @@ import js_engine_host { EngineServices }
 import js_debug_positions { encodePending }
 import js_core_types { SourceText, ObjectData, ObjectPayload, PropertySlot, ShapeData,
   ByteStorage, FunctionBytecode, FunctionKind, VariableKind, ClosureKind, ModuleDef,
-  ExportBinding, NativeErrorKind, FunctionDebugInfo }
+  ExportBinding, NativeErrorKind, FunctionDebugInfo, KNOWN_CALL }
 import js_coercion_host { CoercionHooks }
 import js_exceptions { JsException }
 import js_atoms { AtomTable }
@@ -555,7 +555,10 @@ unsafe effect fn writeFunction<'a, 'm, S: EngineServices>(state: &mut Writer, en
     u32.shiftLeft(boolean(function.superCallAllowed), 7) | u32.shiftLeft(boolean(function.superAllowed), 8) |
     u32.shiftLeft(boolean(function.argumentsAllowed), 9) | u32.shiftLeft(boolean(debug), 10) |
     u32.shiftLeft(boolean(function.isDirectOrIndirectEval), 11) | u32.shiftLeft(boolean(function.scopeSlots != 0), 12) |
-    u32.shiftLeft(boolean(keepStub), 13)
+    u32.shiftLeft(boolean(keepStub), 13) |
+    // A known local function (js_compiler_known) stays one in a reader of the
+    // code-cache wire: its creations and calls were compiled for that.
+    u32.shiftLeft(boolean(lazy && function.known.state == KNOWN_CALL), 14)
   run state.word(flags, 2) run state.byte(function.mode) run state.atom(function.name)
   run state.leb(u16.toU32(function.argumentCount))
   run state.leb(u16.toU32(function.variableCount))
