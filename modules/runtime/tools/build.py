@@ -162,7 +162,7 @@ def startup_order(arguments):
     return ['-Wl,--symbol-ordering-file=' + str(order), '-Wl,--no-warn-symbol-ordering']
 
 
-HEAP_IMAGE_MAGIC = int.from_bytes(b'SILKIMG1', 'little')
+HEAP_IMAGE_MAGIC = int.from_bytes(b'SILKIMG2', 'little')
 # Starts whose writes lay out the heap image (lay_out_heap_image).
 HEAP_IMAGE_STARTS = ROOT / 'tools/heap-image-starts'
 
@@ -220,12 +220,41 @@ def write_heap_image(executable, image, layout=None):
         subprocess.run(command, env={}, cwd='/', check=True)
 
 
+# Runs of at least this many zero pages are left out of the file and mapped as fresh
+# memory (heap_image.silk, holes): the bootstrap's region is never reused, so freed
+# blocks leave long runs of zeros behind.
+HEAP_IMAGE_HOLE_PAGES = 16
+MAX_HOLES = 1024
+
+
+def heap_image_holes(data):
+    """The (first page, count) runs of zero pages to leave out of data, after its first page."""
+    zero = bytes(4096)
+    holes = []
+    for page in range(1, len(data) // 4096):
+        if data[page * 4096:(page + 1) * 4096] != zero:
+            continue
+        if holes and holes[-1][0] + holes[-1][1] == page:
+            holes[-1][1] += 1
+        else:
+            holes.append([page, 1])
+    holes = [hole for hole in holes if hole[1] >= HEAP_IMAGE_HOLE_PAGES]
+    return sorted(sorted(holes, key=lambda hole: -hole[1])[:MAX_HOLES])
+
+
 def append_heap_image(executable, data):
+    holes = heap_image_holes(data)
+    kept, page = [], 0
+    for first, count in holes:
+        kept.append(data[page * 4096:first * 4096])
+        page = first + count
+    kept.append(data[page * 4096:])
     with open(executable, 'ab') as handle:
         handle.write(bytes(-handle.tell() % 4096))
         offset = handle.tell()
-        handle.write(data)
-        handle.write(struct.pack('<QQQQ', offset, len(data), 0, HEAP_IMAGE_MAGIC))
+        handle.write(b''.join(kept))
+        handle.write(b''.join(struct.pack('<Q', (first << RANGE_PAGE_BITS) | count) for first, count in holes))
+        handle.write(struct.pack('<QQQQQ', offset, len(data), 0, len(holes), HEAP_IMAGE_MAGIC))
 
 
 # heap_image.silk: a range word is its first page above RANGE_PAGE_BITS and its page
@@ -271,12 +300,15 @@ def written_page_ranges(executable):
 def append_heap_image_ranges(executable, ranges):
     """Puts ranges between the executable's image and its trailer."""
     with open(executable, 'r+b') as handle:
-        handle.seek(-32, 2)
-        offset, length, _, magic = struct.unpack('<QQQQ', handle.read(32))
-        handle.seek(-32, 2)
+        handle.seek(-40, 2)
+        offset, length, _, holes, magic = struct.unpack('<QQQQQ', handle.read(40))
+        handle.seek(-40 - 8 * holes, 2)
+        hole_words = handle.read(8 * holes)
+        handle.seek(-40 - 8 * holes, 2)
         handle.truncate()
         handle.write(b''.join(struct.pack('<Q', (first << RANGE_PAGE_BITS) | count) for first, count in ranges))
-        handle.write(struct.pack('<QQQQ', offset, length, len(ranges), magic))
+        handle.write(hole_words)
+        handle.write(struct.pack('<QQQQQ', offset, length, len(ranges), holes, magic))
 
 
 def lay_out_heap_image(output, work):

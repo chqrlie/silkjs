@@ -38,12 +38,19 @@ pub const ROOTS_CAPACITY: usize = PAGE - ROOTS
 
 struct Header { magic: u64, end: usize }
 impl Copy for Header {}
-/// The last 32 bytes of an executable that carries an image: where the image is,
-/// and how many range words follow it. A range word is a first page above
-/// RANGE_PAGE_BITS and a page count below.
-struct Trailer { offset: u64, length: u64, ranges: u64, magic: u64 }
+/// The last 40 bytes of an executable that carries an image: where the image is, its
+/// length once mapped, and how many range and hole words come before the trailer
+/// (ranges first). The file leaves out the hole pages, runs of zero pages that are
+/// mapped as fresh memory instead, so it holds `length` less the holes' pages. A range
+/// or hole word is a first page above RANGE_PAGE_BITS and a page count below; holes
+/// are in increasing order and never cover the first page.
+struct Trailer { offset: u64, length: u64, ranges: u64, holes: u64, magic: u64 }
+const TRAILER: usize = 40
+// "SILKIMG2", the trailer's last word.
+const TRAILER_MAGIC: u64 = 0x32474d494b4c4953
 const RANGE_PAGE_BITS: u64 = 24
 const MAX_RANGES: usize = 1024
+const MAX_HOLES: usize = 1024
 impl Copy for Trailer {}
 
 unsafe fn header(base: *mut u8) -> *mut Header { return unsafe Intrinsic.pointerReinterpret<*mut u8, *mut Header>(base) }
@@ -89,6 +96,8 @@ static if Intrinsic.targetOperatingSystem() == "linux" {
   // MAP_PRIVATE | MAP_FIXED_NOREPLACE, with MAP_ANONYMOUS | MAP_NORESERVE for a new region.
   const MAP_IMAGE: i32 = 0x100002
   const MAP_NEW: i32 = 0x104022
+  // MAP_PRIVATE | MAP_FIXED: a part of the image over the region reserved for it.
+  const MAP_PART: i32 = 0x12
   // O_RDONLY | O_CLOEXEC, and O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC.
   const OPEN_READ: i32 = 0x80000
   const OPEN_WRITE: i32 = 0x80241
@@ -214,27 +223,79 @@ static if Intrinsic.targetOperatingSystem() == "linux" {
   }
   unsafe fn loadFrom(fd: i32) -> ?*mut u8 {
     let size = unsafe lseek(fd, 0, 2)
-    if size < 32 { return Pointer.null<u8>() }
-    let mut trailer = Trailer { offset: 0, length: 0, ranges: 0, magic: 0 }
+    if size < usize.toI64(TRAILER) { return Pointer.null<u8>() }
+    let mut trailer = Trailer { offset: 0, length: 0, ranges: 0, holes: 0, magic: 0 }
     let pointer = unsafe Intrinsic.pointerReinterpret<*mut Trailer, *mut u8>(Pointer.fromMutRef<Trailer>(&mut trailer))
-    if unsafe pread(fd, pointer, 32, size - 32) != 32 { return Pointer.null<u8>() }
-    let end = i64.toU64(size) - 32
-    if trailer.magic != MAGIC || trailer.length < usize.toU64(PAGE) || trailer.length > usize.toU64(RESERVED)
-      || trailer.offset > end || trailer.length > end - trailer.offset
-      || trailer.offset % usize.toU64(PAGE) != 0 || trailer.length % usize.toU64(PAGE) != 0
-      || trailer.ranges > usize.toU64(MAX_RANGES) || trailer.ranges * 8 > end - trailer.offset - trailer.length { return Pointer.null<u8>() }
-    let mapped = unsafe mapImage(fd, u64.toI64(trailer.offset), u64.toUsize(trailer.length))
+    if unsafe pread(fd, pointer, TRAILER, size - usize.toI64(TRAILER)) != usize.toIsize(TRAILER) { return Pointer.null<u8>() }
+    let end = i64.toU64(size) - usize.toU64(TRAILER)
+    if trailer.magic != TRAILER_MAGIC || trailer.length < usize.toU64(PAGE) || trailer.length > usize.toU64(RESERVED)
+      || trailer.offset > end || trailer.offset % usize.toU64(PAGE) != 0 || trailer.length % usize.toU64(PAGE) != 0
+      || trailer.ranges > usize.toU64(MAX_RANGES) || trailer.holes > usize.toU64(MAX_HOLES)
+      || (trailer.ranges + trailer.holes) * 8 > end - trailer.offset { return Pointer.null<u8>() }
+    let mut holes: [u64; MAX_HOLES] = [0; MAX_HOLES]
+    let count = u64.toUsize(trailer.holes)
+    let holesAt = unsafe Intrinsic.pointerReinterpret<*mut u64, *mut u8>(Pointer.fromMutRef<u64>(&mut holes[0]))
+    if count != 0 && unsafe pread(fd, holesAt, count * 8, u64.toI64(end) - usize.toI64(count * 8)) != usize.toIsize(count * 8) { return Pointer.null<u8>() }
+    // The holes must be in order, inside the image and after its first page.
+    let pages = u64.toUsize(trailer.length) / PAGE
+    let mut next: usize = 1
+    let mut absent: usize = 0
+    let mut index: usize = 0
+    while index < count {
+      let first = holeFirst(holes[index])
+      let length = holeLength(holes[index])
+      if first < next || length == 0 || length > pages - first { return Pointer.null<u8>() }
+      next = first + length
+      absent = absent + length
+      index = index + 1
+    }
+    let stored = usize.toU64((pages - absent) * PAGE)
+    if stored + (trailer.ranges + trailer.holes) * 8 > end - trailer.offset { return Pointer.null<u8>() }
+    let mapped = if count == 0 { unsafe mapImage(fd, u64.toI64(trailer.offset), u64.toUsize(trailer.length)) } else { unsafe mapParts(fd, trailer, &holes, count) }
     if trailer.ranges != 0 && !Pointer.isNull<u8>(mapped) {
-      unsafe populate(fd, unsafe Intrinsic.pointerRequalify<?*mut u8, *mut u8>(mapped), trailer)
+      unsafe populate(fd, unsafe Intrinsic.pointerRequalify<?*mut u8, *mut u8>(mapped), trailer, stored)
     }
     return mapped
   }
+  fn holeFirst(word: u64) -> usize { return u64.toUsize(u64.shiftRight(word, RANGE_PAGE_BITS)) }
+  fn holeLength(word: u64) -> usize { return u64.toUsize(u64.bitAnd(word, u64.shiftLeft(1, RANGE_PAGE_BITS) - 1)) }
+  // Maps an image whose file leaves out its holes: fresh memory for the whole image,
+  // then each run of stored pages over it from the file. The holes stay fresh zero pages.
+  unsafe fn mapParts(fd: i32, trailer: Trailer, holes: &[u64; MAX_HOLES], count: usize) -> ?*mut u8 {
+    let length = u64.toUsize(trailer.length)
+    let reserved = unsafe mapAt(baseAddress(), length, READ_WRITE, MAP_NEW, -1, 0)
+    if Pointer.address<u8>(reserved) != BASE { return Pointer.null<u8>() }
+    let base = unsafe Intrinsic.pointerRequalify<?*mut u8, *mut u8>(reserved)
+    let pages = length / PAGE
+    let mut page: usize = 0
+    let mut stored: usize = 0
+    let mut index: usize = 0
+    while index <= count {
+      let until = if index < count { holeFirst(holes[index]) } else { pages }
+      if until > page {
+        let part = unsafe mapAt(unsafe at(base, page * PAGE), (until - page) * PAGE, READ_WRITE, MAP_PART, fd, u64.toI64(trailer.offset) + usize.toI64(stored * PAGE))
+        if Pointer.address<u8>(part) != BASE + page * PAGE {
+          let _unmapped = unsafe munmap(base, length)
+          return Pointer.null<u8>()
+        }
+        stored = stored + (until - page)
+      }
+      if index < count { page = until + holeLength(holes[index]) }
+      index = index + 1
+    }
+    let state = unsafe Pointer.read<Header>(unsafe header(base))
+    if state.magic != MAGIC || state.end < BASE + PAGE || state.end > BASE + length {
+      let _unmapped = unsafe munmap(base, length)
+      return Pointer.null<u8>()
+    }
+    return base
+  }
   // Copies in the pages the trailer's ranges name. Ranges past the image are skipped.
-  unsafe fn populate(fd: i32, base: *mut u8, trailer: Trailer) -> () {
+  unsafe fn populate(fd: i32, base: *mut u8, trailer: Trailer, stored: u64) -> () {
     let mut words: [u64; MAX_RANGES] = [0; MAX_RANGES]
     let count = u64.toUsize(trailer.ranges)
     let pointer = unsafe Intrinsic.pointerReinterpret<*mut u64, *mut u8>(Pointer.fromMutRef<u64>(&mut words[0]))
-    if unsafe pread(fd, pointer, count * 8, u64.toI64(trailer.offset + trailer.length)) != usize.toIsize(count * 8) { return () }
+    if unsafe pread(fd, pointer, count * 8, u64.toI64(trailer.offset + stored)) != usize.toIsize(count * 8) { return () }
     let pages = u64.toUsize(trailer.length) / PAGE
     let mut index: usize = 0
     while index < count {
