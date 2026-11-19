@@ -41,7 +41,10 @@ PROGRAMS = [
 
 def defined(executable):
     listing = subprocess.run(['nm', '--defined-only', str(executable)], capture_output=True, text=True, check=True).stdout
-    return {line.split()[-1] for line in listing.splitlines() if line.split()}
+    names = {line.split()[-1] for line in listing.splitlines() if line.split()}
+    # Since Silk 0.1.0-dev.88 a Linux executable's .symtab names each Silk function by its
+    # declaration (`package:src/file.silk::name`), C exports included: also keep the bare name.
+    return names | {name.rsplit('::', 1)[-1] for name in names if '::' in name}
 
 
 def expected(wasm, files):
