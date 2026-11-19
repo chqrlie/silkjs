@@ -1,4 +1,9 @@
 #define _POSIX_C_SOURCE 200809L
+/* _POSIX_C_SOURCE hides the BSD extensions of Apple's headers, arc4random_buf among them;
+ * _DARWIN_C_SOURCE brings them back alongside POSIX. */
+#if defined(__APPLE__)
+#define _DARWIN_C_SOURCE
+#endif
 #include "inspector_transport.h"
 #include <arpa/inet.h>
 #include <errno.h>
@@ -17,9 +22,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <stdint.h>
-#if defined(__APPLE__)
-#include <stdlib.h>
-#else
+#if !defined(__APPLE__)
 #include <sys/random.h>
 #endif
 /* SHA-1 and base64 for the WebSocket handshake (RFC 6455 4.2.2), and the system's random bytes
