@@ -32,6 +32,7 @@ import js_string_types { StringLengthError, StringOwner }
 import js_bigint { BigInt, BigIntError }
 import js_opcode_data as op
 import js_gc as gc
+import js_runtime as runtimes
 import js_debug_positions { PendingLines, SourceLocation }
 import js_core_types { blankPolyField, LastMatch, LineTables, DeferredSource }
 import js_core_types { KnownCall }
@@ -434,6 +435,73 @@ test effect fn manyOldCellsReleasedByYoungGarbageOverflowTheZeroStackAndStillDie
   run unsafe gc.collect(&mut hooks, runtime, false) |> Effect.provideMut<Allocator>(&mut allocator)
   run Testing.expect(hooks.freedCount == MANY_OLD + 2, "nothing is left for a full collection")
   drop olds
+  run unsafe gc.destroyRuntime(&mut hooks, runtime) |> Effect.provideMut<Allocator>(&mut allocator)
+}
+/// Enough objects that the arenas most of them leave pass releaseIdle's floor.
+const RELEASED_CELLS: usize = 60000
+/// The runtime lets go of the pool arenas its cells have left (js_runtime.releaseIdle), so
+/// the pool can give them back to the system, and cells published afterwards claim arenas
+/// again: collections on both sides of the release see every cell.
+test effect fn idleArenasLeaveTheRuntimeAndLaterCellsClaimThemAgain() -> ()
+  ! OutOfMemoryError | AssertionError<'static> {
+  let mut allocator = run RuntimeAllocator<SystemAllocator>.make(Allocator.systemAllocatorProvider())
+  allocator.enablePooling()
+  let observer = run allocator.observe()
+  let runtime = run runtimeFixture() |> Effect.provideMut<Allocator>(&mut allocator)
+  let mut hooks = Hooks.make()
+  let mut cells = List<*mut HeapHeader>.make()
+  let mut index: usize = 0
+  while index < RELEASED_CELLS {
+    let cell = run objectFixture(runtime, 1) |> Effect.provideMut<Allocator>(&mut allocator)
+    run cells.append(cell) |> Effect.provideMut<Allocator>(&mut allocator)
+    index = index + 1
+  }
+  run unsafe gc.collect(&mut hooks, runtime, false) |> Effect.provideMut<Allocator>(&mut allocator)
+  // All but one cell in 1024 die: nearly every arena is left without a cell.
+  let mut kept: usize = 0
+  index = 0
+  while index < RELEASED_CELLS {
+    if index % 1024 == 0 { kept = kept + 1 } else { unsafe gc.releaseHeader(&mut hooks, runtime, cells.get(index)) }
+    index = index + 1
+  }
+  run unsafe gc.collect(&mut hooks, runtime, false) |> Effect.provideMut<Allocator>(&mut allocator)
+  run Testing.expect(hooks.freedCount == RELEASED_CELLS - kept, "the released cells died")
+  let used = allocator.stats().usedBytes
+  let live = allocator.stats().allocationCount
+  let idle = observer.idleBytes()
+  let released = unsafe runtimes.releaseIdle(&observer, runtime, 0)
+  static if Intrinsic.targetOperatingSystem() == "linux" || Intrinsic.targetOperatingSystem() == "darwin" {
+    run Testing.expect(released >= 4194304, "the arenas the cells left go back to the system")
+  } else {
+    run Testing.expect(released == 0, "nothing is released where the system has no call for it")
+  }
+  static if Intrinsic.targetOperatingSystem() == "darwin" {
+    run Testing.expect(observer.idleBytes() < idle, "a retired arena's blocks are no longer the pool's idle memory")
+  }
+  run Testing.expect(allocator.stats().usedBytes == used && allocator.stats().allocationCount == live,
+    "giving idle memory back changes nothing that is in use")
+  // New cells land in arenas the runtime claims again, the retired ones among them.
+  let mut again = List<*mut HeapHeader>.make()
+  index = 0
+  while index < RELEASED_CELLS {
+    let cell = run objectFixture(runtime, 1) |> Effect.provideMut<Allocator>(&mut allocator)
+    run again.append(cell) |> Effect.provideMut<Allocator>(&mut allocator)
+    index = index + 1
+  }
+  run unsafe gc.collect(&mut hooks, runtime, false) |> Effect.provideMut<Allocator>(&mut allocator)
+  run Testing.expect(hooks.freedCount == RELEASED_CELLS - kept, "a collection after the release frees no live cell")
+  index = 0
+  while index < RELEASED_CELLS {
+    unsafe gc.releaseHeader(&mut hooks, runtime, again.get(index))
+    if index % 1024 == 0 { unsafe gc.releaseHeader(&mut hooks, runtime, cells.get(index)) }
+    index = index + 1
+  }
+  run unsafe gc.collect(&mut hooks, runtime, false) |> Effect.provideMut<Allocator>(&mut allocator)
+  run Testing.expect(hooks.freedCount == 2 * RELEASED_CELLS, "every cell dies, those in the arenas that came back too")
+  // A second release after the heap emptied, then the runtime ends: nothing is left listed.
+  let _again = unsafe runtimes.releaseIdle(&observer, runtime, 0)
+  drop cells
+  drop again
   run unsafe gc.destroyRuntime(&mut hooks, runtime) |> Effect.provideMut<Allocator>(&mut allocator)
 }
 unsafe fn young(node: *mut HeapHeader) -> u8 {

@@ -1683,6 +1683,15 @@ unsafe fn tenured(runtime: *mut HeapHeader) -> bool {
   let anchor = ()
   return (unsafe HeapCell.payload<RuntimeState, ()>(&anchor, runtime)).gcTenured
 }
+/// Lets go of the pool arenas none of the runtime's cells is left in, so the pool
+/// may give them back to the system (js_runtime.releaseIdle). Does nothing during
+/// a collection, whose passes walk those lists.
+pub unsafe fn unclaimEmptyArenas(runtime: *mut HeapHeader) -> () {
+  if unsafe phase(runtime) != GcPhase.None { return () }
+  let mut anchor = ()
+  let state = unsafe HeapCell.payloadMut<RuntimeState, ()>(&mut anchor, runtime)
+  unsafe memory.unclaimEmptyArenas(Pointer.fromMutRef<?*mut u8>(&mut state.gcArenas), Pointer.fromMutRef<?*mut u8>(&mut state.gcYoungArenas))
+}
 /// Makes every member old without collecting (js_runtime.tenure).
 pub unsafe fn tenureMembers(runtime: *mut HeapHeader) -> () {
   require(unsafe phase(runtime) == GcPhase.None)

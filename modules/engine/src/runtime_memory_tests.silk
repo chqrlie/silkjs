@@ -686,7 +686,8 @@ test effect fn idleArenasAreReleasedAndTheirBlocksComeBackUsable() -> ()
   let live = allocator.stats().usedBytes
   drop dropped
   let released = stats.releaseIdle(0)
-  static if Intrinsic.targetOperatingSystem() == "linux" {
+  static if Intrinsic.targetOperatingSystem() == "linux" || Intrinsic.targetOperatingSystem() == "darwin" {
+    // Linux gives back an idle arena's pages after its header's; Darwin retires it whole.
     run Testing.expect(released >= 4194304, "arenas left wholly idle give their pages back")
     run Testing.expect(stats.releaseIdle(0) == 0, "a released arena is not released twice")
   } else {
