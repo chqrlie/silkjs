@@ -575,6 +575,16 @@ fn lesser(left: usize, right: usize) -> usize {
   if left < right { return left }
   return right
 }
+/// Gives the pool's idle memory back to the system, as AllocationObserver.releaseIdle
+/// does, and returns the bytes released: what a host calls when its app goes idle
+/// after a burst. On Darwin the pool can only give back an arena that no collector
+/// lists, so the arenas the runtime's cells have left are let go of first; elsewhere
+/// this is the allocator's call alone. allocator is the runtime's. Owner thread,
+/// outside a collection.
+pub unsafe fn releaseIdle(allocator: &AllocationObserver, runtime: *mut HeapHeader, reserve: usize) -> usize {
+  static if Intrinsic.targetOperatingSystem() == "darwin" { unsafe gc.unclaimEmptyArenas(runtime) }
+  return allocator.releaseIdle(reserve)
+}
 /// Explicit safepoint, called before allocation. Size arithmetic wraps like size_t.
 /// Usage is sampled again AFTER collection because hooks can allocate/free storage.
 /// Weak callbacks use the caller's allocator capability; the observer only samples usage.
@@ -689,7 +699,7 @@ unsafe effect fn collectOverThreshold<H: HeapHooks>(allocator: &AllocationObserv
   let idle = allocator.idleBytes()
   let settled = lesser(idle, state.gcIdleBytes)
   state.gcIdleBytes = idle
-  if settled >= IDLE_RELEASE_BYTES { let _released = allocator.releaseIdle(usize.saturatingAdd(idle - settled, used / 4)) }
+  if settled >= IDLE_RELEASE_BYTES { let _released = unsafe releaseIdle(allocator, runtime, usize.saturatingAdd(idle - settled, used / 4)) }
   let young = if tenured { tenuredThreshold(used, state.gcYoungBudget) } else { youngThreshold(used) }
   state.mallocGcThreshold = lesser(lesser(lesser(state.gcFullThreshold, young), usize.saturatingAdd(used, state.gcYoungLimit)), heapCap(state.gcHeapLimit, used))
   return true

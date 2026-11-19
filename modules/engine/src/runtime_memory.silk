@@ -20,6 +20,7 @@ import silk.mem.slot { Slot }
 import silk.concurrency.thread { Transferable, Concurrent }
 import silk.num.usize
 import silk.num.i64
+import silk.num.i32
 import silk.num.u64
 import silk.collections.list { List }
 import silk.core.option { Option }
@@ -60,13 +61,20 @@ const ARENA_BYTES: usize = 16384
 // so it costs address space but no resident memory.
 const GROUP_ARENAS: usize = 128
 const HUGE_PAGE_BYTES: usize = 2097152
-static if Intrinsic.targetOperatingSystem() == "linux" {
+static if Intrinsic.targetOperatingSystem() == "linux" || Intrinsic.targetOperatingSystem() == "darwin" {
   unsafe extern "C" fn nativeMadvise(address: *mut u8, length: usize, advice: i32) -> i32 as "madvise"
+}
+static if Intrinsic.targetOperatingSystem() == "darwin" {
+  unsafe extern "C" fn nativePageSize() -> i32 as "getpagesize"
 }
 /// MADV_HUGEPAGE.
 const ADVICE_HUGE_PAGES: i32 = 14
 /// MADV_DONTNEED.
 const ADVICE_DONT_NEED: i32 = 4
+/// Darwin's MADV_FREE_REUSABLE: the pages leave the process's footprint at once and
+/// their contents are the kernel's to drop. MADV_FREE_REUSE takes them back.
+const ADVICE_FREE_REUSABLE: i32 = 7
+const ADVICE_FREE_REUSE: i32 = 8
 // releaseIdle leaves a heap with less idle memory than this alone.
 const RELEASE_MIN_BYTES: usize = 4194304
 // The page an arena's header is on stays; the rest of an idle arena goes back.
@@ -122,7 +130,10 @@ struct Pool {
   // linked through AllocationHeader.next. They are uncharged and off the ledger's
   // list. Only the allocating thread touches these.
   largeHeads: [?*mut AllocationHeader; 20],
-  largeCounts: [usize; 20]
+  largeCounts: [usize; 20],
+  // Arenas releaseIdle retired on Darwin (see retireIdleArenas): how many bits are
+  // set in the groups' ArenaHeader.retired. takeArena hands these out first.
+  retiredCount: usize
 }
 
 // The first record of every arena. Every block in the arena belongs to ledger and
@@ -169,7 +180,11 @@ struct ArenaHeader {
   // Whether releaseIdle gave this arena's pages after the first back to the
   // system: every carved block is then a spill bit, so nothing reads them until
   // unspillInto links the blocks again.
-  released: bool
+  released: bool,
+  // In a group's first arena only: a bit per arena of the group that
+  // retireIdleArenas gave back whole. A retired arena has no header and is on no
+  // list until takeArena writes it a new one.
+  retired: [u64; 2]
 }
 
 @inlineAlways
@@ -669,11 +684,23 @@ impl AllocationObserver {
   /// Gives the memory of wholly idle arenas back to the system after a peak,
   /// keeping reserve bytes of them for the next allocations, and returns the
   /// bytes released; 0 when under RELEASE_MIN_BYTES are idle, and on systems
-  /// other than Linux. The arenas stay the pool's: their blocks come back, as
-  /// zero pages, when their class next needs them. Owner thread only.
+  /// other than Linux and Darwin. Owner thread only.
+  ///
+  /// On Linux the arenas stay the pool's: their pages after the header's go, and
+  /// their blocks come back, as zero pages, when their class next needs them.
+  ///
+  /// On Darwin a page is as large as an arena where it matters (16 KB on Apple
+  /// silicon), so an idle arena is retired whole: it leaves the pool's lists, its
+  /// page leaves the process's footprint (MADV_FREE_REUSABLE), and the next class
+  /// that needs an arena takes it back before any new memory. Only an arena no
+  /// runtime's collector lists can go this way, so an embedder with a runtime calls
+  /// js_runtime.releaseIdle, which lets go of the arenas its cells have left first.
   pub fn releaseIdle(self: &Self, reserve: usize) -> usize {
     static if Intrinsic.targetOperatingSystem() == "linux" { return unsafe releaseIdleArenas(self.ledger, reserve) }
-    else { return 0 }
+    else {
+      static if Intrinsic.targetOperatingSystem() == "darwin" { return unsafe retireIdleArenas(self.ledger, reserve) }
+      else { return 0 }
+    }
   }
   /// stats().usedBytes without taking the ledger gate: a relaxed snapshot for
   /// the per-allocation GC threshold check, which tolerates a stale total.
@@ -742,7 +769,7 @@ impl<A> RuntimeAllocator<A> {
         fresh: [Pointer.null<u8>(); 64], freshBytes: [0; 64],
         ownerActive: false, ownerThread: 0, ownerHeads: [Pointer.null<u8>(); 64], ownerCounts: [0; 64], ownerUsed: 0, ownerAllocations: 0, ownerPeak: 0,
         spillHeaps: [Pointer.null<ArenaHeader>(); 64], spillCounts: [0; 64],
-        largeHeads: [Pointer.null<AllocationHeader>(); 20], largeCounts: [0; 20] }
+        largeHeads: [Pointer.null<AllocationHeader>(); 20], largeCounts: [0; 20], retiredCount: 0 }
     })
     let mut anchor = ()
     let fresh = unsafe Pointer.borrowMut(&mut anchor, address)
@@ -1057,19 +1084,30 @@ unsafe fn profilePooledAllocation(ledger: LedgerPointers, record: AllocationReco
   return epoch
 }
 
-// Returns an uncarved arena with its header written for class: the next spare
-// arena of the newest group, or the first arena of a new group.
+// Returns an uncarved arena with its header written for class: an arena
+// releaseIdle retired (Darwin), else the next spare arena of the newest group, or
+// the first arena of a new group.
 @inlineNever
 effect fn takeArena<A>(self: &mut RuntimeAllocator<A>, class: usize, requestedBytes: usize) -> *mut u8
   ! OutOfMemoryError where &mut A provides &Allocator from &mut Allocator {
   let ledger = self.ledger
   let mut spare = Pointer.null<u8>()
   let mut spareRecords = Pointer.null<PoolRecord>()
+  // Whether spare is an arena releaseIdle retired, not one never used.
+  let mut retired = false
   unsafe {
     lockLedger(ledger)
     let mut poolAnchor = ()
     let pool = Pointer.borrowMut<(), Pool>(&mut poolAnchor, poolOf(ledger))
-    if pool.spareCount > 0 {
+    static if Intrinsic.targetOperatingSystem() == "darwin" {
+      if pool.retiredCount > 0 {
+        let taken = takeRetired(&mut pool)
+        spare = taken.arena
+        spareRecords = taken.records
+        retired = !Pointer.isNull<u8>(spare)
+      }
+    }
+    if !retired && pool.spareCount > 0 {
       spare = pool.spare
       spareRecords = pool.spareRecords
       pool.spareRecords = Intrinsic.pointerRequalify<*mut PoolRecord, ?*mut PoolRecord>(
@@ -1084,6 +1122,10 @@ effect fn takeArena<A>(self: &mut RuntimeAllocator<A>, class: usize, requestedBy
   }
   match Pointer.nonNullMut<u8>(spare) {
     Option<*mut u8>.Some { value: arena } => {
+      // The page is counted as the process's again before it is written.
+      static if Intrinsic.targetOperatingSystem() == "darwin" {
+        if retired { let _reused = unsafe nativeMadvise(arena, ARENA_BYTES, ADVICE_FREE_REUSE) }
+      }
       let owner = unsafe Intrinsic.pointerReinterpret<*mut u8, *mut ArenaHeader>(arena)
       unsafe {
         lockLedger(ledger)
@@ -1094,7 +1136,7 @@ effect fn takeArena<A>(self: &mut RuntimeAllocator<A>, class: usize, requestedBy
           nextLive: state.firstPooledArena, records: Intrinsic.pointerRequalify<?*mut PoolRecord, *mut PoolRecord>(spareRecords), carved: 0,
           cellOwner: 0, cellNext: Pointer.null<u8>(), pendingNext: Pointer.null<u8>(), pendingListed: false, cells: [0; 16], pending: [0; 16], youngNext: Pointer.null<u8>(), youngListed: false, young: [0; 16],
           idleNext: Pointer.null<ArenaHeader>(), idleListed: false, idle: [0; 16],
-          spillNext: Pointer.null<ArenaHeader>(), spillChild: Pointer.null<ArenaHeader>(), spillListed: false, spill: [0; 16], released: false })
+          spillNext: Pointer.null<ArenaHeader>(), spillChild: Pointer.null<ArenaHeader>(), spillListed: false, spill: [0; 16], released: false, retired: [0; 2] })
         state.firstPooledArena = owner
         drop state
         unlockLedger(ledger)
@@ -1141,7 +1183,7 @@ effect fn takeArena<A>(self: &mut RuntimeAllocator<A>, class: usize, requestedBy
       nextLive: firstLive, records: records, carved: 0,
       cellOwner: 0, cellNext: Pointer.null<u8>(), pendingNext: Pointer.null<u8>(), pendingListed: false, cells: [0; 16], pending: [0; 16], youngNext: Pointer.null<u8>(), youngListed: false, young: [0; 16],
       idleNext: Pointer.null<ArenaHeader>(), idleListed: false, idle: [0; 16],
-          spillNext: Pointer.null<ArenaHeader>(), spillChild: Pointer.null<ArenaHeader>(), spillListed: false, spill: [0; 16], released: false })
+          spillNext: Pointer.null<ArenaHeader>(), spillChild: Pointer.null<ArenaHeader>(), spillListed: false, spill: [0; 16], released: false, retired: [0; 2] })
     pool.arenas = Intrinsic.pointerRequalify<*mut ArenaHeader, ?*mut ArenaHeader>(owner)
     // A racing refill's leftover spares stay owned by its group, unused.
     pool.spare = Intrinsic.pointerRequalify<*mut u8, ?*mut u8>(second)
@@ -2446,6 +2488,44 @@ pub unsafe fn arenaHasCells(arena: *mut u8) -> bool {
   }
   return false
 }
+/// Takes off a runtime's lists the arenas its cells have left, so the pool may
+/// retire them (releaseIdle on Darwin): off the young list at youngHead those with
+/// no young cell, then off the list at head those with no cell that are on neither
+/// the young list nor the pending one. A later cell in one claims it again
+/// (addCell). Outside a collection only.
+pub unsafe fn unclaimEmptyArenas(head: *mut ?*mut u8, youngHead: *mut ?*mut u8) -> () {
+  let mut link = youngHead
+  while !Pointer.isNull<u8>(unsafe Pointer.read<?*mut u8>(link)) {
+    let arena = unsafe Intrinsic.pointerRequalify<?*mut u8, *mut u8>(unsafe Pointer.read<?*mut u8>(link))
+    let mut anchor = ()
+    let header = unsafe Pointer.borrowMut<(), ArenaHeader>(&mut anchor, unsafe arenaRef(arena))
+    let mut any: u64 = 0
+    let mut index: usize = 0
+    while index < CELL_WORDS { any = u64.bitOr(any, u64.bitAnd(header.young[index], header.cells[index])) index = index + 1 }
+    if any != 0 { link = Pointer.fromMutRef<?*mut u8>(&mut header.youngNext) continue }
+    let next = header.youngNext
+    header.youngNext = Pointer.null<u8>()
+    header.youngListed = false
+    header.young = [0; 16]
+    drop header
+    unsafe Pointer.write<?*mut u8>(link, next)
+  }
+  link = head
+  while !Pointer.isNull<u8>(unsafe Pointer.read<?*mut u8>(link)) {
+    let arena = unsafe Intrinsic.pointerRequalify<?*mut u8, *mut u8>(unsafe Pointer.read<?*mut u8>(link))
+    let mut anchor = ()
+    let header = unsafe Pointer.borrowMut<(), ArenaHeader>(&mut anchor, unsafe arenaRef(arena))
+    let mut any: u64 = 0
+    let mut index: usize = 0
+    while index < CELL_WORDS { any = u64.bitOr(any, header.cells[index]) index = index + 1 }
+    if any != 0 || header.pendingListed || header.youngListed { link = Pointer.fromMutRef<?*mut u8>(&mut header.cellNext) continue }
+    let next = header.cellNext
+    header.cellNext = Pointer.null<u8>()
+    header.cellOwner = 0
+    drop header
+    unsafe Pointer.write<?*mut u8>(link, next)
+  }
+}
 /// Gives up every arena on the list at head (a runtime ending): their cell and
 /// scratch bits must be clear already.
 pub unsafe fn releaseCellArenas(head: *mut ?*mut u8) -> () {
@@ -2619,23 +2699,12 @@ unsafe fn spillOwned(ledger: LedgerPointers, block: *mut u8, class: usize) -> ()
   unsafe Atomic.store<usize>(Pointer.fromMutRef<usize>(&mut pool.ownerAllocations), usize.wrappingSubtract(pool.ownerAllocations, 1), MemoryOrder.Relaxed)
 }
 
-// AllocationObserver.releaseIdle. Every owner-cached block becomes a spill bit of
-// its arena first, so an arena whose carved blocks are all idle shows it in its
-// header alone and no list runs through the pages given back.
-static if Intrinsic.targetOperatingSystem() == "linux" {
-  @inlineNever
-  unsafe fn releaseIdleArenas(ledger: LedgerPointers, reserve: usize) -> usize {
-    let mut poolAnchor = ()
-    let pool = unsafe Pointer.borrowMut<(), Pool>(&mut poolAnchor, unsafe poolOf(ledger))
-    if !pool.ownerActive { return 0 }
-    let mut idle: usize = 0
+// Every owner-cached block becomes a spill bit of its arena, so an arena whose
+// carved blocks are all idle shows it in its header alone and no list runs through
+// its blocks. Owner thread only.
+static if Intrinsic.targetOperatingSystem() == "linux" || Intrinsic.targetOperatingSystem() == "darwin" {
+  unsafe fn spillOwnerLists(pool: &mut Pool) -> () {
     let mut class: usize = 0
-    while class < POOL_CLASSES {
-      idle = idle + (pool.ownerCounts[class] + pool.spillCounts[class]) * classBytes(class)
-      class = class + 1
-    }
-    if idle < usize.saturatingAdd(RELEASE_MIN_BYTES, reserve) { return 0 }
-    class = 0
     while class < POOL_CLASSES {
       let mut cursor = pool.ownerHeads[class]
       let mut moved: usize = 0
@@ -2659,6 +2728,182 @@ static if Intrinsic.targetOperatingSystem() == "linux" {
       pool.spillCounts[class] = pool.spillCounts[class] + moved
       class = class + 1
     }
+  }
+}
+
+// AllocationObserver.releaseIdle on Darwin. A page there is as large as an arena
+// (16 KB on Apple silicon), so no page of an idle arena is free of its header and
+// the Linux way, which keeps the header's page, would give nothing back. A wholly
+// idle arena is retired instead: taken off the pool's live list and its class's
+// spill heap, recorded as a bit in its group's first arena, and its page handed
+// to the system. Nothing reads a retired arena again until takeArena writes it a
+// new header.
+//
+// Only an arena on no other list can go: not a group's first arena (it owns the
+// group and holds the retired bits), not the arena its class is still carving, and
+// not one a runtime's collector lists (cellOwner; unclaimEmptyArenas lets go of
+// the ones its cells have left).
+static if Intrinsic.targetOperatingSystem() == "darwin" {
+  struct RetiredArena { arena: ?*mut u8, records: ?*mut PoolRecord }
+  impl Copy for RetiredArena {}
+
+  // Takes a retired arena back: the lowest one of the first group that has any,
+  // with the records slot it had. Under the gate.
+  unsafe fn takeRetired(pool: &mut Pool) -> RetiredArena {
+    let mut group = pool.arenas
+    while !Pointer.isNull<ArenaHeader>(group) {
+      let first = unsafe presentArena(group)
+      let mut anchor = ()
+      let header = unsafe Pointer.borrowMut<(), ArenaHeader>(&mut anchor, first)
+      let mut word: usize = 0
+      while word < 2 {
+        let bits = header.retired[word]
+        if bits != 0 {
+          let index = word * 64 + u32.toUsize(u64.trailingZeros(bits))
+          header.retired[word] = u64.bitAnd(bits, bits - 1)
+          pool.retiredCount = pool.retiredCount - 1
+          let base = unsafe Pointer.assumeManyMut<u8>(unsafe Intrinsic.pointerReinterpret<*mut ArenaHeader, *mut u8>(first))
+          let records = unsafe Pointer.atMut<PoolRecord>(unsafe Pointer.assumeManyMut<PoolRecord>(header.records), index * ARENA_RECORDS)
+          return RetiredArena {
+            arena: unsafe Intrinsic.pointerRequalify<*mut u8, ?*mut u8>(unsafe Pointer.atMut<u8>(base, index * ARENA_BYTES)),
+            records: unsafe Intrinsic.pointerRequalify<*mut PoolRecord, ?*mut PoolRecord>(records) }
+        }
+        word = word + 1
+      }
+      group = header.next
+    }
+    pool.retiredCount = 0
+    return RetiredArena { arena: Pointer.null<u8>(), records: Pointer.null<PoolRecord>() }
+  }
+
+  @inlineNever
+  unsafe fn retireIdleArenas(ledger: LedgerPointers, reserve: usize) -> usize {
+    // A group is found from any of its arenas by masking, and a retired arena is
+    // whole pages.
+    if ARENA_BYTES * GROUP_ARENAS != HUGE_PAGE_BYTES { return 0 }
+    let page = i32.toUsize(unsafe nativePageSize())
+    if page == 0 || ARENA_BYTES % page != 0 { return 0 }
+    let mut poolAnchor = ()
+    let pool = unsafe Pointer.borrowMut<(), Pool>(&mut poolAnchor, unsafe poolOf(ledger))
+    if !pool.ownerActive { return 0 }
+    let mut idle: usize = 0
+    let mut class: usize = 0
+    while class < POOL_CLASSES {
+      idle = idle + (pool.ownerCounts[class] + pool.spillCounts[class]) * classBytes(class)
+      class = class + 1
+    }
+    if idle < usize.saturatingAdd(RELEASE_MIN_BYTES, reserve) { return 0 }
+    unsafe spillOwnerLists(&mut pool)
+    let mut kept: usize = 0
+    let mut released: usize = 0
+    // The blocks of the arenas retired, and their bytes: owner-cached, so still charged.
+    let mut blocks: usize = 0
+    let mut charged: usize = 0
+    unsafe lockLedger(ledger)
+    let mut stateAnchor = ()
+    let state = unsafe Pointer.borrowMut(&mut stateAnchor, ledger.allocation)
+    let mut link = Pointer.fromMutRef<?*mut ArenaHeader>(&mut state.firstPooledArena)
+    drop state
+    while !Pointer.isNull<ArenaHeader>(unsafe Pointer.read<?*mut ArenaHeader>(link)) {
+      let pointer = unsafe presentArena(unsafe Pointer.read<?*mut ArenaHeader>(link))
+      let address = Pointer.address<ArenaHeader>(pointer)
+      let mut anchor = ()
+      let header = unsafe Pointer.borrowMut<(), ArenaHeader>(&mut anchor, pointer)
+      let next = header.nextLive
+      let arenaClass = header.class
+      let carved = header.carved
+      let mut bits: usize = 0
+      let mut word: usize = 0
+      while word < 16 { bits = bits + u32.toUsize(u64.countOnes(header.spill[word])) word = word + 1 }
+      // The class's current arena: its uncarved tail is still to be handed out.
+      let fresh = pool.fresh[arenaClass]
+      let carving = pool.freshBytes[arenaClass] != 0 && !Pointer.isNull<u8>(fresh)
+        && usize.wrappingSubtract(Pointer.address<u8>(unsafe Intrinsic.pointerRequalify<?*mut u8, *mut u8>(fresh)), address) < ARENA_BYTES
+      let idleWhole = carved != 0 && bits == carved && !carving
+        && usize.bitAnd(address, HUGE_PAGE_BYTES - 1) != 0
+        && header.cellOwner == 0 && !header.pendingListed && !header.youngListed && !header.idleListed
+      if !idleWhole || kept < reserve {
+        if idleWhole { kept = kept + ARENA_BYTES }
+        link = Pointer.fromMutRef<?*mut ArenaHeader>(&mut header.nextLive)
+        continue
+      }
+      drop header
+      let bytes = unsafe Intrinsic.pointerReinterpret<*mut ArenaHeader, *mut u8>(pointer)
+      // A refusal leaves the arena as it was.
+      if unsafe nativeMadvise(bytes, ARENA_BYTES, ADVICE_FREE_REUSABLE) != 0 {
+        let refused = unsafe Pointer.borrowMut<(), ArenaHeader>(&mut anchor, pointer)
+        link = Pointer.fromMutRef<?*mut ArenaHeader>(&mut refused.nextLive)
+        continue
+      }
+      // The header is gone with the page: only what was read above is used from here.
+      unsafe Pointer.write<?*mut ArenaHeader>(link, next)
+      pool.spillCounts[arenaClass] = pool.spillCounts[arenaClass] - carved
+      let offset = usize.bitAnd(address, HUGE_PAGE_BYTES - 1)
+      let first = unsafe Intrinsic.pointerReinterpret<*mut u8, *mut ArenaHeader>(
+        unsafe Pointer.atMut<u8>(unsafe Pointer.assumeManyMut<u8>(bytes), usize.wrappingSubtract(0, offset)))
+      let mut groupAnchor = ()
+      let group = unsafe Pointer.borrowMut<(), ArenaHeader>(&mut groupAnchor, first)
+      let index = offset / ARENA_BYTES
+      group.retired[index / 64] = u64.bitOr(group.retired[index / 64], u64.shiftLeft(1, usize.toU64(index % 64)))
+      drop group
+      pool.retiredCount = pool.retiredCount + 1
+      released = released + ARENA_BYTES
+      blocks = blocks + carved
+      charged = charged + carved * classBytes(arenaClass)
+    }
+    if released != 0 {
+      // An owner-cached block stays charged and keeps a ledger reference, with the owner
+      // totals taking it back out of the reported stats (claimShared). The retired
+      // arenas' blocks are no longer anyone's: uncharge them and drop their references,
+      // or the ledger would outlive its last allocation. The allocator calling this
+      // holds a reference of its own, so the count stays above zero.
+      let mut stats = unsafe Pointer.read<RuntimeMemoryStats>(ledger.stats)
+      stats.usedBytes = usize.wrappingSubtract(stats.usedBytes, charged)
+      stats.allocationCount = usize.wrappingSubtract(stats.allocationCount, blocks)
+      unsafe Pointer.write<RuntimeMemoryStats>(ledger.stats, stats)
+      unsafe Atomic.store<usize>(Pointer.fromMutRef<usize>(&mut pool.ownerUsed), usize.wrappingAdd(pool.ownerUsed, charged), MemoryOrder.Relaxed)
+      unsafe Atomic.store<usize>(Pointer.fromMutRef<usize>(&mut pool.ownerAllocations), usize.wrappingAdd(pool.ownerAllocations, blocks), MemoryOrder.Relaxed)
+      let references = unsafe Atomic.load<usize>(ledger.references, MemoryOrder.Relaxed)
+      if references != usize.MAX { unsafe Atomic.store<usize>(ledger.references, references - blocks, MemoryOrder.Relaxed) }
+      // The spill heaps ran through the retired arenas: build them again from the
+      // arenas that stay.
+      class = 0
+      while class < POOL_CLASSES { pool.spillHeaps[class] = Pointer.null<ArenaHeader>() class = class + 1 }
+      let mut cursor = (unsafe Pointer.borrow(&stateAnchor, ledger.allocation)).firstPooledArena
+      while !Pointer.isNull<ArenaHeader>(cursor) {
+        let pointer = unsafe presentArena(cursor)
+        let mut anchor = ()
+        let header = unsafe Pointer.borrowMut<(), ArenaHeader>(&mut anchor, pointer)
+        cursor = header.nextLive
+        if !header.spillListed { continue }
+        header.spillNext = Pointer.null<ArenaHeader>()
+        header.spillChild = Pointer.null<ArenaHeader>()
+        let listedClass = header.class
+        drop header
+        pool.spillHeaps[listedClass] = unsafe meldSpill(pool.spillHeaps[listedClass], unsafe Intrinsic.pointerRequalify<*mut ArenaHeader, ?*mut ArenaHeader>(pointer))
+      }
+    }
+    unsafe unlockLedger(ledger)
+    return released
+  }
+}
+
+// AllocationObserver.releaseIdle on Linux: an arena whose carved blocks are all
+// idle gives its pages after the header's back and stays listed.
+static if Intrinsic.targetOperatingSystem() == "linux" {
+  @inlineNever
+  unsafe fn releaseIdleArenas(ledger: LedgerPointers, reserve: usize) -> usize {
+    let mut poolAnchor = ()
+    let pool = unsafe Pointer.borrowMut<(), Pool>(&mut poolAnchor, unsafe poolOf(ledger))
+    if !pool.ownerActive { return 0 }
+    let mut idle: usize = 0
+    let mut class: usize = 0
+    while class < POOL_CLASSES {
+      idle = idle + (pool.ownerCounts[class] + pool.spillCounts[class]) * classBytes(class)
+      class = class + 1
+    }
+    if idle < usize.saturatingAdd(RELEASE_MIN_BYTES, reserve) { return 0 }
+    unsafe spillOwnerLists(&mut pool)
     drop pool
     let mut kept: usize = 0
     let mut released: usize = 0
