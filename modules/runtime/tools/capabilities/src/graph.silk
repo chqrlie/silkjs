@@ -119,6 +119,19 @@ fn startsWith(text: &[u8], prefix: &[u8]) -> bool {
   return same(Slice.view<u8>(text, 0, prefix.length), prefix)
 }
 
+// A symbol's own name. Since Silk 0.1.0-dev.88 a Linux executable's symbol table names each Silk
+// function by its declaration, `package:src/file.silk::name`, C exports included.
+fn declared(symbol: &[u8]) -> &[u8] {
+  let mut at = symbol.length
+  while at >= 2 {
+    if symbol[at - 1] == 58 && symbol[at - 2] == 58 {
+      return Slice.view<u8>(symbol, at, symbol.length - at)
+    }
+    at = at - 1
+  }
+  return symbol
+}
+
 fn endsWith(text: &[u8], suffix: &[u8]) -> bool {
   if text.length < suffix.length {
     return false
@@ -2097,7 +2110,7 @@ pub effect fn symbols(binary: &[u8], prefix: &[u8], absent: bool) -> ()
   let mut at: usize = 0
   while at < items.length {
     let parts = run fields(items[at].asSlice())
-    if parts.length() >= 3 && startsWith(parts.asSlice()[2].asSlice(), prefix) {
+    if parts.length() >= 3 && startsWith(declared(parts.asSlice()[2].asSlice()), prefix) {
       if found == 0 {
         run first.append(parts.asSlice()[2].asSlice())
       }
