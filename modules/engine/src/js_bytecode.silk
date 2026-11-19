@@ -985,7 +985,7 @@ pub fn fieldsInitSize(code: &[u8], pos: usize) -> usize {
 pub const FIELDS_PREFIX_SIZE: usize = 5
 fn constructEvaluable(code: &[u8]) -> bool {
   let length = code.length
-  if length == 0 || length > 256 || code[length - 1] != op.OP_return_undef { return false }
+  if length == 0 || length > 640 || code[length - 1] != op.OP_return_undef { return false }
   let mut pos: usize = 0
   let mut stores: usize = 0
   let mut fields = false
@@ -1006,7 +1006,7 @@ fn constructEvaluable(code: &[u8]) -> bool {
     else if opcode == op.OP_put_arg { size = 3 if pos + 2 >= length || code[pos + 1] >= 4 || code[pos + 2] != 0 { return false } }
     else if opcode == op.OP_set_loc8 { size = 2 if pos + 1 >= length || code[pos + 1] >= 4 { return false } }
     else if !(opcode == op.OP_push_this || opcode == op.OP_return_undef || opcode == op.OP_undefined || opcode == op.OP_null
-      || opcode == op.OP_push_false || opcode == op.OP_push_true || opcode == op.OP_dup || opcode == op.OP_drop || opcode == op.OP_lnot
+      || opcode == op.OP_push_false || opcode == op.OP_push_true || opcode == op.OP_dup || opcode == op.OP_insert2 || opcode == op.OP_drop || opcode == op.OP_lnot
       || (opcode >= op.OP_push_0 && opcode <= op.OP_push_1)
       || (opcode >= op.OP_get_arg0 && opcode <= op.OP_get_arg0 + 3)
       || (opcode >= op.OP_get_loc0 && opcode <= op.OP_get_loc0 + 3)
@@ -1014,5 +1014,5 @@ fn constructEvaluable(code: &[u8]) -> bool {
     pos = pos + size
   }
   // A class constructor with no stores still adds its constant fields.
-  return pos == length && (stores != 0 || fields) && stores <= 16
+  return pos == length && (stores != 0 || fields) && stores <= 32
 }

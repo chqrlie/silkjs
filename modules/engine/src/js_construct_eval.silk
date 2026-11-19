@@ -48,7 +48,7 @@ const RECIPE_NOT: u8 = 3
 const RECIPE_SELECT: u8 = 4
 const NODES_MAX: usize = 32
 const CONSTANTS_MAX: usize = 16
-const STORES_MAX: usize = 16
+const STORES_MAX: usize = 32
 /// put_field in final code: the opcode, its atom and its inline field-cache key.
 const PUT_FIELD_SIZE: usize = 13
 const STACK_MAX: usize = 8
@@ -271,6 +271,14 @@ fn straight(bytes: &[u8], pc: usize, recipe: &mut ConstructRecipe, constants: &m
   }
   if opcode == 14 { if symbols.depth == 0 { return declined } symbols.depth = symbols.depth - 1 return pc + 1 } // OP_drop
   if opcode == 17 { if symbols.depth == 0 { return declined } let top = symbols.stack[symbols.depth - 1] if !push(&mut symbols, top) { return declined } return pc + 1 } // OP_dup
+  if opcode == 21 { // OP_insert2: a chained store keeps its value (a b -> b a b)
+    if symbols.depth < 2 { return declined }
+    let kept = symbols.stack[symbols.depth - 1]
+    let under = symbols.stack[symbols.depth - 2]
+    if !push(&mut symbols, kept) { return declined }
+    symbols.stack[symbols.depth - 3] = kept symbols.stack[symbols.depth - 2] = under
+    return pc + 1
+  }
   if opcode == 148 { // OP_lnot
     if symbols.depth == 0 { return declined }
     let node = addNode(&mut recipe, RECIPE_NOT, symbols.stack[symbols.depth - 1], 0, 0)
@@ -509,7 +517,7 @@ pub unsafe fn construct<H: HeapHooks>(hooks: &mut H, runtime: *mut HeapHeader, o
     let mut index: usize = 0
     while index < total {
       let mut atom: u32 = 0
-      if index < fields.count { atom = fields.atoms[index & 7] } else { atom = entry.recipe.atoms[(index - fields.count) & 15] }
+      if index < fields.count { atom = fields.atoms[index & 7] } else { atom = entry.recipe.atoms[(index - fields.count) & 31] }
       let mut earlier: usize = 0
       while earlier < index { if keys[earlier & 31] == atom { return false } earlier = earlier + 1 }
       keys[index & 31] = atom
@@ -650,7 +658,7 @@ pub unsafe effect fn planned<'a, H: HeapHooks>(hooks: &mut H, memory: &Allocatio
   let data = unsafe HeapCell.payloadMut<ObjectData, ()>(&mut nodeAnchor, node)
   let mut index: usize = 0
   while index < stores {
-    data.setSlot(index, SlotBits.value(unsafe (unsafe values.get(u8.toUsize(roots[index & 15]))).retained()))
+    data.setSlot(index, SlotBits.value(unsafe (unsafe values.get(u8.toUsize(roots[index & 31]))).retained()))
     index = index + 1
   }
   return created
@@ -687,7 +695,7 @@ unsafe effect fn plannedFields<'a, H: HeapHooks>(hooks: &mut H, memory: &Allocat
   while index < fields.count { data.setSlot(index, SlotBits.value(unsafe (fields.values[index & 7]).retained())) index = index + 1 }
   index = 0
   while index < stores {
-    data.setSlot(fields.count + index, SlotBits.value(unsafe (unsafe values.get(u8.toUsize(roots[index & 15]))).retained()))
+    data.setSlot(fields.count + index, SlotBits.value(unsafe (unsafe values.get(u8.toUsize(roots[index & 31]))).retained()))
     index = index + 1
   }
   return created
@@ -695,7 +703,7 @@ unsafe effect fn plannedFields<'a, H: HeapHooks>(hooks: &mut H, memory: &Allocat
 /// Gives node the final shape (the empty base keeps other holders) and the
 /// recipe's store values, retained, as its slots.
 @inlineAlways
-unsafe fn install(node: *mut HeapHeader, base: *mut HeapHeader, final: *mut HeapHeader, fields: &FieldList, roots: &[u8; 16], values: &FrameSlots, stores: usize) -> () {
+unsafe fn install(node: *mut HeapHeader, base: *mut HeapHeader, final: *mut HeapHeader, fields: &FieldList, roots: &[u8; 32], values: &FrameSlots, stores: usize) -> () {
   unsafe HeapCell.retain(final)
   let mut headerAnchor = ()
   let header = unsafe Pointer.borrowMut<(), HeapHeader>(&mut headerAnchor, base)
@@ -708,7 +716,7 @@ unsafe fn install(node: *mut HeapHeader, base: *mut HeapHeader, final: *mut Heap
   while index < fields.count { unsafe data.pushSlotUnchecked(SlotBits.value(unsafe (fields.values[index & 7]).retained())) index = index + 1 }
   index = 0
   while index < stores {
-    unsafe data.pushSlotUnchecked(SlotBits.value(unsafe (unsafe values.get(u8.toUsize(roots[index & 15]))).retained()))
+    unsafe data.pushSlotUnchecked(SlotBits.value(unsafe (unsafe values.get(u8.toUsize(roots[index & 31]))).retained()))
     index = index + 1
   }
 }

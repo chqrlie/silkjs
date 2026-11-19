@@ -1,20 +1,70 @@
-// SilkJS regression test for construct recipes with more than 8 stores
-// (js_construct_eval STORES_MAX 16): 9 to 16 stores take the recipe, 17 and up
-// the frame; fields plus stores, repeated keys, conditional values, object
-// literals as values, and a setter added on the prototype after the plan.
-const out = [];
-function log(...args) { out.push(args.join(' ')) }
-function mk(n) { let s = 'return class { constructor(a, b) {'; for (let i = 0; i < n; i++) s += ` this.p${i} = ${i % 3 === 0 ? 'a' : i % 3 === 1 ? i : 'b ? ' + i + ' : "z"'};`; return new Function(s + ' } }')() }
-for (const n of [8, 9, 12, 15, 16, 17, 20]) { const C = mk(n); let o; for (let i = 0; i < 6; i++) o = new C(i, i & 1); log(n, JSON.stringify(o)); }
-class F { #x = 1; y = 2; constructor(a) { this.a0 = a; this.a1 = 1; this.a2 = 2; this.a3 = 3; this.a4 = 4; this.a5 = 5; this.a6 = 6; this.a7 = 7; this.a8 = 8; this.a9 = 9; this.b0 = 10; this.b1 = 11; this.b2 = 12; this.b3 = 13 } x() { return this.#x } }
-let f; for (let i = 0; i < 6; i++) f = new F(i); log(JSON.stringify(f), f.x(), Object.keys(f).length);
-class G { constructor(a) { this.p = a; this.q = 1; this.r = 2; this.s = 3; this.t = 4; this.u = 5; this.v = 6; this.w = 7; this.x = 8; this.p = 9; this.y = 10 } }
-let g; for (let i = 0; i < 6; i++) g = new G(i); log(JSON.stringify(g));
-class H { constructor(a) { this.a = a; this.b = a; this.c = a; this.d = a; this.e = a; this.f = a; this.g = a; this.h = a; this.i = a; this.j = { k: a } } }
-let h; for (let i = 0; i < 6; i++) h = new H(i); log(JSON.stringify(h));
-class P { constructor() { this.a = 1; this.b = 2; this.c = 3; this.d = 4; this.e = 5; this.f = 6; this.g = 7; this.h = 8; this.i = 9; this.j = 10 } }
-for (let i = 0; i < 4; i++) new P(); Object.defineProperty(P.prototype, 'e', { set(v) { log('setter', v) } }); log(JSON.stringify(new P()));
-const got = out.join('\n');
-const expected = "8 {\"p0\":5,\"p1\":1,\"p2\":2,\"p3\":5,\"p4\":4,\"p5\":5,\"p6\":5,\"p7\":7}\n9 {\"p0\":5,\"p1\":1,\"p2\":2,\"p3\":5,\"p4\":4,\"p5\":5,\"p6\":5,\"p7\":7,\"p8\":8}\n12 {\"p0\":5,\"p1\":1,\"p2\":2,\"p3\":5,\"p4\":4,\"p5\":5,\"p6\":5,\"p7\":7,\"p8\":8,\"p9\":5,\"p10\":10,\"p11\":11}\n15 {\"p0\":5,\"p1\":1,\"p2\":2,\"p3\":5,\"p4\":4,\"p5\":5,\"p6\":5,\"p7\":7,\"p8\":8,\"p9\":5,\"p10\":10,\"p11\":11,\"p12\":5,\"p13\":13,\"p14\":14}\n16 {\"p0\":5,\"p1\":1,\"p2\":2,\"p3\":5,\"p4\":4,\"p5\":5,\"p6\":5,\"p7\":7,\"p8\":8,\"p9\":5,\"p10\":10,\"p11\":11,\"p12\":5,\"p13\":13,\"p14\":14,\"p15\":5}\n17 {\"p0\":5,\"p1\":1,\"p2\":2,\"p3\":5,\"p4\":4,\"p5\":5,\"p6\":5,\"p7\":7,\"p8\":8,\"p9\":5,\"p10\":10,\"p11\":11,\"p12\":5,\"p13\":13,\"p14\":14,\"p15\":5,\"p16\":16}\n20 {\"p0\":5,\"p1\":1,\"p2\":2,\"p3\":5,\"p4\":4,\"p5\":5,\"p6\":5,\"p7\":7,\"p8\":8,\"p9\":5,\"p10\":10,\"p11\":11,\"p12\":5,\"p13\":13,\"p14\":14,\"p15\":5,\"p16\":16,\"p17\":17,\"p18\":5,\"p19\":19}\n{\"y\":2,\"a0\":5,\"a1\":1,\"a2\":2,\"a3\":3,\"a4\":4,\"a5\":5,\"a6\":6,\"a7\":7,\"a8\":8,\"a9\":9,\"b0\":10,\"b1\":11,\"b2\":12,\"b3\":13} 1 15\n{\"p\":9,\"q\":1,\"r\":2,\"s\":3,\"t\":4,\"u\":5,\"v\":6,\"w\":7,\"x\":8,\"y\":10}\n{\"a\":5,\"b\":5,\"c\":5,\"d\":5,\"e\":5,\"f\":5,\"g\":5,\"h\":5,\"i\":5,\"j\":{\"k\":5}}\nsetter 5\n{\"a\":1,\"b\":2,\"c\":3,\"d\":4,\"f\":6,\"g\":7,\"h\":8,\"i\":9,\"j\":10}";
-console.log(got === expected ? 'PASS wide construct recipes' : 'FAIL ' + JSON.stringify(got));
-if (got !== expected) throw new Error('wide construct recipe regressions');
+// Constructor bodies that only store into `this` run from a recipe, without a frame:
+// chained stores, bodies with up to 32 stores, and everything that must still decline.
+const r = [];
+function Chain(a, b) { this.x = a; this.p = this.q = this.r = null; this.n = this.m = 0; this.y = b; }
+function Wide(a, b, c, d) {
+  this.tag = a; this.key = c;
+  this.sibling = this.child = this.return = this.stateNode = this.type = this.elementType = null;
+  this.index = 0; this.refCleanup = this.ref = null; this.pendingProps = b;
+  this.dependencies = this.memoizedState = this.updateQueue = this.memoizedProps = null;
+  this.mode = d; this.subtreeFlags = this.flags = 0; this.deletions = null;
+  this.childLanes = this.lanes = 0; this.alternate = null;
+}
+function show(o) { return Object.keys(o).map((k) => k + '=' + String(o[k])).join(','); }
+let last;
+for (let i = 0; i < 50; i++) last = new Chain(i, 'b' + i);
+r.push(show(last));
+for (let i = 0; i < 50; i++) last = new Wide(i, { p: i }, 'k' + i, i & 1);
+r.push(Object.keys(last).length, last.tag, last.key, last.pendingProps.p, last.mode, last.elementType, last.lanes, last.alternate);
+r.push(Object.keys(last).join(',') === Object.keys(new Wide(1, 2, 3, 4)).join(','));
+// Fewer arguments than parameters read undefined.
+r.push(show(new Chain(1)));
+// 32 stores are covered, 33 are not: both must build the same object.
+function body(n) { let s = ''; for (let i = 0; i < n; i++) s += 'this.f' + i + ' = ' + (i % 3 === 0 ? 'a' : i % 3 === 1 ? 'null' : i) + ';'; return s; }
+const F32 = new Function('a', body(32)), F33 = new Function('a', body(33));
+for (let i = 0; i < 40; i++) { last = new F32(i); }
+r.push(Object.keys(last).length, last.f0, last.f30, last.f31, last.f2);
+for (let i = 0; i < 40; i++) { last = new F33(i); }
+r.push(Object.keys(last).length, last.f0, last.f32, last.f31);
+// A chained store of the same key twice keeps one property with the value.
+function Twice(a) { this.k = this.k = a; this.z = 1; }
+for (let i = 0; i < 40; i++) last = new Twice(i);
+r.push(show(last));
+// A chain that stores the receiver into itself is still a plain cycle.
+function Self() { this.me = this.also = this; this.v = 1; }
+for (let i = 0; i < 40; i++) last = new Self();
+r.push(last.me === last, last.also === last, last.v);
+// A setter on the prototype runs for a chained store, once objects were already planned.
+function Watched(a) { this.a = this.w = a; this.b = 2; }
+for (let i = 0; i < 40; i++) last = new Watched(i);
+r.push(show(last));
+let seen = [];
+Object.defineProperty(Watched.prototype, 'w', { set(v) { seen.push(v); }, get() { return 'getter'; }, configurable: true });
+last = new Watched(7);
+r.push(show(last), last.w, seen.join());
+delete Watched.prototype.w;
+last = new Watched(8);
+r.push(show(last));
+// A frozen prototype chain member and a non-writable inherited property.
+function Guarded(a) { this.g = this.h = a; }
+for (let i = 0; i < 40; i++) last = new Guarded(i);
+Object.defineProperty(Guarded.prototype, 'h', { value: 'fixed', writable: false, configurable: true });
+last = new Guarded(5);
+r.push(show(last), last.h);
+// Subclass through new.target keeps its own prototype.
+class Sub extends Wide {}
+for (let i = 0; i < 40; i++) last = Reflect.construct(Wide, [i, null, null, 0], Sub);
+r.push(last instanceof Sub, Object.keys(last).length, last.tag);
+// Many objects stay intact across a collection and later property adds.
+const all = [];
+for (let i = 0; i < 3000; i++) all.push(new Wide(i, null, 'k', 0));
+all[10].extra = 'added'; all[11].extra2 = 1; delete all[12].tag;
+let sum = 0;
+for (const f of all) sum += (f.tag | 0) + f.index + (f.alternate === null ? 1 : 0);
+r.push(sum, all[10].extra, Object.keys(all[10]).length, Object.keys(all[12]).length, all[2999].tag);
+const got = r.join('|');
+const expected = 'x=49,r=null,q=null,p=null,m=0,n=0,y=b49|23|49|k49|49|1||0||true|x=1,r=null,q=null,p=null,m=0,n=0,y=undefined|'
+  + '32|39|39||2|33|39|32||k=39,z=1|true|true|1|w=39,a=39,b=2|a=7,b=2|getter|7|w=8,a=8,b=2|g=5|fixed|true|23|39|'
+  + '4501488|added|24|22|2999';
+console.log(got === expected ? 'PASS construct recipe wide' : 'FAIL ' + got);
+if (got !== expected) throw new Error('constructor recipe regressions');

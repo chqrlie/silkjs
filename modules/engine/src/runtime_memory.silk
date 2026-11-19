@@ -65,6 +65,12 @@ static if Intrinsic.targetOperatingSystem() == "linux" {
 }
 /// MADV_HUGEPAGE.
 const ADVICE_HUGE_PAGES: i32 = 14
+/// MADV_DONTNEED.
+const ADVICE_DONT_NEED: i32 = 4
+// releaseIdle leaves a heap with less idle memory than this alone.
+const RELEASE_MIN_BYTES: usize = 4194304
+// The page an arena's header is on stays; the rest of an idle arena goes back.
+const RELEASE_KEPT_BYTES: usize = 4096
 const POOL_CLASSES: usize = 64
 const POOL_GRANULE: usize = 16
 const ARENA_RECORDS: usize = ARENA_BYTES / POOL_GRANULE
@@ -159,7 +165,11 @@ struct ArenaHeader {
   spillNext: ?*mut ArenaHeader,
   spillChild: ?*mut ArenaHeader,
   spillListed: bool,
-  spill: [u64; 16]
+  spill: [u64; 16],
+  // Whether releaseIdle gave this arena's pages after the first back to the
+  // system: every carved block is then a spill bit, so nothing reads them until
+  // unspillInto links the blocks again.
+  released: bool
 }
 
 @inlineAlways
@@ -643,6 +653,28 @@ impl AllocationObserver {
     records.truncate(index)
     return move records
   }
+  /// The bytes of pooled blocks the owner thread has freed and not reused: what
+  /// releaseIdle looks through. Owner thread only.
+  pub fn idleBytes(self: &Self) -> usize {
+    let anchor = ()
+    let pool = unsafe Pointer.borrow<(), Pool>(&anchor, unsafe poolOf(self.ledger))
+    let mut idle: usize = 0
+    let mut class: usize = 0
+    while class < POOL_CLASSES {
+      idle = idle + (pool.ownerCounts[class] + pool.spillCounts[class]) * classBytes(class)
+      class = class + 1
+    }
+    return idle
+  }
+  /// Gives the memory of wholly idle arenas back to the system after a peak,
+  /// keeping reserve bytes of them for the next allocations, and returns the
+  /// bytes released; 0 when under RELEASE_MIN_BYTES are idle, and on systems
+  /// other than Linux. The arenas stay the pool's: their blocks come back, as
+  /// zero pages, when their class next needs them. Owner thread only.
+  pub fn releaseIdle(self: &Self, reserve: usize) -> usize {
+    static if Intrinsic.targetOperatingSystem() == "linux" { return unsafe releaseIdleArenas(self.ledger, reserve) }
+    else { return 0 }
+  }
   /// stats().usedBytes without taking the ledger gate: a relaxed snapshot for
   /// the per-allocation GC threshold check, which tolerates a stale total.
   @inlineAlways
@@ -1062,7 +1094,7 @@ effect fn takeArena<A>(self: &mut RuntimeAllocator<A>, class: usize, requestedBy
           nextLive: state.firstPooledArena, records: Intrinsic.pointerRequalify<?*mut PoolRecord, *mut PoolRecord>(spareRecords), carved: 0,
           cellOwner: 0, cellNext: Pointer.null<u8>(), pendingNext: Pointer.null<u8>(), pendingListed: false, cells: [0; 16], pending: [0; 16], youngNext: Pointer.null<u8>(), youngListed: false, young: [0; 16],
           idleNext: Pointer.null<ArenaHeader>(), idleListed: false, idle: [0; 16],
-          spillNext: Pointer.null<ArenaHeader>(), spillChild: Pointer.null<ArenaHeader>(), spillListed: false, spill: [0; 16] })
+          spillNext: Pointer.null<ArenaHeader>(), spillChild: Pointer.null<ArenaHeader>(), spillListed: false, spill: [0; 16], released: false })
         state.firstPooledArena = owner
         drop state
         unlockLedger(ledger)
@@ -1109,7 +1141,7 @@ effect fn takeArena<A>(self: &mut RuntimeAllocator<A>, class: usize, requestedBy
       nextLive: firstLive, records: records, carved: 0,
       cellOwner: 0, cellNext: Pointer.null<u8>(), pendingNext: Pointer.null<u8>(), pendingListed: false, cells: [0; 16], pending: [0; 16], youngNext: Pointer.null<u8>(), youngListed: false, young: [0; 16],
       idleNext: Pointer.null<ArenaHeader>(), idleListed: false, idle: [0; 16],
-          spillNext: Pointer.null<ArenaHeader>(), spillChild: Pointer.null<ArenaHeader>(), spillListed: false, spill: [0; 16] })
+          spillNext: Pointer.null<ArenaHeader>(), spillChild: Pointer.null<ArenaHeader>(), spillListed: false, spill: [0; 16], released: false })
     pool.arenas = Intrinsic.pointerRequalify<*mut ArenaHeader, ?*mut ArenaHeader>(owner)
     // A racing refill's leftover spares stay owned by its group, unused.
     pool.spare = Intrinsic.pointerRequalify<*mut u8, ?*mut u8>(second)
@@ -2587,6 +2619,75 @@ unsafe fn spillOwned(ledger: LedgerPointers, block: *mut u8, class: usize) -> ()
   unsafe Atomic.store<usize>(Pointer.fromMutRef<usize>(&mut pool.ownerAllocations), usize.wrappingSubtract(pool.ownerAllocations, 1), MemoryOrder.Relaxed)
 }
 
+// AllocationObserver.releaseIdle. Every owner-cached block becomes a spill bit of
+// its arena first, so an arena whose carved blocks are all idle shows it in its
+// header alone and no list runs through the pages given back.
+static if Intrinsic.targetOperatingSystem() == "linux" {
+  @inlineNever
+  unsafe fn releaseIdleArenas(ledger: LedgerPointers, reserve: usize) -> usize {
+    let mut poolAnchor = ()
+    let pool = unsafe Pointer.borrowMut<(), Pool>(&mut poolAnchor, unsafe poolOf(ledger))
+    if !pool.ownerActive { return 0 }
+    let mut idle: usize = 0
+    let mut class: usize = 0
+    while class < POOL_CLASSES {
+      idle = idle + (pool.ownerCounts[class] + pool.spillCounts[class]) * classBytes(class)
+      class = class + 1
+    }
+    if idle < usize.saturatingAdd(RELEASE_MIN_BYTES, reserve) { return 0 }
+    class = 0
+    while class < POOL_CLASSES {
+      let mut cursor = pool.ownerHeads[class]
+      let mut moved: usize = 0
+      while !Pointer.isNull<u8>(cursor) {
+        let block = unsafe Intrinsic.pointerRequalify<?*mut u8, *mut u8>(cursor)
+        cursor = unsafe linkOf(block)
+        let owner = unsafe arenaOf(block)
+        let granule = usize.bitAnd(Pointer.address<u8>(block), ARENA_BYTES - 1) / POOL_GRANULE
+        let mut anchor = ()
+        let header = unsafe Pointer.borrowMut<(), ArenaHeader>(&mut anchor, owner)
+        let word = granule / 64
+        header.spill[word] = u64.bitOr(header.spill[word], u64.shiftLeft(1, usize.toU64(granule % 64)))
+        let listed = header.spillListed
+        header.spillListed = true
+        drop header
+        if !listed { pool.spillHeaps[class] = unsafe meldSpill(pool.spillHeaps[class], unsafe Intrinsic.pointerRequalify<*mut ArenaHeader, ?*mut ArenaHeader>(owner)) }
+        moved = moved + 1
+      }
+      pool.ownerHeads[class] = Pointer.null<u8>()
+      pool.ownerCounts[class] = 0
+      pool.spillCounts[class] = pool.spillCounts[class] + moved
+      class = class + 1
+    }
+    drop pool
+    let mut kept: usize = 0
+    let mut released: usize = 0
+    unsafe lockLedger(ledger)
+    let stateAnchor = ()
+    let mut nextArena = (unsafe Pointer.borrow(&stateAnchor, ledger.allocation)).firstPooledArena
+    while !Pointer.isNull<ArenaHeader>(nextArena) {
+      let pointer = unsafe Intrinsic.pointerRequalify<?*mut ArenaHeader, *mut ArenaHeader>(nextArena)
+      let mut anchor = ()
+      let header = unsafe Pointer.borrowMut<(), ArenaHeader>(&mut anchor, pointer)
+      nextArena = header.nextLive
+      if header.released || header.carved == 0 { continue }
+      let mut bits: usize = 0
+      let mut word: usize = 0
+      while word < 16 { bits = bits + u32.toUsize(u64.countOnes(header.spill[word])) word = word + 1 }
+      if bits != header.carved { continue }
+      if kept < reserve { kept = kept + ARENA_BYTES continue }
+      let pages = unsafe Pointer.atMut<u8>(unsafe Pointer.assumeManyMut<u8>(unsafe Intrinsic.pointerReinterpret<*mut ArenaHeader, *mut u8>(pointer)), RELEASE_KEPT_BYTES)
+      // A refusal (a system with larger pages) leaves the arena as it was.
+      if unsafe nativeMadvise(pages, ARENA_BYTES - RELEASE_KEPT_BYTES, ADVICE_DONT_NEED) == 0 {
+        header.released = true
+        released = released + ARENA_BYTES - RELEASE_KEPT_BYTES
+      }
+    }
+    unsafe unlockLedger(ledger)
+    return released
+  }
+}
+
 // Moves the lowest-addressed spill arena of class onto its (empty) owner list.
 // False when class has no spilled blocks.
 @inlineNever
@@ -2608,6 +2709,7 @@ unsafe fn unspillInto(pool: &mut Pool, class: usize) -> () {
   let mut anchor = ()
   let header = unsafe Pointer.borrowMut<(), ArenaHeader>(&mut anchor, arena)
   header.spillListed = false
+  header.released = false
   let mut head = Pointer.null<u8>()
   let mut last = Pointer.null<u8>()
   let mut beforeLast = Pointer.null<u8>()

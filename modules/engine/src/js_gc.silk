@@ -1026,7 +1026,7 @@ pub unsafe fn notePlan<H: HeapHooks>(hooks: &mut H, runtime: *mut HeapHeader, fu
   let finalShape = unsafe HeapCell.payload<ShapeData, ()>(&anchor, final)
   let depth = unsafe chainVersions(finalShape.prototype, &mut chain)
   drop finalShape
-  if depth > 3 || stores == 0 || stores > 16 { return () }
+  if depth > 3 || stores == 0 || stores > 32 { return () }
   let mut stateAnchor = ()
   let state = unsafe HeapCell.payloadMut<RuntimeState, ()>(&mut stateAnchor, runtime)
   let slot = receiverWay(&state.*, address)
@@ -1616,6 +1616,7 @@ unsafe effect fn collectCells<H: HeapHooks>(hooks: &mut H, runtime: *mut HeapHea
   require(unsafe zeroQueueEmpty(runtime))
   // event bit 0: 0 start, 1 end; bit 1: a young-generation collection.
   let generation: u32 = if young { 2 } else { 0 }
+  let started = unsafe memory.ticks()
   unsafe HeapHooks.gcLifecycle(&mut hooks, runtime, generation)
   if removeWeakObjects { run unsafe sweepWeak(&mut hooks, runtime) }
   let mut stack = RestoreStack { cells: [Pointer.null<HeapHeader>(); 1024], depth: 0, overflowed: false }
@@ -1639,6 +1640,10 @@ unsafe effect fn collectCells<H: HeapHooks>(hooks: &mut H, runtime: *mut HeapHea
   // finalizes them at once, as V8's does.
   if removeWeakObjects && unsafe takeWeakTargetsDied(runtime) { run unsafe sweepWeak(&mut hooks, runtime) }
   unsafe HeapHooks.gcLifecycle(&mut hooks, runtime, generation | 1)
+  let mut anchor = ()
+  let state = unsafe HeapCell.payloadMut<RuntimeState, ()>(&mut anchor, runtime)
+  if young { state.gcYoungCount = u32.wrappingAdd(state.gcYoungCount, 1) } else { state.gcFullCount = u32.wrappingAdd(state.gcFullCount, 1) }
+  state.gcTicks = usize.wrappingAdd(state.gcTicks, usize.wrappingSubtract(unsafe memory.ticks(), started))
 }
 /// The first arena a pass over the members walks: all of them, or the young ones.
 @inlineAlways

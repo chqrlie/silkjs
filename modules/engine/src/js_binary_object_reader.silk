@@ -38,7 +38,7 @@ import js_debugger_metadata { Metadata as DebuggerMetadata }
 import js_exceptions { JsException }
 import js_coercion_host { CoercionHooks }
 import js_debug_positions { PendingLines, SourceLocation }
-import js_core_types { KnownCall }
+import js_core_types { KnownCall, KNOWN_CALL }
 import js_core_types { HostEdges }
 import js_core_types { LineTables, DeferredSource }
 import js_core_types { SourceText, RuntimeState, ObjectData, ObjectPayload, NativeErrorKind, NativeFunctionId,
@@ -798,7 +798,11 @@ effect fn readFunction<'a,'r,'m,S:EngineServices>(r:&mut Reader<'a>,engine:&mut 
   let previousScriptId = r.activeScriptId
   if previousScriptId == 0 { r.activeScriptId = unsafe runtime.allocateScriptId(realm.runtime()) }
   let flags=u64.toU16(run fixed(&mut r,&mut engine,realm,2))
-  if (flags&0xc000)!=0 || ((flags&8192)!=0 && (r.flags&LAZY)==0) { return run error(&mut engine,realm,b"invalid function flags") }
+  if (flags&0x8000)!=0 || ((flags&(8192|16384))!=0 && (r.flags&LAZY)==0) { return run error(&mut engine,realm,b"invalid function flags") }
+  // A known local function of the code-cache wire (trusted: its creations push
+  // the bytecode itself and its calls run it under the caller's scope).
+  let mut knownCall=KnownCall.none()
+  if (flags&16384)!=0 { knownCall.state=KNOWN_CALL }
   let stub=(flags&8192)!=0
   let previousScriptIsEval = r.activeScriptIsEval
   if previousScriptId == 0 { r.activeScriptIsEval = (flags & 2048) != 0 }
@@ -835,7 +839,7 @@ effect fn readFunction<'a,'r,'m,S:EngineServices>(r:&mut Reader<'a>,engine:&mut 
     argumentsAllowed:(flags&512)!=0,readOnlyBytecode:r.rom,isDirectOrIndirectEval:(flags&2048)!=0,
     code:ByteStorage.empty(),name:0,varDefs:BoxList<VarDef>.make(),
     closureVars:BoxList<ClosureVar>.make(),argumentCount:argc,variableCount:varc,
-    definedArgumentCount:defined,stackSize:stack,varRefCount:refs,scopeCaptures:0,scopeSlots:scopeSlots,scopeVarSlots:scopeVarSlots,frameCells:scopes.inlineFrameCells(varc,stack,refs,scopeSlots),scopeParameters:move scopeParameters,scopeVariables:move scopeVariables,borrowsArguments:false,leaf:0,constructForm:0,realm:context, known: KnownCall.none(),
+    definedArgumentCount:defined,stackSize:stack,varRefCount:refs,scopeCaptures:0,scopeSlots:scopeSlots,scopeVarSlots:scopeVarSlots,frameCells:scopes.inlineFrameCells(varc,stack,refs,scopeSlots),scopeParameters:move scopeParameters,scopeVariables:move scopeVariables,borrowsArguments:false,leaf:0,constructForm:0,realm:context, known: move knownCall,
     constants:BoxList<ValueBits>.make(),debug:Option<FunctionDebugInfo>.none(),pending:ThinBox<PendingFunction>.none()
   })
   unsafe HeapCell.retain(context) unsafe gc.publish(realm.runtime(),function)

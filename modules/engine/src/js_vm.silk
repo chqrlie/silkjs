@@ -2526,6 +2526,16 @@ unsafe effect fn nativeInline<H: HeapHooks + CoercionHooks + OwnPropertyHooks + 
       }
     }
   }
+  // native.call(thisArg, ...args), as in hasOwnProperty.call(object, key): the
+  // target is called itself, without Function.prototype.call's frame around it.
+  if count != 0 && opcode == op.OP_call_method && receiver.isObject() && unsafe classId(receiver) == classes.JS_CLASS_C_FUNCTION
+    && unsafe invoke.functionMethod(function) == invoke.CALL_METHOD {
+    let rest = FrameSlots { data: unsafe Pointer.atMut<ValueBits>(unsafe Pointer.assumeManyMut<ValueBits>(data), 1), count: count - 1 }
+    let answer = run unsafe callNativePlain(&mut hooks, memory, context, receiver, unsafe argv.get(0), &rest)
+    unsafe releaseOperandsFrom(&mut hooks, &mut machine, unsafe operandCell(data, extra))
+    unsafe machine.push(answer)
+    return true
+  }
   let result = run unsafe callNativePlain(&mut hooks, memory, context, function, receiver, &argv)
   unsafe releaseOperandsFrom(&mut hooks, &mut machine, unsafe operandCell(data, extra))
   unsafe machine.push(result)

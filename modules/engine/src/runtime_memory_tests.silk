@@ -663,3 +663,68 @@ test effect fn pooledBlocksAreReusedUnchargedAndReturnedWithTheLedger() -> ()
     "final release returns pooled blocks",
   )
 }
+
+test effect fn idleArenasAreReleasedAndTheirBlocksComeBackUsable() -> ()
+  ! OutOfMemoryError | AssertionError<'static> {
+  let mut system = Allocator.systemAllocatorProvider()
+  let observer = run makeObserver() |> Effect.provideMut<Allocator>(&mut system)
+  let mut allocator = run RuntimeAllocator.make(trackingChild(&observer))
+  allocator.enablePooling()
+  let stats = run allocator.observe()
+  run Testing.expect(stats.releaseIdle(0) == 0, "an empty pool has nothing to release")
+  // 10 MB of 256-byte blocks; every fourth stays live across the release.
+  let mut kept = List<Box<[u64; 32]>>.make()
+  let mut dropped = List<Box<[u64; 32]>>.make()
+  let mut index: usize = 0
+  while index < 40000 {
+    let block = run Box<[u64; 32]>.make([usize.toU64(index); 32]) |> Effect.provideMut<Allocator>(&mut allocator)
+    if index % 4 == 0 && index < 8000 { run kept.append(move block) |> Effect.provideMut<Allocator>(&mut system) }
+    else { run dropped.append(move block) |> Effect.provideMut<Allocator>(&mut system) }
+    index = index + 1
+  }
+  let issued = childStats(&observer).issued
+  let live = allocator.stats().usedBytes
+  drop dropped
+  let released = stats.releaseIdle(0)
+  static if Intrinsic.targetOperatingSystem() == "linux" {
+    run Testing.expect(released >= 4194304, "arenas left wholly idle give their pages back")
+    run Testing.expect(stats.releaseIdle(0) == 0, "a released arena is not released twice")
+  } else {
+    run Testing.expect(released == 0, "nothing is released where the system has no call for it")
+  }
+  run Testing.expect(childStats(&observer).returned == 0 && allocator.stats().usedBytes < live, "the arenas stay the pool's")
+  index = 0
+  let mut intact = true
+  while index < kept.length() {
+    let value = kept.asSlice()[index].get()[0]
+    if value[0] != usize.toU64(index * 4) || value[31] != usize.toU64(index * 4) { intact = false }
+    index = index + 1
+  }
+  run Testing.expect(intact, "live blocks beside released arenas keep their contents")
+  let mut again = List<Box<[u64; 32]>>.make()
+  index = 0
+  while index < 38000 {
+    let block = run Box<[u64; 32]>.make([usize.toU64(index) + 7; 32]) |> Effect.provideMut<Allocator>(&mut allocator)
+    run again.append(move block) |> Effect.provideMut<Allocator>(&mut system)
+    index = index + 1
+  }
+  run Testing.expect(childStats(&observer).issued == issued, "released blocks are reused before the child is asked again")
+  index = 0
+  while index < again.length() {
+    let value = again.asSlice()[index].get()[0]
+    if value[0] != usize.toU64(index) + 7 || value[31] != usize.toU64(index) + 7 { intact = false }
+    index = index + 1
+  }
+  index = 0
+  while index < kept.length() {
+    if kept.asSlice()[index].get()[0][5] != usize.toU64(index * 4) { intact = false }
+    index = index + 1
+  }
+  run Testing.expect(intact, "reused blocks hold what was written and disturb no live block")
+  drop again
+  drop kept
+  drop stats
+  drop allocator
+  let finished = childStats(&observer)
+  run Testing.expect(finished.returned == finished.issued && finished.liveBytes == 0, "final release returns the released arenas too")
+}

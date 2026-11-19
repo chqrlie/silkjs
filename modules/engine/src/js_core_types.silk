@@ -648,6 +648,20 @@ pub struct RuntimeState {
   /// The heap budget in allocator bytes (js_runtime.setHeapLimit, V8's max old
   /// space): collections run before usage reaches it. usize.MAX when unset.
   pub gcHeapLimit: usize,
+  /// Usage after the last full collection: how far the heap has grown without one.
+  pub gcFullBase: usize,
+  /// The allocator's idle pooled bytes at the last full collection: memory idle
+  /// at two in a row is released to the system (js_runtime.collectOverThreshold).
+  pub gcIdleBytes: usize,
+  /// A full collection is due and a probe is deciding whether it is worth running:
+  /// everything allocated before it is old, and the young collection at the next
+  /// threshold looks only at what was allocated since (js_runtime.collectOverThreshold).
+  pub gcProbing: bool,
+  /// Collections run so far, full and young, and the ticks (runtime_memory.ticks)
+  /// they took in all: what a host reports as its GC cost (js_runtime.gcCounts).
+  pub gcFullCount: u32,
+  pub gcYoungCount: u32,
+  pub gcTicks: usize,
   /// V8's --use-strict: every script and eval compiles as strict code (js_runtime.setUseStrict).
   pub useStrict: bool,
   /// V8's --allow-natives-syntax: %Name(...) calls parse (js_parser_expressions.parseNativeCall).
@@ -1136,8 +1150,8 @@ pub struct ConstructRecipe {
   pub stores: u8,
   pub nodes: [u32; 32],
   pub constants: [ValueBits; 16],
-  pub roots: [u8; 16],
-  pub atoms: [u32; 16],
+  pub roots: [u8; 32],
+  pub atoms: [u32; 32],
   /// For a class constructor, the closure reference holding its class's field
   /// initializer: undefined when the class has no instance fields, else a
   /// constant-only initializer (js_class_fields) whose fields go first. 255: none.
@@ -1168,7 +1182,7 @@ pub struct ConstructCacheEntry {
 impl Copy for ConstructCacheEntry {}
 pub fn blankRecipe() -> ConstructRecipe {
   return ConstructRecipe { nodeCount: 0, stores: 0, nodes: [0; 32],
-    constants: [ValueBits.Undefined; 16], roots: [0; 16], atoms: [0; 16], fieldsReference: 255 }
+    constants: [ValueBits.Undefined; 16], roots: [0; 32], atoms: [0; 32], fieldsReference: 255 }
 }
 pub fn blankConstructEntry() -> ConstructCacheEntry {
   return ConstructCacheEntry { code: 0, recipe: blankRecipe(), base: 0, baseVersion: 0, final: Pointer.null<HeapHeader>(), chain: [0; 3], depth: 0, epoch: 0, fieldCount: 0, fieldAtoms: [0; 8] }
@@ -1653,6 +1667,11 @@ pub struct ShapeData {
   /// On a prototype's empty shape: the largest slot capacity an object built from
   /// it grew to (js_shapes.growForTransition), up to SLOT_HINT_LIMIT.
   pub slotHint: u8,
+  /// On a prototype's empty shape: the most slots an object a constructor built
+  /// from it returned with (js_shapes.constructChain), when that is past
+  /// INLINE_SLOTS and at most BUILT_SLOTS_LIMIT; 0 when none did. Later objects
+  /// start with a tail of exactly that many slots in their cell.
+  pub builtSlots: u8,
   /// Made by an add under a computed key (obj[name] = v, js_shapes.addKeyedProperty):
   /// a dictionary-like object's shape, which later keyed adds extend in place
   /// while the object owns it alone, rather than copying it per key.

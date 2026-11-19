@@ -21,6 +21,11 @@ import qjs
 import qjs_memory { TraceAllocator }
 import qjs_stats
 import qjs_benchmark
+import silk.core.option { Option }
+import silk.collections.list { List }
+import cli_options { ArgRef }
+import js_libc_platform as platform
+import js_libc_platform { PlatformError }
 
 pub effect fn runInterpreter(arguments: &Arguments, options: &QjsOptions) -> i32
   ! OutOfMemoryError | SynchronizationError ? &mut Allocator {
@@ -29,6 +34,16 @@ pub effect fn runInterpreter(arguments: &Arguments, options: &QjsOptions) -> i32
   let mut process = run Process.make(&namespace)
   if options.codeCache { process.codeCache = run CodeCache.enabled(code_cache.DEFAULT_BUDGET) }
   let domain = run WaiterDomain.make()
+  // An --image file's bytes: function bodies stay in them, so they outlive the runtime.
+  let mut imageBytes = List<u8>.make()
+  if let Option<ArgRef>.Some { value: named } = &options.image {
+    let loaded = run Effect.result(platform.readFile(arguments.resolve(named)))
+    match move loaded {
+      Result<List<u8>, OutOfMemoryError | PlatformError>.Success { value } => { imageBytes = move value }
+      Result<List<u8>, OutOfMemoryError | PlatformError>.Failure { .. } => { cli_io.stderr(b"qjs: cannot read the image\n") return 2 }
+    }
+    if imageBytes.length() == 0 { cli_io.stderr(b"qjs: the image is empty\n") return 2 }
+  }
   let mut allocator = run RuntimeAllocator.make(TraceAllocator.make(options.traceMemory != 0))
   // Tracing reports every child allocation, so only pool when it is off.
   if options.traceMemory == 0 { allocator.enablePooling() }
@@ -57,7 +72,7 @@ pub effect fn runInterpreter(arguments: &Arguments, options: &QjsOptions) -> i32
       cli_io.stderr(b"qjs: cannot allocate JS context\n") return 2
     }
   }
-  let evaluated = run Effect.result(unsafe qjs.execute(&mut session, arguments, options)) |> Effect.provideMut<Allocator>(&mut allocator)
+  let evaluated = run Effect.result(unsafe qjs.execute(&mut session, arguments, options, imageBytes.asSlice())) |> Effect.provideMut<Allocator>(&mut allocator)
   let mut status: i32 = 1
   match move evaluated {
     Result<i32, OutOfMemoryError | JsException>.Success { value } => { status = value }
@@ -68,6 +83,7 @@ pub effect fn runInterpreter(arguments: &Arguments, options: &QjsOptions) -> i32
   if status == 0 && options.dumpMemory != 0 { unsafe qjs_stats.dump(session.runtime, &memory) }
   run unsafe session.close() |> Effect.provideMut<Allocator>(&mut allocator)
   drop session
+  drop imageBytes
   if status == 0 && options.emptyRun != 0 && options.dumpMemory != 0 {
     let measured = run Effect.result(unsafe qjs_benchmark.runBenchmark(domain.handle(), &process))
     match move measured {
