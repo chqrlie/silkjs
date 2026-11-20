@@ -7,7 +7,7 @@ exports = [
   "js_engine", "js_engine_host", "js_engine_no_host",
   "runtime_memory", "native_stack", "thin_list", "js_heap", "js_value", "js_owned_value", "js_core_types",
   "js_realm", "js_object_ref",
-  "js_runtime", "js_runtime_registry", "js_runtime_classes", "js_gc", "qjs_stats",
+  "js_runtime", "js_runtime_registry", "js_runtime_classes", "js_gc", "qjs_stats", "js_census",
   "js_intrinsic_basic", "js_intrinsic_install", "js_intrinsic_install_families",
   "js_intl", "js_intl_durationformat", "js_temporal",
 

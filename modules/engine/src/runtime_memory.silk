@@ -133,7 +133,11 @@ struct Pool {
   largeCounts: [usize; 20],
   // Arenas releaseIdle retired on Darwin (see retireIdleArenas): how many bits are
   // set in the groups' ArenaHeader.retired. takeArena hands these out first.
-  retiredCount: usize
+  retiredCount: usize,
+  // For the bench census (poolCensus): every block handed out since the ledger was
+  // made and the bytes charged for them. Only the allocating thread writes these.
+  censusAllocations: usize,
+  censusBytes: usize
 }
 
 // The first record of every arena. Every block in the arena belongs to ledger and
@@ -706,6 +710,55 @@ impl AllocationObserver {
   /// the per-allocation GC threshold check, which tolerates a stale total.
   @inlineAlways
   pub fn usedBytes(self: &Self) -> usize { return unsafe ledgerUsed(self.ledger) }
+
+  /// See PoolCensus. Call it from the allocating thread.
+  pub fn poolCensus(self: &Self) -> PoolCensus {
+    let mut result = PoolCensus { groups: 0, arenas: 0, carvedBytes: 0, idleBlocks: 0, idleBytes: 0, largeCount: 0, largeBytes: 0, largeIdle: 0,
+      allocations: 0, allocatedBytes: 0, carved: [0; 64], idle: [0; 64] }
+    let ledger = self.ledger
+    unsafe lockLedger(ledger)
+    let anchor = ()
+    let state = unsafe Pointer.borrow(&anchor, ledger.allocation)
+    let mut group = state.pool.arenas
+    while !Pointer.isNull(group) {
+      result.groups = result.groups + 1
+      group = (unsafe Pointer.borrow(&anchor, unsafe Intrinsic.pointerRequalify<?*mut ArenaHeader, *mut ArenaHeader>(group))).next
+    }
+    let mut nextArena = state.firstPooledArena
+    while !Pointer.isNull(nextArena) {
+      let arena = unsafe Pointer.borrow(&anchor, unsafe Intrinsic.pointerRequalify<?*mut ArenaHeader, *mut ArenaHeader>(nextArena))
+      result.arenas = result.arenas + 1
+      if arena.class < 64 {
+        result.carved[arena.class] = result.carved[arena.class] + arena.carved
+        result.carvedBytes = result.carvedBytes + arena.carved * classBytes(arena.class)
+      }
+      nextArena = arena.nextLive
+    }
+    let mut class: usize = 0
+    while class < 64 {
+      let idle = state.pool.counts[class] + state.pool.ownerCounts[class] + state.pool.spillCounts[class]
+      result.idle[class] = idle
+      result.idleBlocks = result.idleBlocks + idle
+      result.idleBytes = result.idleBytes + idle * classBytes(class)
+      class = class + 1
+    }
+    let mut next = state.firstAllocation
+    while !Pointer.isNull(next) {
+      let node = unsafe Pointer.borrow(&anchor, unsafe Intrinsic.pointerRequalify<?*mut AllocationHeader, *mut AllocationHeader>(next))
+      result.largeCount = result.largeCount + 1
+      result.largeBytes = result.largeBytes + node.block.chargedBytes
+      next = node.next
+    }
+    let mut bucket: usize = 0
+    while bucket < 20 {
+      result.largeIdle = result.largeIdle + state.pool.largeCounts[bucket]
+      bucket = bucket + 1
+    }
+    result.allocations = state.pool.censusAllocations
+    result.allocatedBytes = state.pool.censusBytes
+    drop state unsafe unlockLedger(ledger)
+    return move result
+  }
 }
 
 @inlineAlways
@@ -732,6 +785,29 @@ fn ledgerStats(ledger: LedgerPointers) -> RuntimeMemoryStats {
     if state.peakBytes < totals.peak { state.peakBytes = totals.peak }
     return state
   }
+}
+
+// Counts one block handed out outside takeOwned, for the bench census.
+@inlineAlways
+unsafe fn censusCharge(ledger: LedgerPointers, bytes: usize) -> () {
+  let mut anchor = ()
+  let pool = unsafe Pointer.borrowMut<(), Pool>(&mut anchor, unsafe poolOf(ledger))
+  pool.censusAllocations = usize.wrappingAdd(pool.censusAllocations, 1)
+  pool.censusBytes = usize.wrappingAdd(pool.censusBytes, bytes)
+}
+
+/// What the allocator holds, for the bench census (AllocationObserver.poolCensus):
+/// `groups` child allocations of 128 arenas each (2 MB of payload reserved, touched a
+/// page at a time), `arenas` of them in use, `carvedBytes` the blocks carved from those
+/// (what was ever touched), `idleBlocks` and `idleBytes` the carved blocks no one holds,
+/// `largeCount` and `largeBytes` the unpooled allocations, `largeIdle` those cached for
+/// reuse; `allocations` and `allocatedBytes` count every block handed out since the start.
+/// `carved` and `idle` are blocks by 16-byte class.
+pub struct PoolCensus {
+  pub groups: usize, pub arenas: usize, pub carvedBytes: usize, pub idleBlocks: usize, pub idleBytes: usize,
+  pub largeCount: usize, pub largeBytes: usize, pub largeIdle: usize,
+  pub allocations: usize, pub allocatedBytes: usize,
+  pub carved: [usize; 64], pub idle: [usize; 64]
 }
 
 struct OwnerTotals { used: usize, allocations: usize, peak: usize }
@@ -769,7 +845,7 @@ impl<A> RuntimeAllocator<A> {
         fresh: [Pointer.null<u8>(); 64], freshBytes: [0; 64],
         ownerActive: false, ownerThread: 0, ownerHeads: [Pointer.null<u8>(); 64], ownerCounts: [0; 64], ownerUsed: 0, ownerAllocations: 0, ownerPeak: 0,
         spillHeaps: [Pointer.null<ArenaHeader>(); 64], spillCounts: [0; 64],
-        largeHeads: [Pointer.null<AllocationHeader>(); 20], largeCounts: [0; 20], retiredCount: 0 }
+        largeHeads: [Pointer.null<AllocationHeader>(); 20], largeCounts: [0; 20], retiredCount: 0, censusAllocations: 0, censusBytes: 0 }
     })
     let mut anchor = ()
     let fresh = unsafe Pointer.borrowMut(&mut anchor, address)
@@ -1334,6 +1410,7 @@ unsafe fn chargePlaced(ledger: LedgerPointers, block: *mut u8, blockBytes: usize
     let references = Atomic.load<usize>(ledger.references, MemoryOrder.Relaxed)
     if references == usize.MAX { Intrinsic.trap("allocation ledger reference count overflow") }
     Atomic.store<usize>(ledger.references, references + 1, MemoryOrder.Relaxed)
+    censusCharge(ledger, blockBytes)
     let mut stats = Pointer.read<RuntimeMemoryStats>(ledger.stats)
     stats.usedBytes = stats.usedBytes + blockBytes
     stats.allocationCount = stats.allocationCount + 1
@@ -1518,6 +1595,7 @@ effect fn allocateUnpooled<A>(self: &mut RuntimeAllocator<A>, layout: Layout, ze
     })
     // Checked above; only reclaims ran meanwhile, and they lower the count.
     if !retainGated(ledger) { Intrinsic.trap("allocation ledger reference count overflow") }
+    censusCharge(ledger, chargedBytes)
     let mut state = Pointer.read<RuntimeMemoryStats>(ledger.stats)
     state.usedBytes = state.usedBytes + chargedBytes
     state.allocationCount = state.allocationCount + 1
@@ -1658,6 +1736,8 @@ unsafe fn takeOwned(ledger: LedgerPointers, class: usize) -> ?*mut u8 {
   unsafe prefetch(Pointer.address<u8>(unsafe Intrinsic.pointerRequalify<?*mut u8, *mut u8>(skip)))
   pool.ownerCounts[class] = usize.wrappingSubtract(pool.ownerCounts[class], 1)
   let used = usize.wrappingAdd(pool.ownerUsed, classBytes(class))
+  pool.censusAllocations = usize.wrappingAdd(pool.censusAllocations, 1)
+  pool.censusBytes = usize.wrappingAdd(pool.censusBytes, classBytes(class))
   unsafe Atomic.store<usize>(Pointer.fromMutRef<usize>(&mut pool.ownerUsed), used, MemoryOrder.Relaxed)
   unsafe Atomic.store<usize>(Pointer.fromMutRef<usize>(&mut pool.ownerAllocations), usize.wrappingAdd(pool.ownerAllocations, 1), MemoryOrder.Relaxed)
   // Other threads' reclaims only lower the shared usage, so this read can only
@@ -2024,6 +2104,7 @@ unsafe fn adoptLarge(ledger: LedgerPointers, owner: *mut AllocationHeader, layou
     header.room = [0; 2]
     drop header
     if !retainGated(ledger) { Intrinsic.trap("allocation ledger reference count overflow") }
+    censusCharge(ledger, chargedBytes)
     let mut state = Pointer.read<RuntimeMemoryStats>(ledger.stats)
     state.usedBytes = state.usedBytes + chargedBytes
     state.allocationCount = state.allocationCount + 1

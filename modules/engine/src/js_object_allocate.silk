@@ -14,6 +14,7 @@ import silk.num.u32
 import silk.num.usize
 import runtime_memory { AllocationObserver }
 import runtime_memory as memory
+import js_core_types as census
 import js_heap { HeapCell, HeapHeader, HeapKind }
 import js_value { ValueBits }
 import js_owned_value { Value, ValueRef }
@@ -343,6 +344,7 @@ unsafe effect fn freshNode<'a, H: HeapHooks>(hooks: &mut H, memory: &AllocationO
 unsafe effect fn freshNodeWith<'a, H: HeapHooks>(hooks: &mut H, observer: &AllocationObserver, realm: Realm<'a>, ownedShape: *mut HeapHeader, classId: u32,
   exotic: bool, fast: bool, extra: usize, plan: ?*mut HeapHeader, sized: bool, written: usize, exact: bool) -> ValueBits ! OutOfMemoryError ? &mut Allocator {
   let runtime = realm.runtime()
+  unsafe census.censusBump(runtime, census.CENSUS_OBJECTS_ALLOCATED, 1)
   let created = run Intrinsic.catchFailure<OutOfMemoryError>(unsafe prepareNode(&mut hooks, observer, runtime, ownedShape, extra, plan, classId == classes.JS_CLASS_OBJECT, classId == classes.JS_CLASS_BYTECODE_FUNCTION, written, exact), failedOom)
   let fresh = match move created {
     PreparedNode { node, slots } => unsafe placeSlots(node, move slots)

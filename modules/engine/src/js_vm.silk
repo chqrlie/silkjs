@@ -16,6 +16,7 @@ import silk.num.usize
 import silk.num.u64
 import runtime_memory { AllocationObserver }
 import native_stack { currentFrameAddress }
+import js_core_types as census
 import js_heap { HeapCell, HeapHeader }
 import js_strings { Strings }
 import js_atoms { AtomTable }
@@ -3455,6 +3456,7 @@ unsafe effect fn callInline<H: HeapHooks + CoercionHooks + OwnPropertyHooks + Ge
   + PropertyWriteHooks + PrototypeHooks + InterruptHooks + NativeFunctionHooks + CallHooks + ErrorHooks + EvalHooks>(hooks: &mut H,
   memory: &AllocationObserver, machine: &mut Machine, opcode: u8) -> *mut Machine ! JsException ? &mut Allocator {
   let count = unsafe callCount(&machine, opcode)
+  unsafe census.censusBump(machine.runtime, census.CENSUS_CALLS, 1)
   let mut width: usize = 0
   if opcode == op.OP_call || opcode == op.OP_call_method { width = 2 }
   let function = unsafe machine.top(count + 1)

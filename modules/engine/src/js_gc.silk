@@ -24,6 +24,7 @@ import silk.num.u32
 import silk.num.u64
 import silk.num.i32
 import silk.num.usize
+import js_core_types as census
 import js_heap { HeapCell, HeapHeader, HeapKind, CellRef, CellLinks }
 import js_value { ValueBits }
 import js_owned_value { Value, ValueRef }
@@ -1617,6 +1618,7 @@ unsafe effect fn collectCells<H: HeapHooks>(hooks: &mut H, runtime: *mut HeapHea
   // event bit 0: 0 start, 1 end; bit 1: a young-generation collection.
   let generation: u32 = if young { 2 } else { 0 }
   let started = unsafe memory.ticks()
+  unsafe census.censusBump(runtime, if young { census.CENSUS_GC_YOUNG } else { census.CENSUS_GC_FULL }, 1)
   unsafe HeapHooks.gcLifecycle(&mut hooks, runtime, generation)
   if removeWeakObjects { run unsafe sweepWeak(&mut hooks, runtime) }
   let mut stack = RestoreStack { cells: [Pointer.null<HeapHeader>(); 1024], depth: 0, overflowed: false }
@@ -1773,6 +1775,7 @@ unsafe fn ageYoung(runtime: *mut HeapHeader) -> () {
 @inlineNever
 unsafe fn decrementPass<H: HeapHooks>(hooks: &mut H, runtime: *mut HeapHeader, tracer: &mut Tracer) -> () {
   let young = tracer.young
+  let mut traced: usize = 0
   let mut cursor = unsafe passArena(runtime, young)
   while !Pointer.isNull<u8>(cursor) {
     let arena = unsafe present(cursor)
@@ -1785,6 +1788,7 @@ unsafe fn decrementPass<H: HeapHooks>(hooks: &mut H, runtime: *mut HeapHeader, t
         if bits != 0 { unsafe prefetchCell(unsafe cellIn(arena, word, u64.trailingZeros(bits))) }
         unsafe traceAs(&mut hooks, node, &mut tracer, MarkOperation.Decrement)
         unsafe markMember(node, young)
+        traced = traced + 1
       }
       word = word + 1
     }
@@ -1797,8 +1801,10 @@ unsafe fn decrementPass<H: HeapHooks>(hooks: &mut H, runtime: *mut HeapHeader, t
     if unsafe inPass(node, young) {
       unsafe traceDecrement(&mut hooks, node, &mut tracer)
       unsafe markMember(node, young)
+      traced = traced + 1
     }
   }
+  unsafe census.censusBump(runtime, census.CENSUS_GC_TRACED, traced)
 }
 /// Restores the children of node, found reachable (mark 0), then of every cell
 /// that makes reachable in turn.
