@@ -2,7 +2,7 @@
 name = "silkjs-runtime-smoke"
 description = "The embedding smoke test without WebAssembly: a program of the runtime's core alone"
 version = "0.1.0"
-silk-version = "0.1.0-dev.88+17d1a1b4d501"
+silk-version = "0.1.0-dev.90+43166993a300"
 
 [dependencies]
 silkjs = { path = "../../engine", package = "silkjs-engine" }
