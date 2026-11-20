@@ -30,6 +30,7 @@ import silk.num.u64
 import silk.num.i32
 import silk.num.usize
 import js_core_types { GcPhase, ObjectData, PropertySlot, SlotBits, RuntimeState, ShapeData, ShapeProperty, TransitionEntry, TransitionChain, BLANK_TRANSITION_CHAIN, EmptyShapeEntry, CHAIN_UNVERIFIED, JS_PROP_C_W_E, JS_PROP_INITIAL_SIZE, JS_PROP_INITIAL_HASH_SIZE, JS_PROP_TMASK, JS_PROP_GETSET, JS_PROP_ENUMERABLE }
+import js_core_types as census
 import js_heap { HeapCell, HeapHeader, HeapKind, CellLinks }
 import js_value { ValueBits }
 
@@ -377,6 +378,7 @@ unsafe fn unlink(runtime: *mut HeapHeader, shape: *mut HeapHeader) -> () {
 unsafe effect fn allocateShape(runtime: *mut HeapHeader, hashSize: usize, capacity: usize, hash: u32, deletedPropertyCount: usize,
   prototype: ?*mut HeapHeader) -> *mut HeapHeader ! OutOfMemoryError ? &mut Allocator {
   let recordBytes = capacity * Layout.of<ShapeProperty>().bytes
+  unsafe census.censusBump(runtime, census.CENSUS_SHAPES_ALLOCATED, 1)
   let shape = run HeapCell.allocateUninitWithTail<ShapeData>(HeapKind.Shape, recordBytes + hashSize * Layout.of<u32>().bytes)
   let tail = unsafe HeapCell.tailAddress<ShapeData>(shape)
   let properties = unsafe ThinList<ShapeProperty>.borrowing(unsafe Intrinsic.pointerReinterpret<*mut u8, *mut ShapeProperty>(tail), capacity)
@@ -1299,8 +1301,12 @@ unsafe fn remember(runtime: *mut HeapHeader, set: usize, entry: TransitionEntry)
 pub unsafe effect fn addProperty(runtime: *mut HeapHeader, object: &mut ObjectData,
   atom: u32, flags: u8) -> AddResult ! OutOfMemoryError ? &mut Allocator {
   let old = object.shape
+  unsafe census.censusBump(runtime, census.CENSUS_PROPERTY_ADDS, 1)
   let transition = unsafe memoTransition(runtime, old, atom, flags)
-  if Pointer.isNull<HeapHeader>(transition) { return run unsafe addUntransitioned(runtime, &mut object, atom, flags) }
+  if Pointer.isNull<HeapHeader>(transition) {
+    unsafe census.censusBump(runtime, census.CENSUS_PROPERTY_ADDS_UNMEMOIZED, 1)
+    return run unsafe addUntransitioned(runtime, &mut object, atom, flags)
+  }
   // The memoized transition is the common case; growth and new shapes stay out of
   // line so this path keeps a small frame.
   let anchor = ()

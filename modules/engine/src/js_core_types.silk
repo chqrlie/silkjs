@@ -924,7 +924,31 @@ pub struct RuntimeState {
   pub reactionResolve: ValueBits,
   /// A for-in iterator object kept for reuse (js_for_in.build), owning one
   /// count, or Undefined. While that count is its only one, no loop uses it.
-  pub parkedForIn: ValueBits
+  pub parkedForIn: ValueBits,
+  /// Counts of work since the runtime was made, for the bench census (censusBump,
+  /// js_census): the CENSUS_* constants index it. The runtime starts zeroed.
+  pub census: [usize; 16]
+}
+pub const CENSUS_GC_FULL: usize = 0
+pub const CENSUS_GC_YOUNG: usize = 1
+/// Cells the collections' first pass visited.
+pub const CENSUS_GC_TRACED: usize = 2
+/// Calls the dispatch loop made (call, call_method and the like).
+pub const CENSUS_CALLS: usize = 3
+/// get_field instructions that asked their site cache, and those whose inline key missed.
+pub const CENSUS_FIELD_GETS: usize = 4
+pub const CENSUS_FIELD_REFILLS: usize = 5
+/// Properties added to objects, and those the transition memo did not answer.
+pub const CENSUS_PROPERTY_ADDS: usize = 6
+pub const CENSUS_PROPERTY_ADDS_UNMEMOIZED: usize = 7
+pub const CENSUS_SHAPES_ALLOCATED: usize = 8
+pub const CENSUS_OBJECTS_ALLOCATED: usize = 9
+/// Adds `by` to one of RuntimeState.census.
+@inlineAlways
+pub unsafe fn censusBump(runtime: *mut HeapHeader, index: usize, by: usize) -> () {
+  let mut anchor = ()
+  let state = unsafe HeapCell.payloadMut<RuntimeState, ()>(&mut anchor, runtime)
+  state.census[index] = usize.wrappingAdd(state.census[index], by)
 }
 
 /// One get_field site cache entry: site is the bytecode address of the

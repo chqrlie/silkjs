@@ -7,6 +7,12 @@ the release link place these functions first, so creating and tearing down a
 runtime touches a few contiguous code pages instead of windows spread across
 the whole text segment.
 
+Since Silk 0.1.0-dev.88 a release binary names each function by its declaration
+(`package:file.silk::Owner.name`) rather than by a hash, and the order lists
+declarations as the third column of the binary's .symbols file spells them
+(`package@version:file.silk::Owner.name`), so the order holds across compiler
+and dependency changes. C exports keep their own names.
+
 Usage: python3 scripts/function_order.py [BINARY]
 """
 import os
@@ -25,6 +31,16 @@ HEADER = """# Functions the CLI runs to create a runtime and realm and tear them
 def main():
     binary = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, 'build', 'silkjs-engine')
     binary = os.path.abspath(binary)
+    declarations = {}
+    known = set()
+    with open(os.path.splitext(binary)[0] + '.symbols') as symbols:
+        for row in symbols:
+            columns = row.rstrip('\n').split('\t')
+            if len(columns) >= 3:
+                known.add(columns[2] if '::' in columns[2] else columns[0])
+            if len(columns) >= 3 and '::' in columns[2]:
+                package, _, rest = columns[2].partition(':')
+                declarations[package.split('@')[0] + ':' + rest] = columns[2]
     with tempfile.TemporaryDirectory() as scratch:
         script = os.path.join(scratch, 'empty.js')
         profile = os.path.join(scratch, 'callgrind.out')
@@ -37,9 +53,16 @@ def main():
     for line in report.splitlines():
         if not line.rstrip().endswith('[' + binary + ']'):
             continue
-        match = re.search(r'\?\?\?:([A-Za-z_0-9.]+)', line)
-        if match and match.group(1) not in names:
-            names.append(match.group(1))
+        match = re.search(r'\?\?\?:(\S+) \[', line)
+        if not match:
+            continue
+        # A second function of one declaration (an instance, or a copy the compiler made) is
+        # named `declaration'2` and is ordered with its declaration. Names the .symbols file
+        # does not list (addresses, runtime helpers) cannot be ordered.
+        name = re.sub(r"'\d+$", '', match.group(1))
+        name = declarations.get(name, name)
+        if name in known and name not in names:
+            names.append(name)
     with open(os.path.join(ROOT, 'startup.order'), 'w') as out:
         out.write(HEADER)
         out.write(''.join(name + '\n' for name in names))

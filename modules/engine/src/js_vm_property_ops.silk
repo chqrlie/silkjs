@@ -15,6 +15,7 @@ import silk.num.usize
 import silk.num.u64
 import runtime_memory { AllocationObserver }
 import js_vm_state { Machine }
+import js_core_types as census
 import js_heap { HeapCell, HeapHeader }
 import js_value { ValueBits }
 import js_owned_value { lendBits, lendFor, Value }
@@ -326,6 +327,7 @@ unsafe fn readFieldCachedAs(machine: &Machine, object: *mut HeapHeader, target: 
 /// readFieldCachedAs for the get_field whose atom operand is at ip, in runtime.
 @inlineAlways
 pub unsafe fn readFieldCachedAt(runtime: *mut HeapHeader, ip: *const u8, object: *mut HeapHeader, target: *mut ValueBits, retain: bool) -> bool {
+  unsafe census.censusBump(runtime, census.CENSUS_FIELD_GETS, 1)
   let anchor = () let data = unsafe HeapCell.payload<ObjectData, ()>(&anchor, object)
   let shape = unsafe HeapCell.payload<ShapeData, ()>(&anchor, data.shape)
   let state = unsafe HeapCell.payload<RuntimeState, ()>(&anchor, runtime)
@@ -431,6 +433,7 @@ pub unsafe fn readFieldKeyedAt(runtime: *mut HeapHeader, ip: *const u8, object: 
 /// site's inline key, and anything else goes to the site cache's own miss.
 @inlineNever
 unsafe fn refillFieldKey(runtime: *mut HeapHeader, ip: *const u8, object: *mut HeapHeader, target: *mut ValueBits, retain: bool) -> bool {
+  unsafe census.censusBump(runtime, census.CENSUS_FIELD_REFILLS, 1)
   let anchor = () let data = unsafe HeapCell.payload<ObjectData, ()>(&anchor, object)
   let shape = unsafe HeapCell.payload<ShapeData, ()>(&anchor, data.shape)
   let site = Pointer.address<u8>(ip)
