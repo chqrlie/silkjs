@@ -13,6 +13,7 @@ import silk.core.option { Option }
 import silk.mem.pointer { Pointer }
 import silk.core.ownership { Copy }
 import silk.collections.slice { Slice }
+import silk.collections.list { List }
 import silk.num.u32
 import silk.num.u16
 import silk.num.i32
@@ -682,6 +683,61 @@ pub unsafe fn deferredStub(node: *mut HeapHeader) -> bool {
 pub unsafe fn lazyStub(node: *mut HeapHeader) -> bool {
   let anchor = () let b = unsafe HeapCell.payload<FunctionBytecode, ()>(&anchor, node)
   return b.pending.isSome() && b.pending.get().lazy.isSome()
+}
+
+/// Whether node is a stub of defer that waits for finish: it keeps its whole definition
+/// (a FunctionDef and its unresolved code) until a first call.
+unsafe fn waitingStub(node: *mut HeapHeader) -> bool {
+  let anchor = () let b = unsafe HeapCell.payload<FunctionBytecode, ()>(&anchor, node)
+  if b.pending.isNone() { return false }
+  let pending = b.pending.get()
+  return pending.lazy.isNone() && pending.deferred.isNone()
+}
+
+/// Appends to out every stub of defer in runtime whose first call has not come, each with
+/// a reference of its own: what finishWaiting takes. A function a program never calls keeps
+/// its definition for good otherwise, some 1.5 KB and its unresolved code against the few
+/// hundred bytes of its finished form; a large bundle has tens of thousands. A host calls
+/// this when its application is idle, outside a collection and outside any compile.
+pub unsafe effect fn waitingStubs(runtime: *mut HeapHeader, out: &mut List<*mut HeapHeader>) -> () ! OutOfMemoryError ? &mut Allocator {
+  let anchor = ()
+  let mut walk = unsafe js_gc.walkCells(runtime)
+  while true {
+    let cursor = unsafe js_gc.nextCell(&mut walk)
+    if Pointer.isNull<HeapHeader>(cursor) { break }
+    let node = unsafe Intrinsic.pointerRequalify<?*mut HeapHeader, *mut HeapHeader>(cursor)
+    let head = unsafe Pointer.borrow<(), HeapHeader>(&anchor, node)
+    let wanted = head.kind == HeapKind.FunctionBytecode && head.referenceCount > 0
+    drop head
+    if !wanted || !unsafe waitingStub(node) { continue }
+    run out.append(node)
+    unsafe HeapCell.retain(node)
+  }
+}
+
+/// Finishes up to count of the stubs waitingStubs listed, from the end of stubs, giving
+/// back the list's reference to each, and returns how many it took. One a call finished
+/// in the meantime costs nothing; one that fails to finish stays a stub, as after a
+/// failed first call. The same conditions as waitingStubs.
+pub unsafe effect fn finishWaiting<H: HeapHooks>(hooks: &mut H, runtime: *mut HeapHeader, stubs: &mut List<*mut HeapHeader>, count: usize) -> usize ? &mut Allocator {
+  let mut taken: usize = 0
+  while taken < count {
+    let node = match stubs.pop() { Option<*mut HeapHeader>.Some { value } => value _ => { break } }
+    taken = taken + 1
+    let finished = run Effect.result(unsafe finish(&mut hooks, node))
+    drop finished
+    unsafe js_gc.releaseHeader(&mut hooks, runtime, node)
+  }
+  return taken
+}
+
+/// Gives back the references of the stubs still listed, unfinished: what a host does with
+/// a list it will not finish, before the runtime goes.
+pub unsafe fn forgetWaiting<H: HeapHooks>(hooks: &mut H, runtime: *mut HeapHeader, stubs: &mut List<*mut HeapHeader>) -> () {
+  while true {
+    let node = match stubs.pop() { Option<*mut HeapHeader>.Some { value } => value _ => { break } }
+    unsafe js_gc.releaseHeader(&mut hooks, runtime, node)
+  }
 }
 
 /// createFunction for finishLazy: compiles cell, never deferred, into the stub
