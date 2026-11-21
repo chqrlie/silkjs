@@ -17,7 +17,7 @@ import js_intrinsic_install as intrinsics
 import native_stack as stack
 import js_eval as eval
 import js_eval_compile as flags
-import js_compiler_finish as compilerFinish
+import js_eval_compile as compilerFinish
 import js_debugger_execution_consumer { Services }
 
 // A host finishes, while idle, the functions whose compile waits for a first call
