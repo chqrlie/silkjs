@@ -101,4 +101,7 @@ unsafe effect fn exercise<'m>(engine: &mut Engine<'m, Services>, context: *mut H
   run Testing.expect(row(&rows, "js.large.up-to-4-kb") + row(&rows, "js.large.up-to-16-kb") + row(&rows, "js.large.up-to-64-kb")
     + row(&rows, "js.large.up-to-256-kb") + row(&rows, "js.large.up-to-1-mb") + row(&rows, "js.large.over-1-mb") == row(&rows, "js.large-allocations"),
     "the size buckets add up to the large allocations")
+  run Testing.expect(row(&rows, "js.large.largest-01") >= row(&rows, "js.large.largest-02") && row(&rows, "js.large.largest-02") > 0,
+    "the largest large allocations come largest first")
+  run Testing.expect(row(&rows, "js.runtime.shape-hash") > 0, "the census counts the runtime's shape hash")
 }

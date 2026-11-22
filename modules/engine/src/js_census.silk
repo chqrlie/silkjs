@@ -24,8 +24,8 @@ import js_class_data as classes
 import runtime_memory { AllocationObserver }
 import js_gc as gc
 import js_buffer_storage as buffers
-import js_string_types { FlatString, RopeString }
-import js_core_types { PropertySlot, VarRefState, scopeSlot, ObjectPayloadFamily }
+import js_string_types { FlatString, RopeString, StringOwner }
+import js_core_types { PropertySlot, VarRefState, scopeSlot, ObjectPayloadFamily, NameSlot, ClassDef }
 
 /// A container: `entries` in use, room for `capacity`, `each` bytes an entry.
 pub const HELD: usize = 0
@@ -493,6 +493,23 @@ pub unsafe effect fn collect(rt: *mut HeapHeader, memory: &AllocationObserver, o
   let sizeNames: [string<'static>; 6] = ["js.large.up-to-4-kb", "js.large.up-to-16-kb", "js.large.up-to-64-kb", "js.large.up-to-256-kb", "js.large.up-to-1-mb", "js.large.over-1-mb"]
   let mut size: usize = 0
   while size < 6 { run out.held(sizeNames[size], pool.largeSizes[size], pool.largeSizes[size], if pool.largeSizes[size] != 0 { pool.largeSizeBytes[size] / pool.largeSizes[size] } else { 0 }) size = size + 1 }
+  let largestNames: [string<'static>; 16] = ["js.large.largest-01", "js.large.largest-02", "js.large.largest-03", "js.large.largest-04",
+    "js.large.largest-05", "js.large.largest-06", "js.large.largest-07", "js.large.largest-08", "js.large.largest-09", "js.large.largest-10",
+    "js.large.largest-11", "js.large.largest-12", "js.large.largest-13", "js.large.largest-14", "js.large.largest-15", "js.large.largest-16"]
+  size = 0
+  while size < 16 { run out.bytes(largestNames[size], pool.largest[size], pool.largest[size]) size = size + 1 }
+  // The runtime's own tables, by the bytes they reserve: which of the largest blocks they are.
+  run out.bytes("js.runtime.shape-hash", state.shapeHash.capacity() * Layout.of<?*mut HeapHeader>().bytes, state.shapeHash.capacity() * Layout.of<?*mut HeapHeader>().bytes)
+  run out.bytes("js.runtime.deferred-atoms", state.deferredAtoms.capacity() * 4, state.deferredAtoms.capacity() * 4)
+  run out.bytes("js.runtime.deferred-texts", state.deferredTexts.capacity() * Layout.of<ValueBits>().bytes, state.deferredTexts.capacity() * Layout.of<ValueBits>().bytes)
+  run out.bytes("js.runtime.lexer-names", state.lexerNames.capacity() * Layout.of<NameSlot>().bytes + state.lexerNameAtoms.capacity() * Layout.of<StringOwner>().bytes,
+    state.lexerNames.capacity() * Layout.of<NameSlot>().bytes + state.lexerNameAtoms.capacity() * Layout.of<StringOwner>().bytes)
+  let preparse = (state.preparseBinderStamps.capacity() + state.preparseBinderValues.capacity() + state.preparseMarkStamps.capacity() + state.preparseMarkValues.capacity()) * 4
+  run out.bytes("js.runtime.preparse-tables", preparse, preparse)
+  run out.bytes("js.runtime.stack-scratch", state.stackScratch.entries.capacity() * 8, state.stackScratch.entries.capacity() * 8)
+  run out.bytes("js.runtime.regexp-programs", state.regexpPrograms.capacity() * Layout.of<ValueBits>().bytes, state.regexpPrograms.capacity() * Layout.of<ValueBits>().bytes)
+  run out.bytes("js.runtime.kept-objects", state.keptObjects.capacity() * Layout.of<ValueBits>().bytes, state.keptObjects.capacity() * Layout.of<ValueBits>().bytes)
+  run out.bytes("js.runtime.classes", state.classes.capacity() * Layout.of<ClassDef>().bytes, state.classes.capacity() * Layout.of<ClassDef>().bytes)
   let bigAtoms = state.atoms.largeUsage(1024)
   run out.held("js.large.atoms", bigAtoms.allocationCount, bigAtoms.allocationCount, if bigAtoms.allocationCount != 0 { bigAtoms.bytes / bigAtoms.allocationCount } else { 0 })
   run out.bytes("js.large.atoms.bytes", bigAtoms.bytes, bigAtoms.bytes)
