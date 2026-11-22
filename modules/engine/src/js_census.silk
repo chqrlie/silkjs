@@ -22,6 +22,8 @@ import js_value { ValueBits }
 import js_class_data as classes
 import runtime_memory { AllocationObserver }
 import js_gc as gc
+import js_string_types { FlatString, RopeString }
+import js_core_types { PropertySlot, VarRefState, scopeSlot }
 
 /// A container: `entries` in use, room for `capacity`, `each` bytes an entry.
 pub const HELD: usize = 0
@@ -29,6 +31,52 @@ pub const HELD: usize = 0
 pub const UNIT: usize = 1
 /// Work done since the runtime was made: `entries` times.
 pub const WORK: usize = 2
+
+/// The strings the walk met in properties, elements, constants and captured variables,
+/// each counted once however many places hold it. Atoms are counted by the atom table.
+struct Strings {
+  seen: HashMap<usize, usize>,
+  waiting: List<ValueBits>,
+  flat: usize, flatBytes: usize,
+  /// Those above the pool's largest block (1,024 bytes): large allocations.
+  large: usize, largeBytes: usize,
+  /// Those of 1 MB and more.
+  huge: usize, hugeBytes: usize,
+  ropes: usize, ropeBytes: usize
+}
+impl Strings {
+  unsafe effect fn add(self: &mut Self, value: ValueBits) -> () ! OutOfMemoryError ? &mut Allocator {
+    run self.waiting.append(value)
+    while self.waiting.length() != 0 {
+      let last = self.waiting.length() - 1
+      let next = self.waiting.get(last)
+      self.waiting.truncate(last)
+      let anchor = ()
+      match next {
+        ValueBits.String { reference } => {
+          let text = unsafe HeapCell.shortPayload<FlatString, ()>(&anchor, reference)
+          if text.atom == 0 && !self.seen.contains(Pointer.address<HeapHeader>(reference)) {
+            drop run self.seen.insert(Pointer.address<HeapHeader>(reference), 1)
+            let mut bytes = unsafe HeapCell.allocationBytes(reference)
+            if !text.compact { bytes = bytes + text.latin1.capacity() + text.utf16.capacity() * 2 }
+            self.flat = self.flat + 1 self.flatBytes = self.flatBytes + bytes
+            if bytes > 1024 { self.large = self.large + 1 self.largeBytes = self.largeBytes + bytes }
+            if bytes >= 1048576 { self.huge = self.huge + 1 self.hugeBytes = self.hugeBytes + bytes }
+          }
+        }
+        ValueBits.Rope { reference } => {
+          if !self.seen.contains(Pointer.address<HeapHeader>(reference)) {
+            drop run self.seen.insert(Pointer.address<HeapHeader>(reference), 1)
+            let rope = unsafe HeapCell.shortPayload<RopeString, ()>(&anchor, reference)
+            self.ropes = self.ropes + 1 self.ropeBytes = self.ropeBytes + unsafe HeapCell.allocationBytes(reference)
+            run self.waiting.append(rope.left) run self.waiting.append(rope.right)
+          }
+        }
+        _ => ()
+      }
+    }
+  }
+}
 
 /// Rows of the census: four values a row (kind, entries, capacity, bytes each).
 pub struct Rows {
@@ -136,11 +184,14 @@ pub unsafe effect fn collect(rt: *mut HeapHeader, memory: &AllocationObserver, o
   let mut variableBytes: usize = 0
   let mut sourceOwned: usize = 0
   let mut sourceShared: usize = 0
+  let mut sourceLent: usize = 0
   let mut lineBytes: usize = 0
   let mut withDebug: usize = 0
   let mut scopes: usize = 0
   let mut scopeSlots: usize = 0
   let mut varRefs: usize = 0
+  let mut strings = Strings { seen: HashMap<usize, usize>.make(Hash.seed(0x63656e737577)), waiting: List<ValueBits>.make(),
+    flat: 0, flatBytes: 0, large: 0, largeBytes: 0, huge: 0, hugeBytes: 0, ropes: 0, ropeBytes: 0 }
   let mut walk = unsafe gc.walkCells(rt)
   while true {
     let cursor = unsafe gc.nextCell(&mut walk)
@@ -171,6 +222,13 @@ pub unsafe effect fn collect(rt: *mut HeapHeader, memory: &AllocationObserver, o
         let heldBefore = match shapeHeld.get(key) { Option<usize>.Some { value: count } => count Option<usize>.None => 0 }
         drop run shapeHeld.insert(key, heldBefore + data.slotCapacity())
         drop run shapeNamed.insert(key, shape.properties.length())
+        let mut slotAt: usize = 0
+        while slotAt < data.slotCount() {
+          if slotAt < shape.properties.length() && shape.properties.get(slotAt).atom != 0 {
+            match data.slot(slotAt).view(shape.properties.get(slotAt).flags) { PropertySlot.Value { value: held } => { run unsafe strings.add(held) } _ => () }
+          }
+          slotAt = slotAt + 1
+        }
         match &data.payload {
           ObjectPayload.FastArray { array } => {
             arrays = arrays + 1
@@ -178,6 +236,8 @@ pub unsafe effect fn collect(rt: *mut HeapHeader, memory: &AllocationObserver, o
             elements = elements + array.values().length()
             elementRoom = elementRoom + array.values().capacity()
             if array.values().length() == 0 { emptyArrays = emptyArrays + 1 }
+            let mut elementAt: usize = 0
+            while elementAt < array.values().length() { run unsafe strings.add(array.values().get(elementAt)) elementAt = elementAt + 1 }
           }
           ObjectPayload.BytecodeFunction { function } => {
             closures = closures + 1
@@ -210,6 +270,8 @@ pub unsafe effect fn collect(rt: *mut HeapHeader, memory: &AllocationObserver, o
         if code.pending.isSome() { pending = pending + 1 }
         bytecode = bytecode + nativeBytes(&code.code)
         constants = constants + code.constants.capacity()
+        let mut constantAt: usize = 0
+        while constantAt < code.constants.length() { run unsafe strings.add(code.constants.get(constantAt)) constantAt = constantAt + 1 }
         variableBytes = variableBytes + code.varDefs.capacity() * Layout.of<VarDef>().bytes + code.closureVars.capacity() * Layout.of<ClosureVar>().bytes
         match &code.debug {
           Option<FunctionDebugInfo>.Some { value: debug } => {
@@ -219,6 +281,7 @@ pub unsafe effect fn collect(rt: *mut HeapHeader, memory: &AllocationObserver, o
                 match &source {
                   SourceText.Owned { bytes } => { sourceOwned = sourceOwned + bytes.capacity() }
                   SourceText.Shared { length, .. } => { sourceShared = sourceShared + length }
+                  SourceText.Lent { length, .. } => { sourceLent = sourceLent + length }
                 }
               }
               _ => ()
@@ -235,8 +298,14 @@ pub unsafe effect fn collect(rt: *mut HeapHeader, memory: &AllocationObserver, o
         let scope = unsafe HeapCell.payload<ScopeData, ()>(&anchor, cell)
         scopes = scopes + 1
         scopeSlots = scopeSlots + u32.toUsize(scope.count)
+        let mut scopeAt: usize = 0
+        while scopeAt < u32.toUsize(scope.count) { run unsafe strings.add(unsafe Pointer.read<ValueBits>(unsafe scopeSlot(cell, scopeAt))) scopeAt = scopeAt + 1 }
       }
-      HeapKind.VarRef => { varRefs = varRefs + 1 }
+      HeapKind.VarRef => {
+        varRefs = varRefs + 1
+        let captured = unsafe HeapCell.payload<VarRef, ()>(&anchor, cell)
+        match captured.state { VarRefState.Detached { value: held } => { run unsafe strings.add(held) } _ => () }
+      }
       _ => ()
     }
   }
@@ -368,6 +437,15 @@ pub unsafe effect fn collect(rt: *mut HeapHeader, memory: &AllocationObserver, o
   run out.bytes("js.functions.variable-tables", variableBytes, variableBytes)
   run out.bytes("js.functions.source-text.owned", sourceOwned, sourceOwned)
   run out.unit("js.functions.source-text.shared-spans-bytes", sourceShared)
+  run out.unit("js.functions.source-text.lent-spans-bytes", sourceLent)
+  // Strings held by properties, elements, constants and captured variables (atoms apart).
+  run out.held("js.strings", strings.flat, strings.flat, if strings.flat != 0 { strings.flatBytes / strings.flat } else { 0 })
+  run out.bytes("js.strings.bytes", strings.flatBytes, strings.flatBytes)
+  run out.held("js.strings.over-1-kb", strings.large, strings.large, if strings.large != 0 { strings.largeBytes / strings.large } else { 0 })
+  run out.bytes("js.strings.over-1-kb.bytes", strings.largeBytes, strings.largeBytes)
+  run out.held("js.strings.over-1-mb", strings.huge, strings.huge, if strings.huge != 0 { strings.hugeBytes / strings.huge } else { 0 })
+  run out.bytes("js.strings.over-1-mb.bytes", strings.hugeBytes, strings.hugeBytes)
+  run out.held("js.strings.ropes", strings.ropes, strings.ropes, if strings.ropes != 0 { strings.ropeBytes / strings.ropes } else { 0 })
   run out.bytes("js.functions.line-tables", lineBytes, lineBytes)
   // Atoms.
   let atoms = state.atoms.storageUsage()
