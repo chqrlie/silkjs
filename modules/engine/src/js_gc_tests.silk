@@ -505,6 +505,31 @@ test effect fn idleArenasLeaveTheRuntimeAndLaterCellsClaimThemAgain() -> ()
   drop again
   run unsafe gc.destroyRuntime(&mut hooks, runtime) |> Effect.provideMut<Allocator>(&mut allocator)
 }
+/// An idle release also lets go of the preparser's per-atom mark arrays a parse
+/// left for the next one.
+test effect fn idleReleaseDropsThePreparseMarkArrays() -> ()
+  ! OutOfMemoryError | AssertionError<'static> {
+  let mut allocator = run RuntimeAllocator<SystemAllocator>.make(Allocator.systemAllocatorProvider())
+  let observer = run allocator.observe()
+  let runtime = run runtimeFixture() |> Effect.provideMut<Allocator>(&mut allocator)
+  let mut hooks = Hooks.make()
+  let mut anchor = ()
+  let state = unsafe HeapCell.payloadMut<RuntimeState, ()>(&mut anchor, runtime)
+  run state.preparseBinderStamps.appendRepeated(0, 65536) |> Effect.provideMut<Allocator>(&mut allocator)
+  run state.preparseBinderValues.appendRepeated(0, 65536) |> Effect.provideMut<Allocator>(&mut allocator)
+  run state.preparseMarkStamps.appendRepeated(0, 65536) |> Effect.provideMut<Allocator>(&mut allocator)
+  run state.preparseMarkValues.appendRepeated(0, 65536) |> Effect.provideMut<Allocator>(&mut allocator)
+  drop state
+  let before = allocator.stats().usedBytes
+  let _released = unsafe runtimes.releaseIdle(&observer, runtime, 0)
+  let mut after = ()
+  let kept = unsafe HeapCell.payload<RuntimeState, ()>(&after, runtime)
+  run Testing.expect(kept.preparseBinderStamps.capacity() == 0 && kept.preparseBinderValues.capacity() == 0
+    && kept.preparseMarkStamps.capacity() == 0 && kept.preparseMarkValues.capacity() == 0, "the mark arrays are gone")
+  drop kept
+  run Testing.expect(allocator.stats().usedBytes + 4 * 65536 * 4 <= before, "their 1 MB is given back")
+  run unsafe gc.destroyRuntime(&mut hooks, runtime) |> Effect.provideMut<Allocator>(&mut allocator)
+}
 unsafe fn young(node: *mut HeapHeader) -> u8 {
   let anchor = () return (unsafe Pointer.borrow<(), HeapHeader>(&anchor, node)).young
 }
