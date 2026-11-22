@@ -581,8 +581,17 @@ fn lesser(left: usize, right: usize) -> usize {
 /// after a burst. On Darwin the pool can only give back an arena that no collector
 /// lists, so the arenas the runtime's cells have left are let go of first; elsewhere
 /// this is the allocator's call alone. allocator is the runtime's. Owner thread,
-/// outside a collection.
+/// outside a collection and a parse. The preparser's per-atom mark arrays a parse
+/// left for the next one (about 4 MB for a large bundle's atoms) go too: an idle
+/// app seldom parses again, and a parse that does grows them back.
 pub unsafe fn releaseIdle(allocator: &AllocationObserver, runtime: *mut HeapHeader, reserve: usize) -> usize {
+  let mut anchor = ()
+  let state = unsafe HeapCell.payloadMut<RuntimeState, ()>(&mut anchor, runtime)
+  drop Intrinsic.replace(state.preparseBinderStamps, List<u32>.make())
+  drop Intrinsic.replace(state.preparseBinderValues, List<u32>.make())
+  drop Intrinsic.replace(state.preparseMarkStamps, List<u32>.make())
+  drop Intrinsic.replace(state.preparseMarkValues, List<u32>.make())
+  drop state
   static if Intrinsic.targetOperatingSystem() == "darwin" { unsafe gc.unclaimEmptyArenas(runtime) }
   return allocator.releaseIdle(reserve)
 }
