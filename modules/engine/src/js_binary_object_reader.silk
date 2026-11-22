@@ -211,7 +211,9 @@ effect fn internAtom<'a,'r,'m,S:EngineServices>(r:&mut Reader<'a>,engine:&mut En
   ->u32 !OutOfMemoryError|JsException ?&mut Allocator {
   let resume=r.position
   r.position=r.atomStrings+u32.toUsize(wordAt(&r.*,r.atomTable+offset*4))
-  let text=run string(&mut r,&mut engine,realm)
+  let mut text=ValueBits.Undefined
+  if (r.flags&LEND_TEXT)!=0 { text=run lentString(&mut r,&mut engine,realm) }
+  else { text=run string(&mut r,&mut engine,realm) }
   r.position=resume
   let mut anchor=() let rt=unsafe HeapCell.payloadMut<RuntimeState,()>(&mut anchor,realm.runtime())
   let interned=run rt.atoms.internOwned(text)
@@ -240,6 +242,31 @@ effect fn string<'a,'r,'m,S:EngineServices>(r:&mut Reader<'a>,engine:&mut Engine
     run flat.latin1.append(0)
   }
   return ValueBits.String { reference:run HeapCell.allocateShort(HeapKind.String,move flat) }
+}
+/// Units below which a lent atom saves nothing: its cell holds an 8-byte address.
+const LEND_ATOM_MIN: usize = 16
+/// string for bytes that LEND_TEXT keeps readable: a text that lies as
+/// Strings.lend needs it (Latin-1 with a NUL after it, or wide units at an even
+/// address) is lent from the bytes, and any other is copied.
+effect fn lentString<'a,'r,'m,S:EngineServices>(r:&mut Reader<'a>,engine:&mut Engine<'m,S>,realm: Realm<'r>)
+  ->ValueBits !OutOfMemoryError|JsException ?&mut Allocator {
+  let start=r.position
+  let encoded=run leb(&mut r,&mut engine,realm) let length=u32.toUsize(u32.shiftRight(encoded,1))
+  let text=r.position
+  if length>=LEND_ATOM_MIN && length<=STRING_LENGTH_MAX && text<r.length {
+    let at=Pointer.fromRef<u8>(&r.data[text])
+    if (encoded&1)!=0 {
+      if length*2<=r.length-text && (Pointer.address<u8>(at)&1)==0 {
+        r.position=text+length*2
+        return run unsafe Strings.lend(at,length,true)
+      }
+    } else if length<r.length-text && r.data[text+length]==0 {
+      r.position=text+length
+      return run unsafe Strings.lend(at,length,false)
+    }
+  }
+  r.position=start
+  return run string(&mut r,&mut engine,realm)
 }
 effect fn copiedBytes<'a,'r,'m,S:EngineServices>(r:&mut Reader<'a>,engine:&mut Engine<'m,S>,realm: Realm<'r>,length:usize)
   ->List<u8> !OutOfMemoryError|JsException ?&mut Allocator {

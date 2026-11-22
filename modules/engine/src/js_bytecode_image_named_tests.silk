@@ -67,7 +67,7 @@ unsafe effect fn exercise<'m>(engine: &mut Engine<'m, Services>, context: *mut H
   ! OutOfMemoryError | JsException | AssertionError<'static> ? &mut Allocator {
   let memory = engine.memory
   let written = run image.write(&mut engine, memory, unsafe lendRealm(&context, context),
-    b"function where() { function deep() { function deeper() { return new Error('x').stack } return deeper() } return deep() } function lost() { var o = {}; return o.absent(1) } var top = new Error('t').stack; 5",
+    b"function where() { function deep() { function deeper() { return new Error('x').stack } return deeper() } return deep() } function lost() { var o = {}; return o.absent(1) } function texts() { return ['a long Latin-1 literal read from the image', '\\u4e2d\\u6587 a wide literal read from the image'] } var top = new Error('t').stack; 5",
     b"/built/app.js", flags.TYPE_GLOBAL)
   bytes.* = move written
   run Testing.expect(image.loadable(bytes.asSlice()), "the engine loads the image it wrote")
@@ -86,6 +86,12 @@ unsafe effect fn exercise<'m>(engine: &mut Engine<'m, Services>, context: *mut H
   run Testing.expect(site == 1, "an error in a check script still reports")
   let named = run unsafe number(&mut engine, context, b"var n = ''; try { lost() } catch (e) { n = String(e.message) } n.indexOf('o.absent is not a function') >= 0 ? 1 : 0")
   run Testing.expect(named == 1, "an error names its call site from the image's text")
+  // The image lends its long atoms' text too (Strings.lend): they read, compare,
+  // join and key properties as any other string does.
+  let latin1 = run unsafe number(&mut engine, context, b"var x = texts()[0]; var o = {}; o[x] = 7; (x === 'a long Latin-1 literal ' + 'read from the image' ? 1 : 0) + (x.charCodeAt(2) == 108 ? 10 : 0) + (o['a long Latin-1 literal read from the image'] == 7 ? 100 : 0) + (x.slice(7, 14) == 'Latin-1' ? 1000 : 0)")
+  run Testing.expect(latin1 == 1111, "a lent Latin-1 atom reads as its text")
+  let wide = run unsafe number(&mut engine, context, b"var y = texts()[1]; (y.charCodeAt(0) == 0x4e2d ? 1 : 0) + (y.length == 37 ? 10 : 0) + (y === '\\u4e2d\\u6587 a wide literal ' + 'read from the image' ? 100 : 0)")
+  run Testing.expect(wide == 111, "a wide atom from the image reads as its text")
   // The census tells the lent text from the strings the heap holds.
   let kept = run unsafe number(&mut engine, context, b"globalThis.kept = ['census', new Array(2000).join('ab')].join(' '); globalThis.big = new ArrayBuffer(70000); globalThis.list = new Array(500).fill(1); globalThis.map = new Map([[1, 2]]); kept.length")
   run Testing.expect(kept == 4005, "a string above the pool's blocks is held")
@@ -93,6 +99,8 @@ unsafe effect fn exercise<'m>(engine: &mut Engine<'m, Services>, context: *mut H
   let realm = unsafe lendRealm(&context, context)
   run unsafe census.collect(realm.runtime(), memory, &mut rows)
   run Testing.expect(row(&rows, "js.functions.source-text.lent-spans-bytes") > 0, "the census counts the image's lent text")
+  run Testing.expect(row(&rows, "js.atoms.lent") >= 1, "the census counts the image's lent atoms")
+  run Testing.expect(row(&rows, "js.atoms.lent-text-bytes") >= 42, "the census counts their text")
   run Testing.expect(row(&rows, "js.strings.over-1-kb") >= 1, "the census counts the large string")
   run Testing.expect(row(&rows, "js.strings.over-1-kb.bytes") >= 4005, "the census counts its bytes")
   run Testing.expect(row(&rows, "js.array-buffers.bytes") >= 70000, "the census counts ArrayBuffer bytes")

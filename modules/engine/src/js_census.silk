@@ -484,6 +484,10 @@ pub unsafe effect fn collect(rt: *mut HeapHeader, memory: &AllocationObserver, o
   let atoms = state.atoms.storageUsage()
   run out.held("js.atoms", state.atoms.count(), state.atoms.hashCapacity(), 0)
   run out.bytes("js.atoms.bytes", atoms.bytes, atoms.bytes)
+  // Text read in place from the bytes it was loaded from (a bytecode image), not held.
+  let lentAtoms = state.atoms.lentUsage()
+  run out.unit("js.atoms.lent", lentAtoms.allocationCount)
+  run out.unit("js.atoms.lent-text-bytes", lentAtoms.bytes)
   run out.held("js.runtime-state(caches and spare tables)", 1, 1, Layout.of<RuntimeState>().bytes)
   run out.held("js.deferred-sources", state.deferredSources.length(), state.deferredSources.capacity(), 0)
   run out.held("js.deferred-atoms", state.deferredAtoms.length(), state.deferredAtoms.capacity(), 4)
