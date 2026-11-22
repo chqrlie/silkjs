@@ -333,9 +333,10 @@ pub struct PendingFunction { pub tree: ThinBox<FunctionTree>, pub start: u32, pu
 /// (js_binary_object_reader.finishDeferred). source indexes
 /// RuntimeState.deferredSources, position is the body's offset in its bytes, and
 /// the counts and stack size are the record's own, which the stub's header
-/// cannot hold while it stands in.
+/// cannot hold while it stands in. lines is where the function's line tables
+/// lie in those bytes (0 for none): the stub boxes them only once its body is read.
 pub struct DeferredBody { pub scriptId: u64, pub source: u32, pub position: u32, pub codeLength: u32, pub locals: u32, pub constants: u32,
-  pub stack: u16, pub scriptIsEval: bool }
+  pub lines: u32, pub stack: u16, pub scriptIsEval: bool }
 impl Copy for DeferredBody {}
 
 /// One free name a lazy child resolved from parentScopeLevel of its parent:

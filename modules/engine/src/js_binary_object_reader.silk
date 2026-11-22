@@ -37,7 +37,7 @@ import js_owned_value { Value, ValueList, lendBits }
 import js_debugger_metadata { Metadata as DebuggerMetadata }
 import js_exceptions { JsException }
 import js_coercion_host { CoercionHooks }
-import js_debug_positions { PendingLines, SourceLocation }
+import js_debug_positions { PendingLines, SourceLocation, decodePc2LineRaw, FUNCTION_DEFINITION_PC }
 import js_core_types { KnownCall, KNOWN_CALL }
 import js_core_types { HostEdges }
 import js_core_types { LineTables, DeferredSource }
@@ -761,31 +761,36 @@ effect fn readClosures<'a,'r,'m,S:EngineServices>(r:&mut Reader<'a>,engine:&mut 
   compacted.scopeCaptures=usize.toU16(scoped)
 }
 /// A function's debug data: file name, line table and source text.
+/// A function's debug information. A DEFER read leaves the line tables in the
+/// bytes and returns where they start, for lendLines or stubDefinitionLine; any
+/// other read copies them and returns 0.
 effect fn readDebug<'a,'r,'m,S:EngineServices>(r:&mut Reader<'a>,engine:&mut Engine<'m,S>,realm: Realm<'r>,
-  code:CellRef<FunctionBytecode>)->() !OutOfMemoryError|JsException ?&mut Allocator {
+  code:CellRef<FunctionBytecode>)->usize !OutOfMemoryError|JsException ?&mut Allocator {
   let mut anchor=()
   let filename=run atom(&mut r,&mut engine,realm)
   let b=code.getMut(&mut anchor)
   b.debug=Option<FunctionDebugInfo>.some(FunctionDebugInfo { filename:duplicateAtom(&mut engine,realm,filename),
     nodeVm:false,nodeSourceURL:false,nodeWrapped:false,lineOffset:0,columnOffset:0,sourceColumnOffset:0,
     source:Option<SourceText>.none(),lines:ThinBox<LineTables>.none(),pendingLines:ThinBox<PendingLines>.none(), definition: SourceLocation { line: 0, column: 0 } }) drop b
-  let lines=run count(&mut r,&mut engine,realm)
-  run need(&r.*,&mut engine,realm,lines)
-  // DEFER bytes outlive the runtime, so the line table is read where it lies.
-  let borrow=(r.flags&DEFER)!=0 && lines!=0
-  let start=r.position
-  let lineBytes=if borrow { List<u8>.make() } else { run copiedBytes(&mut r,&mut engine,realm,lines) }
-  if borrow { r.position=r.position+lines }
-  let callCount=run count(&mut r,&mut engine,realm)
-  run need(&r.*,&mut engine,realm,callCount)
-  let callStart=r.position
-  let calls=if callCount==0 { Option<ByteStorage>.none() }
-    else if (r.flags&DEFER)!=0 { r.position=r.position+callCount Option<ByteStorage>.some(ByteStorage.Borrowed { data:Pointer.fromRef<u8>(&r.data[callStart]),length:callCount }) }
-    else { let callBytes=run copiedBytes(&mut r,&mut engine,realm,callCount) Option<ByteStorage>.some(run ByteStorage.copy(callBytes.asSlice())) }
-  let tables=if borrow { run LineTables.boxed(ByteStorage.Borrowed { data:Pointer.fromRef<u8>(&r.data[start]),length:lines },move calls) }
-    else { run LineTables.boxed(run ByteStorage.copy(lineBytes.asSlice()),move calls) }
-  let linesDebug=code.getMut(&mut anchor)
-  match &mut linesDebug.debug { Option<FunctionDebugInfo>.Some { value:debug }=>{ debug.lines=move tables } _=>() } drop linesDebug
+  let mut linesAt:usize=0
+  if (r.flags&DEFER)!=0 {
+    // DEFER bytes outlive the runtime: the tables stay where they lie, and a
+    // function that becomes a stub boxes them only when its body is read.
+    linesAt=r.position
+    let lines=run count(&mut r,&mut engine,realm) run need(&r.*,&mut engine,realm,lines) r.position=r.position+lines
+    let callCount=run count(&mut r,&mut engine,realm) run need(&r.*,&mut engine,realm,callCount) r.position=r.position+callCount
+  } else {
+    let lines=run count(&mut r,&mut engine,realm)
+    run need(&r.*,&mut engine,realm,lines)
+    let lineBytes=run copiedBytes(&mut r,&mut engine,realm,lines)
+    let callCount=run count(&mut r,&mut engine,realm)
+    run need(&r.*,&mut engine,realm,callCount)
+    let calls=if callCount==0 { Option<ByteStorage>.none() }
+      else { let callBytes=run copiedBytes(&mut r,&mut engine,realm,callCount) Option<ByteStorage>.some(run ByteStorage.copy(callBytes.asSlice())) }
+    let tables=run LineTables.boxed(run ByteStorage.copy(lineBytes.asSlice()),move calls)
+    let linesDebug=code.getMut(&mut anchor)
+    match &mut linesDebug.debug { Option<FunctionDebugInfo>.Some { value:debug }=>{ debug.lines=move tables } _=>() } drop linesDebug
+  }
   if (r.flags&LAZY)!=0 {
     let text=run sourceText(&mut r,&mut engine,realm)
     let b=code.getMut(&mut anchor)
@@ -798,6 +803,51 @@ effect fn readDebug<'a,'r,'m,S:EngineServices>(r:&mut Reader<'a>,engine:&mut Eng
       match &mut b.debug { Option<FunctionDebugInfo>.Some { value:debug }=>{ debug.source=Option<SourceText>.some(SourceText.Owned { bytes:move sourceBytes }) } _=>() }
     }
   }
+  return linesAt
+}
+/// The line tables readDebug left at linesAt in a DEFER read's bytes: their
+/// lengths and where each starts. Leaves r where it was.
+struct LentLines { lines:usize, linesStart:usize, calls:usize, callsStart:usize }
+effect fn lentLines<'a,'r,'m,S:EngineServices>(r:&mut Reader<'a>,engine:&mut Engine<'m,S>,realm: Realm<'r>,linesAt:usize)
+  ->LentLines !OutOfMemoryError|JsException ?&mut Allocator {
+  let resume=r.position
+  r.position=linesAt
+  let lines=run count(&mut r,&mut engine,realm) run need(&r.*,&mut engine,realm,lines)
+  let linesStart=r.position r.position=r.position+lines
+  let calls=run count(&mut r,&mut engine,realm) run need(&r.*,&mut engine,realm,calls)
+  let callsStart=r.position
+  r.position=resume
+  return LentLines { lines:lines,linesStart:linesStart,calls:calls,callsStart:callsStart }
+}
+/// Gives code the line tables at linesAt, read where they lie.
+effect fn lendLines<'a,'r,'m,S:EngineServices>(r:&mut Reader<'a>,engine:&mut Engine<'m,S>,realm: Realm<'r>,
+  code:CellRef<FunctionBytecode>,linesAt:usize)->() !OutOfMemoryError|JsException ?&mut Allocator {
+  let at=run lentLines(&mut r,&mut engine,realm,linesAt)
+  let lines=if at.lines==0 { ByteStorage.Borrowed { data:Pointer.fromRef<u8>(&r.data[0]),length:0 } }
+    else { ByteStorage.Borrowed { data:Pointer.fromRef<u8>(&r.data[at.linesStart]),length:at.lines } }
+  let calls=if at.calls==0 { Option<ByteStorage>.none() }
+    else { Option<ByteStorage>.some(ByteStorage.Borrowed { data:Pointer.fromRef<u8>(&r.data[at.callsStart]),length:at.calls }) }
+  let tables=run LineTables.boxed(move lines,move calls)
+  let mut anchor=()
+  let b=code.getMut(&mut anchor)
+  match &mut b.debug {
+    Option<FunctionDebugInfo>.Some { value:debug }=>{ debug.lines=move tables debug.definition=SourceLocation { line:0,column:0 } }
+    _=>()
+  }
+}
+/// For a stub whose tables stay at linesAt until its body is read: its
+/// definition, the one location every lookup answers until then, as a stub
+/// js_compiler_finish.defer makes keeps it.
+effect fn stubDefinitionLine<'a,'r,'m,S:EngineServices>(r:&mut Reader<'a>,engine:&mut Engine<'m,S>,realm: Realm<'r>,
+  code:CellRef<FunctionBytecode>,linesAt:usize)->() !OutOfMemoryError|JsException ?&mut Allocator {
+  let at=run lentLines(&mut r,&mut engine,realm,linesAt)
+  let mut start=at.linesStart let mut length=at.lines
+  if at.calls!=0 { start=at.callsStart length=at.calls }
+  if length==0 { return () }
+  let definition=unsafe decodePc2LineRaw(unsafe Pointer.assumeMany<u8>(Pointer.fromRef<u8>(&r.data[start])),length,FUNCTION_DEFINITION_PC)
+  let mut anchor=()
+  let b=code.getMut(&mut anchor)
+  match &mut b.debug { Option<FunctionDebugInfo>.Some { value:debug }=>{ debug.definition=definition } _=>() }
 }
 /// A function's constants.
 effect fn readConstants<'a,'r,'m,S:EngineServices>(r:&mut Reader<'a>,engine:&mut Engine<'m,S>,realm: Realm<'r>,
@@ -904,7 +954,8 @@ effect fn readFunction<'a,'r,'m,S:EngineServices>(r:&mut Reader<'a>,engine:&mut 
   drop b
   if (r.flags&DEFER)!=0 {
     run readClosures(&mut r,&mut engine,realm,code,closures)
-    if (flags&1024)!=0 { run readDebug(&mut r,&mut engine,realm,code) }
+    let mut linesAt:usize=0
+    if (flags&1024)!=0 { linesAt=run readDebug(&mut r,&mut engine,realm,code) }
     let bodyLength=u64.toUsize(run fixed(&mut r,&mut engine,realm,4))
     // Only a call of a plain function finishes a stub (js_vm.callInternal):
     // generators and async functions start from their own classes' calls, as
@@ -912,14 +963,16 @@ effect fn readFunction<'a,'r,'m,S:EngineServices>(r:&mut Reader<'a>,engine:&mut 
     if bodyLength!=0 && !stub && previousScriptId!=0 && kind==FunctionKind.Normal && (flags&4)==0 {
       run need(&r.*,&mut engine,realm,bodyLength)
       let kept=DeferredBody { scriptId:r.activeScriptId,source:0,position:usize.toU32(r.position),
-        codeLength:usize.toU32(codeLength),locals:usize.toU32(locals),constants:usize.toU32(constants),stack:stack,
+        codeLength:usize.toU32(codeLength),locals:usize.toU32(locals),constants:usize.toU32(constants),lines:usize.toU32(linesAt),stack:stack,
         scriptIsEval:r.activeScriptIsEval }
+      if linesAt!=0 { run stubDefinitionLine(&mut r,&mut engine,realm,code,linesAt) }
       run deferBody(&mut r,realm,code,kept)
       r.position=r.position+bodyLength
       r.activeScriptId = previousScriptId
       r.activeScriptIsEval = previousScriptIsEval
       return value
     }
+    if linesAt!=0 { run lendLines(&mut r,&mut engine,realm,code,linesAt) }
     run readVarDefs(&mut r,&mut engine,realm,code,locals)
     run readCode(&mut r,&mut engine,realm,code,codeLength)
   } else {
@@ -933,7 +986,7 @@ effect fn readFunction<'a,'r,'m,S:EngineServices>(r:&mut Reader<'a>,engine:&mut 
     placeholder.code=ByteStorage.Borrowed { data:Pointer.fromRef<u8>(&STUB_CODE[0]),length:1 }
     placeholder.frameCells=STUB_FRAME_CELLS
   } else if r.trusted && (r.flags&DEFER)==0 { run deriveCallFacts(code) }
-  if (r.flags&DEFER)==0 && (flags&1024)!=0 { run readDebug(&mut r,&mut engine,realm,code) }
+  if (r.flags&DEFER)==0 && (flags&1024)!=0 { let _copied=run readDebug(&mut r,&mut engine,realm,code) }
   run readConstants(&mut r,&mut engine,realm,code,constants)
   if stub {
     let pending=run stubDefinition(&mut r,&mut engine,realm,code)
@@ -1203,6 +1256,7 @@ effect fn deferredBody<'a,'r,'m,S:EngineServices>(r:&mut Reader<'a>,engine:&mut 
   run readVarDefs(&mut r,&mut engine,realm,code,u32.toUsize(body.locals))
   run readCode(&mut r,&mut engine,realm,code,u32.toUsize(body.codeLength))
   run readConstants(&mut r,&mut engine,realm,code,u32.toUsize(body.constants))
+  if body.lines!=0 { run lendLines(&mut r,&mut engine,realm,code,u32.toUsize(body.lines)) }
 }
 /// Copies bytecode; never retains pointers into bytes. ROM_DATA is rejected.
 /// SAB addresses require explicit readObjectShared relocation entries.
