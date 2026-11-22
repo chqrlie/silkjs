@@ -377,6 +377,44 @@ pub unsafe fn spreadHostDebug(rt: &mut RuntimeState, node: *mut HeapHeader, host
     i = i + 1
   }
 }
+/// Gives node's function constants (and theirs) node's host values (configureHostCallbacks:
+/// the module that owns the code, its import() callback, its script metadata) where they
+/// have none: the functions a lazy reparse or a deferred read brought after the host
+/// configured the tree, which import.meta and import() in them go by.
+pub unsafe effect fn spreadHostEdges(node: *mut HeapHeader) -> () ! OutOfMemoryError ? &mut Allocator {
+  let anchor = ()
+  let top = unsafe HeapCell.payload<FunctionBytecode, ()>(&anchor, node)
+  if top.host.isNone() { return () }
+  let count = top.constants.length() drop top
+  let mut i: usize = 0
+  while i < count {
+    let parent = unsafe HeapCell.payload<FunctionBytecode, ()>(&anchor, node)
+    let child = parent.constants.get(i) drop parent
+    if let ValueBits.FunctionBytecode { reference } = child {
+      let childAnchor = ()
+      let existing = unsafe HeapCell.payload<FunctionBytecode, ()>(&childAnchor, reference)
+      let bare = existing.host.isNone() drop existing
+      if bare {
+        // Allocated before the references are taken, so a failure leaves nothing to release.
+        let mut fresh = run ThinBox<HostEdges>.make(HostEdges.empty())
+        let owner = unsafe HeapCell.payload<FunctionBytecode, ()>(&anchor, node)
+        let from = owner.host.get()
+        let edges = fresh.getMut()
+        let callback = Intrinsic.replace(edges.callback, from.callback.dup()).intoBits()
+        let module = Intrinsic.replace(edges.owner, from.owner.dup()).intoBits()
+        let metadata = Intrinsic.replace(edges.scriptMetadata, from.scriptMetadata.dup()).intoBits()
+        drop callback drop module drop metadata
+        drop edges drop from drop owner
+        let mut codeAnchor = ()
+        let code = unsafe HeapCell.payloadMut<FunctionBytecode, ()>(&mut codeAnchor, reference)
+        code.host = move fresh
+        drop code
+        run unsafe spreadHostEdges(reference)
+      }
+    }
+    i = i + 1
+  }
+}
 /// Stub code: never run, since no call reaches a frame before finishing it.
 pub const STUB_STACK: u16 = 0xffff
 /// A stub's FunctionBytecode.frameCells: more cells than any call-frame region

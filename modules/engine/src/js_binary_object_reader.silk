@@ -41,6 +41,7 @@ import js_debug_positions { PendingLines, SourceLocation }
 import js_core_types { KnownCall, KNOWN_CALL }
 import js_core_types { HostEdges }
 import js_core_types { LineTables, DeferredSource }
+import js_compiler_finish { spreadHostDebug, spreadHostEdges, HostDebug }
 import js_core_types { SourceText, RuntimeState, ObjectData, ObjectPayload, NativeErrorKind, NativeFunctionId,
   FunctionBytecode, FunctionKind, FunctionDebugInfo, ByteStorage, VarDef, ClosureVar, CLOSURE_NO_DEPTH,
   VariableKind, ClosureKind, ModuleDef, RequestedModule, ExportEntry, ExportBinding,
@@ -1071,6 +1072,23 @@ pub unsafe effect fn finishDeferred<'m,S:EngineServices>(engine:&mut Engine<'m,S
     Result<(),OutOfMemoryError|JsException|StringLengthError|BigIntError>.Success { .. }=>()
     Result<(),OutOfMemoryError|JsException|StringLengthError|BigIntError>.Failure { .. }=>Intrinsic.trap("deferred function body did not read back")
   }
+  // The functions this read brought carry the file name their bytes were written
+  // with. The stub's is what the host gave it since (js_bytecode_image.loadNamed,
+  // a node:vm configuration): theirs follow it, as a lazy reparse's do.
+  let named=code.get(&anchor)
+  let host=match &named.debug {
+    Option<FunctionDebugInfo>.Some { value }=>Option<HostDebug>.some(HostDebug { filename:value.filename,nodeVm:value.nodeVm,nodeSourceURL:value.nodeSourceURL,
+      lineOffset:value.lineOffset,columnOffset:value.columnOffset,sourceColumnOffset:value.sourceColumnOffset })
+    _=>Option<HostDebug>.none()
+  }
+  drop named
+  if let Option<HostDebug>.Some { value }=host {
+    let mut runtimeAnchor=() let settings=unsafe HeapCell.payloadMut<RuntimeState,()>(&mut runtimeAnchor,rt)
+    unsafe spreadHostDebug(&mut settings,node,value)
+  }
+  // So do the module that owns them and its import() callback (configureHostCallbacks).
+  let owned=run Effect.result(unsafe spreadHostEdges(node))
+  if let Result<(),OutOfMemoryError>.Failure { .. }=move owned { Intrinsic.trap("out of memory finishing a deferred function") }
 }
 /// Finishes every function whose body a DEFER read left in its bytes, and the ones
 /// those bring with their constants, until none is left: a heap about to be saved as
