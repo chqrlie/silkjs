@@ -142,7 +142,7 @@ unsafe effect fn recordBody<'m, S: EngineServices>(engine: &mut Engine<'m, S>, c
   let generated = kind == flags.TYPE_DIRECT || kind == flags.TYPE_INDIRECT
   if (mode & flags.FLAG_DEFER_HOST_SOURCE) == 0 {
     let held = if generated || source.length < LAZY_SOURCE_MIN { ValueBits.Undefined } else { unsafe sharedInput(reference, source.length) }
-    if held.isString() { run unsafe lazySource(&mut engine, context, metadata, held) }
+    if held.tag() != ValueBits.Undefined.tag() { run unsafe lazySource(&mut engine, context, metadata, held) }
     else {
       scope.values[1] = run unsafe string(&mut engine, context, source)
       run unsafe common.define(&mut engine, context, metadata, b"source", unsafe scope.values[1].retained(), 7)
@@ -180,12 +180,13 @@ unsafe effect fn recordBody<'m, S: EngineServices>(engine: &mut Engine<'m, S>, c
 const LAZY_SOURCE_MIN: usize = 65536
 /// The `source` getter of a lazy script: [`sourceGetter`].
 pub const SOURCE_GETTER: u32 = 2260
+const NO_TEXT: [u8; 1] = [0]
 /// The compile's own copy of its whole UTF-8 input (the byte holder the functions'
 /// source spans share), retained, or undefined when the compile kept none. A
 /// module's top level keeps no text of its own, so its functions' spans answer.
 unsafe fn sharedInput(reference: *mut HeapHeader, length: usize) -> ValueBits {
   let held = unsafe heldInput(reference, length)
-  if held.isString() { return held }
+  if held.tag() != ValueBits.Undefined.tag() { return held }
   let anchor = () let code = unsafe HeapCell.payload<FunctionBytecode, ()>(&anchor, reference)
   let count = code.constants.length() drop code
   let mut index: usize = 0
@@ -203,6 +204,10 @@ unsafe fn heldInput(reference: *mut HeapHeader, length: usize) -> ValueBits {
     if let Option<SourceText>.Some { value: SourceText.Shared { text, .. } } = &debug.source {
       let held = text.get()
       if held.tag() == -7 && Strings.length(held) == length { return unsafe held.retained() }
+    }
+    // A lent input has no string to hold: the function that names it stands for it.
+    if let Option<SourceText>.Some { value: SourceText.Lent { total, .. } } = &debug.source {
+      if total == length { return unsafe (ValueBits.FunctionBytecode { reference: reference }).retained() }
     }
   }
   return ValueBits.Undefined
@@ -227,9 +232,21 @@ unsafe effect fn lazySource<'m, S: EngineServices>(engine: &mut Engine<'m, S>, c
 pub unsafe effect fn sourceGetter<'m, S: EngineServices>(engine: &mut Engine<'m, S>, context: *mut HeapHeader,
   receiver: ValueBits, captured: &FrameSlots) -> ValueBits ! OutOfMemoryError | JsException ? &mut Allocator {
   let held = unsafe common.argument(captured, 0)
-  if held.tag() != -7 { return ValueBits.Undefined }
-  // A flat string's Latin-1 bytes end with a NUL the length leaves out.
-  let text = run unsafe string(&mut engine, context, Slice.view(unsafe latin1Bytes(&held, stringReference(held)), 0, Strings.length(held)))
+  let text = if let ValueBits.FunctionBytecode { reference } = held {
+    // The function's lent input (heldInput), which outlives the runtime.
+    let anchor = () let code = unsafe HeapCell.payload<FunctionBytecode, ()>(&anchor, reference)
+    let mut data: *const u8 = Pointer.fromRef<u8>(&NO_TEXT[0]) let mut total: usize = 0 let mut found = false
+    if let Option<FunctionDebugInfo>.Some { value: debug } = &code.debug {
+      if let Option<SourceText>.Some { value: SourceText.Lent { data: lent, total: count, .. } } = &debug.source { data = lent total = count found = true }
+    }
+    drop code
+    if !found { return ValueBits.Undefined }
+    run unsafe string(&mut engine, context, unsafe Pointer.borrowMany<(), u8>(&anchor, unsafe Pointer.assumeMany<u8>(data), total))
+  } else {
+    if held.tag() != -7 { return ValueBits.Undefined }
+    // A flat string's Latin-1 bytes end with a NUL the length leaves out.
+    run unsafe string(&mut engine, context, Slice.view(unsafe latin1Bytes(&held, stringReference(held)), 0, Strings.length(held)))
+  }
   if receiver.isObject() {
     let kept = run Effect.result(unsafe common.define(&mut engine, context, receiver, b"source", unsafe text.retained(), 7))
     if let Result<(), JsException>.Failure { error } = move kept { unsafe owners.release(&mut engine, context, text) fail move error }

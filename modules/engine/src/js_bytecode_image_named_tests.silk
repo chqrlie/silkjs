@@ -55,7 +55,7 @@ unsafe effect fn exercise<'m>(engine: &mut Engine<'m, Services>, context: *mut H
   ! OutOfMemoryError | JsException | AssertionError<'static> ? &mut Allocator {
   let memory = engine.memory
   let written = run image.write(&mut engine, memory, unsafe lendRealm(&context, context),
-    b"function where() { function deep() { function deeper() { return new Error('x').stack } return deeper() } return deep() } var top = new Error('t').stack; 5",
+    b"function where() { function deep() { function deeper() { return new Error('x').stack } return deeper() } return deep() } function lost() { var o = {}; return o.absent(1) } var top = new Error('t').stack; 5",
     b"/built/app.js", flags.TYPE_GLOBAL)
   bytes.* = move written
   run Testing.expect(image.loadable(bytes.asSlice()), "the engine loads the image it wrote")
@@ -66,4 +66,12 @@ unsafe effect fn exercise<'m>(engine: &mut Engine<'m, Services>, context: *mut H
   run Testing.expect(top == 1, "the top level reports the name it was loaded under")
   let deep = run unsafe number(&mut engine, context, b"var s = where(); (s.split('/installed/app.js').length - 1) + (s.indexOf('/built/') >= 0 ? 100 : 0)")
   run Testing.expect(deep == 3, "functions read at their first call report it too")
+  // The image lends its source text (SourceText.Lent): what reads a function's text
+  // reads it from the image's bytes.
+  let text = run unsafe number(&mut engine, context, b"var t = where.toString(); (t.indexOf('function where() { function deep()') == 0 ? 1 : 0) + (t.lastIndexOf('return deep() }') == t.length - 15 ? 10 : 0)")
+  run Testing.expect(text == 11, "a function's text is read from the image")
+  let site = run unsafe number(&mut engine, context, b"function miss() { var o = {}; return o.absent.call() } var m = ''; try { miss() } catch (e) { m = String(e.message) } m.length > 0 ? 1 : 0")
+  run Testing.expect(site == 1, "an error in a check script still reports")
+  let named = run unsafe number(&mut engine, context, b"var n = ''; try { lost() } catch (e) { n = String(e.message) } n.indexOf('o.absent is not a function') >= 0 ? 1 : 0")
+  run Testing.expect(named == 1, "an error names its call site from the image's text")
 }

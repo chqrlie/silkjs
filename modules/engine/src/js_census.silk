@@ -136,6 +136,7 @@ pub unsafe effect fn collect(rt: *mut HeapHeader, memory: &AllocationObserver, o
   let mut variableBytes: usize = 0
   let mut sourceOwned: usize = 0
   let mut sourceShared: usize = 0
+  let mut sourceLent: usize = 0
   let mut lineBytes: usize = 0
   let mut withDebug: usize = 0
   let mut scopes: usize = 0
@@ -219,6 +220,7 @@ pub unsafe effect fn collect(rt: *mut HeapHeader, memory: &AllocationObserver, o
                 match &source {
                   SourceText.Owned { bytes } => { sourceOwned = sourceOwned + bytes.capacity() }
                   SourceText.Shared { length, .. } => { sourceShared = sourceShared + length }
+                  SourceText.Lent { length, .. } => { sourceLent = sourceLent + length }
                 }
               }
               _ => ()
@@ -368,6 +370,7 @@ pub unsafe effect fn collect(rt: *mut HeapHeader, memory: &AllocationObserver, o
   run out.bytes("js.functions.variable-tables", variableBytes, variableBytes)
   run out.bytes("js.functions.source-text.owned", sourceOwned, sourceOwned)
   run out.unit("js.functions.source-text.shared-spans-bytes", sourceShared)
+  run out.unit("js.functions.source-text.lent-spans-bytes", sourceLent)
   run out.bytes("js.functions.line-tables", lineBytes, lineBytes)
   // Atoms.
   let atoms = state.atoms.storageUsage()

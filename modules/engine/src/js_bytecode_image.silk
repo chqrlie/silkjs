@@ -196,7 +196,7 @@ pub unsafe effect fn loadNamed<'a, 'm, S: EngineServices>(engine: &mut Engine<'m
   }
   let payload = unsafe Pointer.at<u8>(unsafe Pointer.assumeMany<u8>(data), HEADER)
   let value = run reader.readObjectTrusted(&mut engine, realm, payload, length - HEADER,
-    reader.BYTECODE | reader.LAZY | reader.DEFER)
+    reader.BYTECODE | reader.LAZY | reader.DEFER | reader.LEND_TEXT)
   if name.length != 0 {
     let renamed = run Effect.result(unsafe rename(&mut engine, realm, value, name))
     if let Result<(), OutOfMemoryError | StringLengthError>.Failure { error } = move renamed {
