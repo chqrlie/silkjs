@@ -87,7 +87,7 @@ unsafe effect fn exercise<'m>(engine: &mut Engine<'m, Services>, context: *mut H
   let named = run unsafe number(&mut engine, context, b"var n = ''; try { lost() } catch (e) { n = String(e.message) } n.indexOf('o.absent is not a function') >= 0 ? 1 : 0")
   run Testing.expect(named == 1, "an error names its call site from the image's text")
   // The census tells the lent text from the strings the heap holds.
-  let kept = run unsafe number(&mut engine, context, b"globalThis.kept = ['census', new Array(2000).join('ab')].join(' '); kept.length")
+  let kept = run unsafe number(&mut engine, context, b"globalThis.kept = ['census', new Array(2000).join('ab')].join(' '); globalThis.big = new ArrayBuffer(70000); globalThis.list = new Array(500).fill(1); globalThis.map = new Map([[1, 2]]); kept.length")
   run Testing.expect(kept == 4005, "a string above the pool's blocks is held")
   let mut rows = Rows.make()
   let realm = unsafe lendRealm(&context, context)
@@ -95,4 +95,10 @@ unsafe effect fn exercise<'m>(engine: &mut Engine<'m, Services>, context: *mut H
   run Testing.expect(row(&rows, "js.functions.source-text.lent-spans-bytes") > 0, "the census counts the image's lent text")
   run Testing.expect(row(&rows, "js.strings.over-1-kb") >= 1, "the census counts the large string")
   run Testing.expect(row(&rows, "js.strings.over-1-kb.bytes") >= 4005, "the census counts its bytes")
+  run Testing.expect(row(&rows, "js.array-buffers.bytes") >= 70000, "the census counts ArrayBuffer bytes")
+  run Testing.expect(row(&rows, "js.large.array-elements") >= 1, "the census counts a big array's elements")
+  run Testing.expect(row(&rows, "js.opaque-cells") >= 2, "the census counts the buffer's and the map's cells")
+  run Testing.expect(row(&rows, "js.large.up-to-4-kb") + row(&rows, "js.large.up-to-16-kb") + row(&rows, "js.large.up-to-64-kb")
+    + row(&rows, "js.large.up-to-256-kb") + row(&rows, "js.large.up-to-1-mb") + row(&rows, "js.large.over-1-mb") == row(&rows, "js.large-allocations"),
+    "the size buckets add up to the large allocations")
 }

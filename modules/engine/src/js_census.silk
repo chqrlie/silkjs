@@ -13,6 +13,7 @@ import silk.collections.hash { Hash }
 import silk.collections.hash_map { HashMap }
 import silk.num.usize
 import silk.num.u32
+import silk.num.u64
 import js_heap { HeapHeader, HeapCell, HeapKind }
 import js_core_types as types
 import js_core_types { SourceText, ScopeData, RuntimeState, ObjectData, ObjectPayload, SlotBits,
@@ -22,8 +23,9 @@ import js_value { ValueBits }
 import js_class_data as classes
 import runtime_memory { AllocationObserver }
 import js_gc as gc
+import js_buffer_storage as buffers
 import js_string_types { FlatString, RopeString }
-import js_core_types { PropertySlot, VarRefState, scopeSlot }
+import js_core_types { PropertySlot, VarRefState, scopeSlot, ObjectPayloadFamily }
 
 /// A container: `entries` in use, room for `capacity`, `each` bytes an entry.
 pub const HELD: usize = 0
@@ -192,6 +194,13 @@ pub unsafe effect fn collect(rt: *mut HeapHeader, memory: &AllocationObserver, o
   let mut varRefs: usize = 0
   let mut strings = Strings { seen: HashMap<usize, usize>.make(Hash.seed(0x63656e737577)), waiting: List<ValueBits>.make(),
     flat: 0, flatBytes: 0, large: 0, largeBytes: 0, huge: 0, hugeBytes: 0, ropes: 0, ropeBytes: 0 }
+  // What lies above the pool's largest block, by owner: the large allocations it explains.
+  let mut bigCells: usize = 0 let mut bigCellBytes: usize = 0
+  let mut bigSlots: usize = 0 let mut bigSlotBytes: usize = 0
+  let mut bigElements: usize = 0 let mut bigElementBytes: usize = 0
+  let mut bigFunctionLists: usize = 0 let mut bigFunctionListBytes: usize = 0
+  let mut buffersHeld: usize = 0 let mut bufferBytes: usize = 0
+  let mut opaqueCells: usize = 0 let mut opaqueBytes: usize = 0
   let mut walk = unsafe gc.walkCells(rt)
   while true {
     let cursor = unsafe gc.nextCell(&mut walk)
@@ -201,6 +210,7 @@ pub unsafe effect fn collect(rt: *mut HeapHeader, memory: &AllocationObserver, o
     let kind = head.kind
     drop head
     let cellBytes = unsafe HeapCell.allocationBytes(cell)
+    if cellBytes > 1024 { bigCells = bigCells + 1 bigCellBytes = bigCellBytes + cellBytes }
     let at = kindIndex(kind)
     kindCount[at] = kindCount[at] + 1
     kindBytes[at] = kindBytes[at] + cellBytes
@@ -214,6 +224,8 @@ pub unsafe effect fn collect(rt: *mut HeapHeader, memory: &AllocationObserver, o
         slotsHeld = slotsHeld + data.slotCapacity()
         slotsNamed = slotsNamed + shape.properties.length()
         if data.slotCapacity() != 0 { objectsWithSlots = objectsWithSlots + 1 } else { objectsNoSlots = objectsNoSlots + 1 }
+        let slotBytes = data.slotCapacity() * Layout.of<SlotBits>().bytes
+        if slotBytes > 1024 { bigSlots = bigSlots + 1 bigSlotBytes = bigSlotBytes + slotBytes }
         let key = Pointer.address<HeapHeader>(data.shape)
         let seen = match users.get(key) { Option<usize>.Some { value: count } => count Option<usize>.None => 0 }
         drop run users.insert(key, seen + 1)
@@ -236,6 +248,8 @@ pub unsafe effect fn collect(rt: *mut HeapHeader, memory: &AllocationObserver, o
             elements = elements + array.values().length()
             elementRoom = elementRoom + array.values().capacity()
             if array.values().length() == 0 { emptyArrays = emptyArrays + 1 }
+            let elementBytes = array.values().capacity() * Layout.of<ValueBits>().bytes
+            if elementBytes > 1024 { bigElements = bigElements + 1 bigElementBytes = bigElementBytes + elementBytes }
             let mut elementAt: usize = 0
             while elementAt < array.values().length() { run unsafe strings.add(array.values().get(elementAt)) elementAt = elementAt + 1 }
           }
@@ -251,6 +265,17 @@ pub unsafe effect fn collect(rt: *mut HeapHeader, memory: &AllocationObserver, o
               plain = plain + 1
               plainCellBytes = plainCellBytes + cellBytes
             } else { otherObjects = otherObjects + 1 }
+          }
+          ObjectPayload.Opaque { family, reference } => {
+            otherObjects = otherObjects + 1
+            if !Pointer.isNull<HeapHeader>(reference) {
+              let opaque = unsafe Intrinsic.pointerRequalify<?*mut HeapHeader, *mut HeapHeader>(reference)
+              opaqueCells = opaqueCells + 1 opaqueBytes = opaqueBytes + unsafe HeapCell.allocationBytes(opaque)
+              if family == ObjectPayloadFamily.ArrayBuffer || family == ObjectPayloadFamily.SharedArrayBuffer {
+                let buffer = unsafe buffers.snapshot(cell)
+                if !Pointer.isNull<u8>(buffer.data) && !buffer.external { buffersHeld = buffersHeld + 1 bufferBytes = bufferBytes + u64.toUsize(buffer.byteLength) }
+              }
+            }
           }
           _ => { otherObjects = otherObjects + 1 }
         }
@@ -270,6 +295,14 @@ pub unsafe effect fn collect(rt: *mut HeapHeader, memory: &AllocationObserver, o
         if code.pending.isSome() { pending = pending + 1 }
         bytecode = bytecode + nativeBytes(&code.code)
         constants = constants + code.constants.capacity()
+        let codeBytes = nativeBytes(&code.code)
+        let constantBytes = code.constants.capacity() * Layout.of<ValueBits>().bytes
+        let varBytes = code.varDefs.capacity() * Layout.of<VarDef>().bytes
+        let closureBytes = code.closureVars.capacity() * Layout.of<ClosureVar>().bytes
+        if codeBytes > 1024 { bigFunctionLists = bigFunctionLists + 1 bigFunctionListBytes = bigFunctionListBytes + codeBytes }
+        if constantBytes > 1024 { bigFunctionLists = bigFunctionLists + 1 bigFunctionListBytes = bigFunctionListBytes + constantBytes }
+        if varBytes > 1024 { bigFunctionLists = bigFunctionLists + 1 bigFunctionListBytes = bigFunctionListBytes + varBytes }
+        if closureBytes > 1024 { bigFunctionLists = bigFunctionLists + 1 bigFunctionListBytes = bigFunctionListBytes + closureBytes }
         let mut constantAt: usize = 0
         while constantAt < code.constants.length() { run unsafe strings.add(code.constants.get(constantAt)) constantAt = constantAt + 1 }
         variableBytes = variableBytes + code.varDefs.capacity() * Layout.of<VarDef>().bytes + code.closureVars.capacity() * Layout.of<ClosureVar>().bytes
@@ -453,6 +486,28 @@ pub unsafe effect fn collect(rt: *mut HeapHeader, memory: &AllocationObserver, o
   run out.bytes("js.atoms.bytes", atoms.bytes, atoms.bytes)
   run out.held("js.runtime-state(caches and spare tables)", 1, 1, Layout.of<RuntimeState>().bytes)
   run out.held("js.deferred-sources", state.deferredSources.length(), state.deferredSources.capacity(), 0)
+  run out.held("js.deferred-atoms", state.deferredAtoms.length(), state.deferredAtoms.capacity(), 4)
+  // The large allocations by size, then the ones the walk can name: cells, object slots,
+  // array elements, function lists, strings and atoms over 1 KB; ArrayBuffer bytes; the
+  // opaque cells (Map, Set, Promise and the rest) behind objects.
+  let sizeNames: [string<'static>; 6] = ["js.large.up-to-4-kb", "js.large.up-to-16-kb", "js.large.up-to-64-kb", "js.large.up-to-256-kb", "js.large.up-to-1-mb", "js.large.over-1-mb"]
+  let mut size: usize = 0
+  while size < 6 { run out.held(sizeNames[size], pool.largeSizes[size], pool.largeSizes[size], if pool.largeSizes[size] != 0 { pool.largeSizeBytes[size] / pool.largeSizes[size] } else { 0 }) size = size + 1 }
+  let bigAtoms = state.atoms.largeUsage(1024)
+  run out.held("js.large.atoms", bigAtoms.allocationCount, bigAtoms.allocationCount, if bigAtoms.allocationCount != 0 { bigAtoms.bytes / bigAtoms.allocationCount } else { 0 })
+  run out.bytes("js.large.atoms.bytes", bigAtoms.bytes, bigAtoms.bytes)
+  run out.held("js.large.cells", bigCells, bigCells, if bigCells != 0 { bigCellBytes / bigCells } else { 0 })
+  run out.bytes("js.large.cells.bytes", bigCellBytes, bigCellBytes)
+  run out.held("js.large.object-slots", bigSlots, bigSlots, if bigSlots != 0 { bigSlotBytes / bigSlots } else { 0 })
+  run out.bytes("js.large.object-slots.bytes", bigSlotBytes, bigSlotBytes)
+  run out.held("js.large.array-elements", bigElements, bigElements, if bigElements != 0 { bigElementBytes / bigElements } else { 0 })
+  run out.bytes("js.large.array-elements.bytes", bigElementBytes, bigElementBytes)
+  run out.held("js.large.function-lists", bigFunctionLists, bigFunctionLists, if bigFunctionLists != 0 { bigFunctionListBytes / bigFunctionLists } else { 0 })
+  run out.bytes("js.large.function-lists.bytes", bigFunctionListBytes, bigFunctionListBytes)
+  run out.held("js.array-buffers", buffersHeld, buffersHeld, if buffersHeld != 0 { bufferBytes / buffersHeld } else { 0 })
+  run out.bytes("js.array-buffers.bytes", bufferBytes, bufferBytes)
+  run out.held("js.opaque-cells", opaqueCells, opaqueCells, if opaqueCells != 0 { opaqueBytes / opaqueCells } else { 0 })
+  run out.bytes("js.opaque-cells.bytes", opaqueBytes, opaqueBytes)
   // Work.
   run out.work("js.gc.full", state.census[types.CENSUS_GC_FULL])
   run out.work("js.gc.young", state.census[types.CENSUS_GC_YOUNG])
