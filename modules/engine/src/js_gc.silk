@@ -4164,7 +4164,7 @@ pub unsafe fn releaseWeak(value: ValueBits) -> () {
       let h = unsafe Pointer.borrow<(), HeapHeader>(&anchor, reference)
       let reclaim = last && h.referenceCount == 0 && h.mark == 0
       drop h
-      if reclaim { unsafe HeapCell.destroy<ObjectData>(reference) }
+      if reclaim { unsafe HeapCell.destroyEmptied<ObjectData>(reference) }
     }
     ValueBits.Symbol { reference } => {
       let symbol = unsafe HeapCell.shortPayloadMut<FlatString, ()>(&mut anchor, reference)

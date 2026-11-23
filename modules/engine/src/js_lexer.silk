@@ -593,15 +593,38 @@ impl<'src> Lexer<'src> {
     let source = self.source
     let length = source.length
     let mut q = self.offset
+    if q >= length { return false }
+    let base = unsafe Intrinsic.pointerRequalify<?[*]const u8, [*]const u8>(Pointer.fromSlice<u8>(source))
     while q < length {
-      let c = source[q]
+      let c = unsafe Pointer.read<u8>(unsafe Pointer.at<u8>(base, q))
       if c != 32 && c != 9 && c != 10 && c != 13 { break }
-      q = q + 1
+      q = usize.wrappingAdd(q, 1)
     }
-    if q >= length || QUICK_CLASS[u8.toUsize(source[q])] != 4 { return false }
-    let mut p = q + 1
-    while p < length && AHEAD_CLASS[u8.toUsize(source[p])] <= 1 { p = p + 1 }
-    if p < length && (source[p] >= 128 || source[p] == 92) { return false }
+    if q >= length || QUICK_CLASS[u8.toUsize(unsafe Pointer.read<u8>(unsafe Pointer.at<u8>(base, q)))] != 4 { return false }
+    let mut p = usize.wrappingAdd(q, 1)
+    while p < length && AHEAD_CLASS[u8.toUsize(unsafe Pointer.read<u8>(unsafe Pointer.at<u8>(base, p)))] <= 1 { p = usize.wrappingAdd(p, 1) }
+    if p < length {
+      let stop = unsafe Pointer.read<u8>(unsafe Pointer.at<u8>(base, p))
+      if stop >= 128 || stop == 92 { return false }
+    }
+    // Chained plain `.ident.ident` accesses on the same line skip without
+    // tokenizing intermediate `.` punctuators.
+    while p < length && unsafe Pointer.read<u8>(unsafe Pointer.at<u8>(base, p)) == 46 {
+      let mut r = usize.wrappingAdd(p, 1)
+      while r < length {
+        let c = unsafe Pointer.read<u8>(unsafe Pointer.at<u8>(base, r))
+        if c != 32 && c != 9 { break }
+        r = usize.wrappingAdd(r, 1)
+      }
+      if r >= length || QUICK_CLASS[u8.toUsize(unsafe Pointer.read<u8>(unsafe Pointer.at<u8>(base, r)))] != 4 { break }
+      let mut e = usize.wrappingAdd(r, 1)
+      while e < length && AHEAD_CLASS[u8.toUsize(unsafe Pointer.read<u8>(unsafe Pointer.at<u8>(base, e)))] <= 1 { e = usize.wrappingAdd(e, 1) }
+      if e < length {
+        let stop = unsafe Pointer.read<u8>(unsafe Pointer.at<u8>(base, e))
+        if stop >= 128 || stop == 92 { break }
+      }
+      p = e
+    }
     self.lastOffset = self.offset
     self.offset = p
     return true

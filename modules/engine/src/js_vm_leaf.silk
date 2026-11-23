@@ -141,7 +141,7 @@ unsafe fn runLeaf<H: HeapHooks>(hooks: &mut H, caller: *mut Machine, target: *mu
       match &fnData.payload {
         ObjectPayload.BytecodeFunction { function: closure } => {
           code = closure.bytecode
-          if closure.varRefs.length() != 0 { references = Pointer.fromRef<?*mut HeapHeader>(&closure.varRefs.asSlice()[0]) }
+          if closure.varRefs.length() != 0 { references = unsafe closure.varRefs.first() }
           scope = closure.scope
         }
         _ => invariant()
@@ -161,7 +161,7 @@ unsafe fn runLeaf<H: HeapHooks>(hooks: &mut H, caller: *mut Machine, target: *mu
   let prefill = bytecode.leaf >= LEAF_PREFILL
   let ip = unsafe bytecode.code.start()
   let mut constants = unsafe Intrinsic.pointerRequalify<*mut ValueBits, *const ValueBits>(top)
-  if bytecode.constants.length() != 0 { constants = Pointer.fromRef<ValueBits>(&bytecode.constants.asSlice()[0]) }
+  if bytecode.constants.length() != 0 { constants = unsafe bytecode.constants.first() }
   let realm = bytecode.realm
   drop bytecode
   let stack = unsafe cellAt(top, localCount)
@@ -173,7 +173,7 @@ unsafe fn runLeaf<H: HeapHooks>(hooks: &mut H, caller: *mut Machine, target: *mu
     record: Pointer.null<u8>() }
   if prefill { // set only when some local is read before written, so localCount > 0
     let mut index: usize = 0
-    while true { unsafe Pointer.write<ValueBits>(unsafe cellAt(top, index), ValueBits.Undefined) index = index + 1 if index >= localCount { break } }
+    while true { unsafe Pointer.write<ValueBits>(unsafe cellAt(top, index), ValueBits.Undefined) index = usize.wrappingAdd(index, 1) if index >= localCount { break } }
   }
   // Nearly every method starts `push_this put_loc0` (this into its local): done
   // here in one copy, without two dispatches or the stack round trip.
