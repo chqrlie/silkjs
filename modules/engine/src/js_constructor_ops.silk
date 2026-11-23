@@ -140,6 +140,11 @@ pub effect fn create<'a, 'b, H: HeapHooks + CoercionHooks>(hooks: &mut H, memory
   newTarget: ValueRef<'b>, classId: u32) -> Value ! JsException ? &mut Allocator {
   return unsafe Value.adoptBits(run unsafe createFromConstructor(&mut hooks, memory, realm, newTarget.view(), classId))
 }
+@inlineNever
+unsafe effect fn materializeReceiverOom<'a, H: HeapHooks + CoercionHooks>(hooks: &mut H, realm: Realm<'a>) -> ValueBits ! JsException ? &mut Allocator {
+  drop run Effect.catch<JsException>(core.materialize(&mut hooks, realm, OutOfMemoryError {}), core.exceptionValue)
+  fail JsException {}
+}
 /// createFromConstructor for an ordinary object (OP_call_constructor's receiver):
 /// a constructor the receiver cache knows allocates over its cached empty shape.
 @inlineAlways
@@ -149,13 +154,9 @@ pub unsafe effect fn createReceiver<'a, H: HeapHooks + CoercionHooks>(hooks: &mu
     ValueBits.Object { reference } => {
       match Pointer.nonNullMut<HeapHeader>(unsafe gc.receiverShape(&mut hooks, realm.runtime(), reference)) {
         Option<*mut HeapHeader>.Some { value: shape } => {
-          let created = run Intrinsic.catchFailure<OutOfMemoryError>(unsafe objects.ordinaryFromShape(&mut hooks, memory, realm, shape), failedOom)
-          let result = match move created {
-            ValueBits value => value
-            FailedOom { error } => run Effect.catch<JsException>(core.materialize(&mut hooks, realm, move error), core.exceptionValue)
-          }
-          if result.isException() { fail JsException {} }
-          return result
+          let result = run unsafe objects.ordinaryFromEmptyShapeOrUninit(&mut hooks, memory, realm, shape)
+          if result.isObject() { return result }
+          return run unsafe materializeReceiverOom(&mut hooks, realm)
         }
         Option<*mut HeapHeader>.None => ()
       }
@@ -464,6 +465,7 @@ unsafe fn shapeCount(shape: *mut HeapHeader) -> i32 {
   let header = unsafe Pointer.borrowMut<(), HeapHeader>(&mut anchor, shape)
   return header.referenceCount
 }
+@inlineNever
 pub unsafe effect fn createFromConstructor<'a, H: HeapHooks + CoercionHooks>(hooks: &mut H,
   memory: &AllocationObserver, realm: Realm<'a>, newTarget: ValueBits,
   classId: u32) -> ValueBits ! JsException ? &mut Allocator {

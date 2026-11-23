@@ -1828,13 +1828,13 @@ unsafe fn decrementPass<H: HeapHooks>(hooks: &mut H, runtime: *mut HeapHeader, t
       let mut bits = unsafe passWord(arena, word, young)
       while bits != 0 {
         let node = unsafe cellIn(arena, word, u64.trailingZeros(bits))
-        bits = u64.bitAnd(bits, bits - 1)
+        bits = u64.bitAnd(bits, u64.wrappingSubtract(bits, 1))
         if bits != 0 { unsafe prefetchCell(unsafe cellIn(arena, word, u64.trailingZeros(bits))) }
         unsafe traceAs(&mut hooks, node, &mut tracer, MarkOperation.Decrement)
         unsafe markMember(node, young)
-        traced = traced + 1
+        traced = usize.wrappingAdd(traced, 1)
       }
-      word = word + 1
+      word = usize.wrappingAdd(word, 1)
     }
     cursor = unsafe passNext(arena, young)
   }
@@ -1845,7 +1845,7 @@ unsafe fn decrementPass<H: HeapHooks>(hooks: &mut H, runtime: *mut HeapHeader, t
     if unsafe inPass(node, young) {
       unsafe traceDecrement(&mut hooks, node, &mut tracer)
       unsafe markMember(node, young)
-      traced = traced + 1
+      traced = usize.wrappingAdd(traced, 1)
     }
   }
   unsafe census.censusBump(runtime, census.CENSUS_GC_TRACED, traced)
@@ -1863,9 +1863,10 @@ unsafe fn drainRestore<H: HeapHooks>(hooks: &mut H, tracer: &mut Tracer) -> () {
     let mut anchor = ()
     let stack = unsafe Pointer.borrowMut<(), RestoreStack>(&mut anchor, tracer.stack)
     if stack.depth == 0 { return () }
-    stack.depth = stack.depth - 1
-    let next = unsafe nonnull(stack.cells[stack.depth])
-    if stack.depth != 0 { unsafe prefetchCell(unsafe nonnull(stack.cells[stack.depth - 1])) }
+    let nextDepth = usize.wrappingSubtract(stack.depth, 1)
+    stack.depth = nextDepth
+    let next = unsafe nonnull(stack.cells[nextDepth])
+    if nextDepth != 0 { unsafe prefetchCell(unsafe nonnull(stack.cells[usize.wrappingSubtract(nextDepth, 1)])) }
     drop stack
     unsafe traceAs(&mut hooks, next, &mut tracer, MarkOperation.RestoreReachable)
   }
@@ -1886,7 +1887,7 @@ unsafe fn restorePass<H: HeapHooks>(hooks: &mut H, runtime: *mut HeapHeader, tra
       while bits != 0 {
         let bit = u64.trailingZeros(bits)
         let node = unsafe cellIn(arena, word, bit)
-        bits = u64.bitAnd(bits, bits - 1)
+        bits = u64.bitAnd(bits, u64.wrappingSubtract(bits, 1))
         if bits != 0 { unsafe prefetchCell(unsafe cellIn(arena, word, u64.trailingZeros(bits))) }
         if unsafe markOf(node) == 1 {
           if unsafe count(node) > 0 { unsafe mark(node, 0) unsafe restoreFrom(&mut hooks, node, &mut tracer) }
@@ -1897,7 +1898,7 @@ unsafe fn restorePass<H: HeapHooks>(hooks: &mut H, runtime: *mut HeapHeader, tra
         unsafe memory.setPendingWord(arena, word, u64.bitOr(unsafe memory.pendingWord(arena, word), uncounted))
         unsafe listPending(runtime, arena)
       }
-      word = word + 1
+      word = usize.wrappingAdd(word, 1)
     }
     cursor = unsafe passNext(arena, young)
   }
@@ -1985,14 +1986,14 @@ unsafe fn rescanRestore<H: HeapHooks>(hooks: &mut H, runtime: *mut HeapHeader, t
       let mut bits = unsafe memory.cellWord(arena, word)
       while bits != 0 {
         let node = unsafe cellIn(arena, word, u64.trailingZeros(bits))
-        bits = u64.bitAnd(bits, bits - 1)
+        bits = u64.bitAnd(bits, u64.wrappingSubtract(bits, 1))
         if unsafe markOf(node) == MARK_RESTORE {
           unsafe mark(node, 0)
           unsafe memory.clearPending(unsafe blockAt(node))
           unsafe restoreFrom(&mut hooks, node, &mut tracer)
         }
       }
-      word = word + 1
+      word = usize.wrappingAdd(word, 1)
     }
     cursor = unsafe memory.nextCellArena(arena)
   }
@@ -2015,11 +2016,11 @@ unsafe fn unreachablePass<H: HeapHooks>(hooks: &mut H, runtime: *mut HeapHeader,
       let mut bits = unsafe memory.pendingWord(arena, word)
       while bits != 0 {
         let node = unsafe cellIn(arena, word, u64.trailingZeros(bits))
-        bits = u64.bitAnd(bits, bits - 1)
+        bits = u64.bitAnd(bits, u64.wrappingSubtract(bits, 1))
         if bits != 0 { unsafe prefetchCell(unsafe cellIn(arena, word, u64.trailingZeros(bits))) }
         if unsafe markOf(node) == 1 { unsafe traceAs(&mut hooks, node, &mut tracer, MarkOperation.RestoreUnreachable) }
       }
-      word = word + 1
+      word = usize.wrappingAdd(word, 1)
     }
     cursor = unsafe memory.nextPendingArena(arena)
   }
@@ -2053,13 +2054,13 @@ unsafe fn removeCycles<H: HeapHooks>(hooks: &mut H, runtime: *mut HeapHeader) ->
       let mut bits = unsafe memory.pendingWord(arena, word)
       while bits != 0 {
         let node = unsafe cellIn(arena, word, u64.trailingZeros(bits))
-        bits = u64.bitAnd(bits, bits - 1)
+        bits = u64.bitAnd(bits, u64.wrappingSubtract(bits, 1))
         // Destroying garbage frees other cells: only a cell still published counts.
         if unsafe memory.isCell(unsafe blockAt(node)) && unsafe markOf(node) == 1 && valueKind(unsafe kind(node)) {
           unsafe destroyGc(&mut hooks, runtime, node)
         }
       }
-      word = word + 1
+      word = usize.wrappingAdd(word, 1)
     }
     cursor = unsafe memory.nextPendingArena(arena)
   }
@@ -2237,38 +2238,42 @@ unsafe fn traceAs<H: HeapHooks>(hooks: &mut H, node: *mut HeapHeader, tracer: &m
   if plain || unsafe js_shapes.plainRecords(object.shape) {
     let values = unsafe js_shapes.objectSlotValues(&object)
     let count = values.length
-    if count <= 3 {
-      let mut index: usize = 0
-      while index < count {
-        unsafe tracer.valueAs(values[index], operation)
-        index = index + 1
-      }
-    } else if ValueBits.anyHeapEarly(values) {
-      let pre = if count < 8 { count } else { 8 }
-      let mut ahead: usize = 0
-      while ahead < pre {
-        match values[ahead] {
-          ValueBits.Object { reference } => { unsafe memory.prefetch(Pointer.address<HeapHeader>(reference)) }
-          ValueBits.FunctionBytecode { reference } => { unsafe memory.prefetch(Pointer.address<HeapHeader>(reference)) }
-          ValueBits.Module { reference } => { unsafe memory.prefetch(Pointer.address<HeapHeader>(reference)) }
-          _ => ()
+    if count != 0 {
+      if count < 8 {
+        let ptr = unsafe Intrinsic.pointerRequalify<?[*]const ValueBits, [*]const ValueBits>(Pointer.fromSlice<ValueBits>(values))
+        let mut index: usize = 0
+        while index < count {
+          unsafe tracer.valueAs(unsafe Pointer.read<ValueBits>(unsafe Pointer.at<ValueBits>(ptr, index)), operation)
+          index = usize.wrappingAdd(index, 1)
         }
-        ahead = ahead + 1
-      }
-      let mut index: usize = 0
-      while index + 8 < count {
-        match values[index + 8] {
-          ValueBits.Object { reference } => { unsafe memory.prefetch(Pointer.address<HeapHeader>(reference)) }
-          ValueBits.FunctionBytecode { reference } => { unsafe memory.prefetch(Pointer.address<HeapHeader>(reference)) }
-          ValueBits.Module { reference } => { unsafe memory.prefetch(Pointer.address<HeapHeader>(reference)) }
-          _ => ()
+      } else if ValueBits.anyHeapEarly(values) {
+        let ptr = unsafe Intrinsic.pointerRequalify<?[*]const ValueBits, [*]const ValueBits>(Pointer.fromSlice<ValueBits>(values))
+        let mut ahead: usize = 0
+        while ahead < 8 {
+          match unsafe Pointer.read<ValueBits>(unsafe Pointer.at<ValueBits>(ptr, ahead)) {
+            ValueBits.Object { reference } => { unsafe memory.prefetch(Pointer.address<HeapHeader>(reference)) }
+            ValueBits.FunctionBytecode { reference } => { unsafe memory.prefetch(Pointer.address<HeapHeader>(reference)) }
+            ValueBits.Module { reference } => { unsafe memory.prefetch(Pointer.address<HeapHeader>(reference)) }
+            _ => ()
+          }
+          ahead = usize.wrappingAdd(ahead, 1)
         }
-        unsafe tracer.valueAs(values[index], operation)
-        index = index + 1
-      }
-      while index < count {
-        unsafe tracer.valueAs(values[index], operation)
-        index = index + 1
+        let limit = usize.wrappingSubtract(count, 8)
+        let mut index: usize = 0
+        while index < limit {
+          match unsafe Pointer.read<ValueBits>(unsafe Pointer.at<ValueBits>(ptr, usize.wrappingAdd(index, 8))) {
+            ValueBits.Object { reference } => { unsafe memory.prefetch(Pointer.address<HeapHeader>(reference)) }
+            ValueBits.FunctionBytecode { reference } => { unsafe memory.prefetch(Pointer.address<HeapHeader>(reference)) }
+            ValueBits.Module { reference } => { unsafe memory.prefetch(Pointer.address<HeapHeader>(reference)) }
+            _ => ()
+          }
+          unsafe tracer.valueAs(unsafe Pointer.read<ValueBits>(unsafe Pointer.at<ValueBits>(ptr, index)), operation)
+          index = usize.wrappingAdd(index, 1)
+        }
+        while index < count {
+          unsafe tracer.valueAs(unsafe Pointer.read<ValueBits>(unsafe Pointer.at<ValueBits>(ptr, index)), operation)
+          index = usize.wrappingAdd(index, 1)
+        }
       }
     }
   } else {
@@ -2281,7 +2286,7 @@ unsafe fn traceAs<H: HeapHooks>(hooks: &mut H, node: *mut HeapHeader, tracer: &m
         if (u8.toU32(entry.flags) & JS_PROP_TMASK) == 0 { unsafe tracer.valueAs(slot.valueBits(), operation) }
         else { unsafe traceProperty(slot.view(entry.flags), &mut tracer) }
       }
-      index = index + 1
+      index = usize.wrappingAdd(index, 1)
     }
   }
   if classId == JS_CLASS_OBJECT { return () }
@@ -2289,40 +2294,45 @@ unsafe fn traceAs<H: HeapHooks>(hooks: &mut H, node: *mut HeapHeader, tracer: &m
   if classId == JS_CLASS_ARRAY {
     match &object.payload {
       ObjectPayload.FastArray { array } => {
+        if array.isPlain() { return () }
         let elements = array.values().asSlice()
         let elementCount = elements.length
-        if elementCount <= 3 {
-          let mut element: usize = 0
-          while element < elementCount {
-            unsafe tracer.valueAs(elements[element], operation)
-            element = element + 1
-          }
-        } else if ValueBits.anyHeapEarly(elements) {
-          let pre = if elementCount < 8 { elementCount } else { 8 }
-          let mut ahead: usize = 0
-          while ahead < pre {
-            match elements[ahead] {
-              ValueBits.Object { reference } => { unsafe memory.prefetch(Pointer.address<HeapHeader>(reference)) }
-              ValueBits.FunctionBytecode { reference } => { unsafe memory.prefetch(Pointer.address<HeapHeader>(reference)) }
-              ValueBits.Module { reference } => { unsafe memory.prefetch(Pointer.address<HeapHeader>(reference)) }
-              _ => ()
+        if elementCount != 0 {
+          if elementCount < 8 {
+            let ptr = unsafe Intrinsic.pointerRequalify<?[*]const ValueBits, [*]const ValueBits>(Pointer.fromSlice<ValueBits>(elements))
+            let mut element: usize = 0
+            while element < elementCount {
+              unsafe tracer.valueAs(unsafe Pointer.read<ValueBits>(unsafe Pointer.at<ValueBits>(ptr, element)), operation)
+              element = usize.wrappingAdd(element, 1)
             }
-            ahead = ahead + 1
-          }
-          let mut element: usize = 0
-          while element + 8 < elementCount {
-            match elements[element + 8] {
-              ValueBits.Object { reference } => { unsafe memory.prefetch(Pointer.address<HeapHeader>(reference)) }
-              ValueBits.FunctionBytecode { reference } => { unsafe memory.prefetch(Pointer.address<HeapHeader>(reference)) }
-              ValueBits.Module { reference } => { unsafe memory.prefetch(Pointer.address<HeapHeader>(reference)) }
-              _ => ()
+          } else if (if elementCount >= 64 { ValueBits.anyHeap(elements) } else { ValueBits.anyHeapEarly(elements) }) {
+            let ptr = unsafe Intrinsic.pointerRequalify<?[*]const ValueBits, [*]const ValueBits>(Pointer.fromSlice<ValueBits>(elements))
+            let mut ahead: usize = 0
+            while ahead < 8 {
+              match unsafe Pointer.read<ValueBits>(unsafe Pointer.at<ValueBits>(ptr, ahead)) {
+                ValueBits.Object { reference } => { unsafe memory.prefetch(Pointer.address<HeapHeader>(reference)) }
+                ValueBits.FunctionBytecode { reference } => { unsafe memory.prefetch(Pointer.address<HeapHeader>(reference)) }
+                ValueBits.Module { reference } => { unsafe memory.prefetch(Pointer.address<HeapHeader>(reference)) }
+                _ => ()
+              }
+              ahead = usize.wrappingAdd(ahead, 1)
             }
-            unsafe tracer.valueAs(elements[element], operation)
-            element = element + 1
-          }
-          while element < elementCount {
-            unsafe tracer.valueAs(elements[element], operation)
-            element = element + 1
+            let limit = usize.wrappingSubtract(elementCount, 8)
+            let mut element: usize = 0
+            while element < limit {
+              match unsafe Pointer.read<ValueBits>(unsafe Pointer.at<ValueBits>(ptr, usize.wrappingAdd(element, 8))) {
+                ValueBits.Object { reference } => { unsafe memory.prefetch(Pointer.address<HeapHeader>(reference)) }
+                ValueBits.FunctionBytecode { reference } => { unsafe memory.prefetch(Pointer.address<HeapHeader>(reference)) }
+                ValueBits.Module { reference } => { unsafe memory.prefetch(Pointer.address<HeapHeader>(reference)) }
+                _ => ()
+              }
+              unsafe tracer.valueAs(unsafe Pointer.read<ValueBits>(unsafe Pointer.at<ValueBits>(ptr, element)), operation)
+              element = usize.wrappingAdd(element, 1)
+            }
+            while element < elementCount {
+              unsafe tracer.valueAs(unsafe Pointer.read<ValueBits>(unsafe Pointer.at<ValueBits>(ptr, element)), operation)
+              element = usize.wrappingAdd(element, 1)
+            }
           }
         }
         return ()
@@ -2346,7 +2356,7 @@ unsafe fn traceAs<H: HeapHooks>(hooks: &mut H, node: *mut HeapHeader, tracer: &m
             Option<*mut HeapHeader>.Some { value } => { unsafe memory.prefetch(Pointer.address<HeapHeader>(value)) }
             Option<*mut HeapHeader>.None => ()
           }
-          ahead = ahead + 1
+          ahead = usize.wrappingAdd(ahead, 1)
         }
         let mut element: usize = 0
         while element < referenceCount {
@@ -2354,7 +2364,7 @@ unsafe fn traceAs<H: HeapHooks>(hooks: &mut H, node: *mut HeapHeader, tracer: &m
             Option<*mut HeapHeader>.Some { value } => { unsafe tracer.edgeAs(value, operation) }
             Option<*mut HeapHeader>.None => ()
           }
-          element = element + 1
+          element = usize.wrappingAdd(element, 1)
         }
         match Pointer.nonNullMut<HeapHeader>(function.scope) {
           Option<*mut HeapHeader>.Some { value } => { unsafe tracer.edgeAs(value, operation) }
@@ -2587,13 +2597,14 @@ pub unsafe fn finalizeCorePayload<H: HeapHooks>(hooks: &mut H, runtime: *mut Hea
       let mut cacheAnchor = ()
       let rtState = unsafe HeapCell.payloadMut<RuntimeState, ()>(&mut cacheAnchor, runtime)
       rtState.regexpStandard.receiverVersion = 0
+      rtState.stringCharCode.protoVersion = 0
       drop rtState
       unsafe releaseOptional(&mut hooks, runtime, function.realm())
       let count = unsafe function.capturedCount()
       let mut index: usize = 0
       while index < count {
         unsafe release(&mut hooks, runtime, unsafe function.capturedGet(index))
-        index = index + 1
+        index = usize.wrappingAdd(index, 1)
       }
       match Pointer.nonNullMut<HeapHeader>(function.captured()) {
         Option<*mut HeapHeader>.Some { value } => { unsafe HeapCell.destroy<NativeCapturedValues>(value) }
@@ -2603,10 +2614,10 @@ pub unsafe fn finalizeCorePayload<H: HeapHooks>(hooks: &mut H, runtime: *mut Hea
     ObjectPayload.FastArray { array } => {
       let mut index: usize = 0
       // A number-only array has nothing to release.
-      if !ValueBits.anyHeap(array.values().asSlice()) { index = array.values().length() }
+      if array.isPlain() || !ValueBits.anyHeap(array.values().asSlice()) { index = array.values().length() }
       while index < array.values().length() {
         unsafe release(&mut hooks, runtime, array.values().get(index))
-        index = index + 1
+        index = usize.wrappingAdd(index, 1)
       }
       unsafe js_shapes.parkValues(runtime, array.intoValues())
     }
@@ -3985,6 +3996,9 @@ unsafe fn destroyModule<H: HeapHooks>(hooks: &mut H, runtime: *mut HeapHeader, n
 @inlineNever
 unsafe fn destroyContext<H: HeapHooks>(hooks: &mut H, runtime: *mut HeapHeader, node: *mut HeapHeader) -> () {
   let mut anchor = ()
+  let rtState = unsafe HeapCell.payloadMut<RuntimeState, ()>(&mut anchor, runtime)
+  rtState.stringCharCode.protoVersion = 0
+  drop rtState
   while true {
     let ctx = unsafe HeapCell.payload<ContextState, ()>(&anchor, node)
     let first = ctx.loadedModules.first

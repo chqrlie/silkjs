@@ -804,6 +804,8 @@ pub struct RuntimeState {
   pub typedLengthCache: [TypedLengthEntry; 12],
   /// The last RegExp layout js_regexp_intrinsics_symbols.standard proved; it owns it.
   pub regexpStandard: RegExpStandardCache,
+  /// The last String.prototype.charCodeAt lookup js_vm_property_ops.noteStringCharCodeAt verified.
+  pub stringCharCode: StringCharCodeCache,
   /// Shape chains of recently constructed objects, each held by one reference
   /// so that `new F()` revives no parked shape on its way from the empty shape
   /// to the final one; js_gc owns these and releases them before each collection.
@@ -1018,6 +1020,23 @@ impl Copy for RegExpStandardCache {}
 pub const EMPTY_REGEXP_STANDARD: RegExpStandardCache = RegExpStandardCache {
   receiverVersion: 0, protoVersion: 0, lastIndex: 0, exec: 0, flags: 0, global: 0, unicode: 0, replace: 0xffffffff,
   execFn: 0, flagsFn: 0, globalFn: 0, unicodeFn: 0, replaceFn: 0
+}
+/// The last String.prototype.charCodeAt lookup verified by
+/// js_vm_property_ops.noteStringCharCodeAt; cleared (protoVersion = 0) if any
+/// NativeFunction or Context is destroyed or String's class prototype changes.
+pub struct StringCharCodeCache {
+  pub context: usize,
+  pub proto: ?*mut HeapHeader,
+  pub protoVersion: u64,
+  pub atom: u32,
+  pub slot: u32,
+  pub fnCell: usize
+}
+impl Copy for StringCharCodeCache {}
+pub fn emptyStringCharCode() -> StringCharCodeCache {
+  return StringCharCodeCache {
+    context: 0, proto: Pointer.null<HeapHeader>(), protoVersion: 0, atom: 0, slot: 0, fnCell: 0
+  }
 }
 /// The slot index of a FieldCacheEntry key whose prototype has no record for the atom.
 pub const FIELD_PASS_THROUGH: u64 = 0xffff
@@ -1239,7 +1258,10 @@ pub fn constructCacheSlot(code: usize) -> usize {
 pub fn literalCacheIndex(site: usize) -> usize { return (site ^ usize.shiftRight(site, 8)) & 255 }
 pub const INSTANCE_CACHE_EMPTY: u64 = 0xffffffffffffffff
 pub struct TransitionEntry {
-  pub base: usize,
+  /// The RuntimeState.shapeEpoch at which this entry's prototype chain last
+  /// held (0 when unverified or cleared): kept inline so fast add hits touch
+  /// only transitions[slot] without loading transitionChains[slot].
+  pub epoch: u64,
   pub target: ?*mut HeapHeader,
   pub atom: u32,
   pub flags: u8,
@@ -1248,6 +1270,7 @@ pub struct TransitionEntry {
   /// (CHAIN_UNVERIFIED until one did): while those versions hold, put_field adds
   /// along this entry without the walk.
   pub chainDepth: u8,
+  /// Monotonic ShapeData.version of the base shape (0 when slot is empty/cleared).
   pub baseVersion: u64
 }
 pub const CHAIN_UNVERIFIED: u8 = 255
@@ -1255,13 +1278,10 @@ impl Copy for TransitionEntry {}
 /// A TransitionEntry's verified prototype chain (RuntimeState.transitionChains).
 pub struct TransitionChain {
   /// Up to six links: a class three levels deep reaches Object.prototype at four.
-  pub chain: [u64; 6],
-  /// The RuntimeState.shapeEpoch at which chain last held (0: not since it was
-  /// recorded): while it is current, no prototype changed and the walk is skipped.
-  pub epoch: u64
+  pub chain: [u64; 6]
 }
 impl Copy for TransitionChain {}
-pub const BLANK_TRANSITION_CHAIN: TransitionChain = TransitionChain { chain: [0; 6], epoch: 0 }
+pub const BLANK_TRANSITION_CHAIN: TransitionChain = TransitionChain { chain: [0; 6] }
 
 /// Context payload (HeapKind.Context). runtime and context-list links are borrowed.
 /// Cached shapes/prototypes/constructors/values are owned JS edges. Modules use

@@ -635,7 +635,7 @@ unsafe fn accessor(runtime: *mut HeapHeader, fnObj: *mut HeapHeader, code: *mut 
   drop bytecode
   let object = match unsafe Pointer.read<ValueBits>(receiver) { ValueBits.Object { reference } => reference _ => { return false } }
   let firstOp = unsafe codeByte(ip, 2)
-  if firstOp == op.OP_get_arg0 { return unsafe charCodeArgAccessor(realm, ip, object, arguments, result) }
+  if firstOp == op.OP_get_arg0 { return unsafe charCodeArgAccessor(runtime, realm, ip, object, arguments, result) }
   if firstOp == op.OP_get_loc_field8 {
     let tail = unsafe codeByte(ip, ACCESSOR_TAIL)
     if tail == op.OP_return {
@@ -650,7 +650,7 @@ unsafe fn accessor(runtime: *mut HeapHeader, fnObj: *mut HeapHeader, code: *mut 
       drop shape drop data
       return unsafe plainAccessorSlow(runtime, ip, object, arguments, result)
     }
-    if tail == op.OP_get_loc_field8 { return unsafe charCodeFieldAccessor(realm, ip, object, result) }
+    if tail == op.OP_get_loc_field8 { return unsafe charCodeFieldAccessor(runtime, realm, ip, object, result) }
     if tail == op.OP_get_var { return unsafe selectAccessor(runtime, fnObj, ip, object, result) }
     if tail != op.OP_get_field2 { return unsafe plainAccessorSlow(runtime, ip, object, arguments, result) }
   }
@@ -686,11 +686,11 @@ unsafe fn forwardingAccessor(runtime: *mut HeapHeader, ip: *const u8, object: *m
 }
 /// js_bytecode.charCodeAccessor (`if (this.i < this.len) return this.s.charCodeAt(this.i)`).
 /// Zero-call leaf: checks shape.version once against all three inline keys,
-/// reads String.prototype.charCodeAt via ContextState's cached slot, and reads
-/// compact flat Latin-1 units inline; on any cold miss returns false so runLeaf
-/// warms the keys/cache once.
+/// verifies String.prototype.charCodeAt via RuntimeState's cached slot/cell, and
+/// reads compact flat Latin-1 units inline; on any cold miss returns false so
+/// runLeaf warms the keys/cache once.
 @inlineNever
-unsafe fn charCodeFieldAccessor(realm: *mut HeapHeader, ip: *const u8, object: *mut HeapHeader, result: *mut ValueBits) -> bool {
+unsafe fn charCodeFieldAccessor(runtime: *mut HeapHeader, realm: *mut HeapHeader, ip: *const u8, object: *mut HeapHeader, result: *mut ValueBits) -> bool {
   let anchor = () let data = unsafe HeapCell.payload<ObjectData, ()>(&anchor, object)
   let version = (unsafe HeapCell.payload<ShapeData, ()>(&anchor, data.shape)).version
   let kPos = unsafe properties.fieldKeyAt(unsafe codeAt(ip, 3))
@@ -706,16 +706,14 @@ unsafe fn charCodeFieldAccessor(realm: *mut HeapHeader, ip: *const u8, object: *
   drop data
   let unit = unsafe nativeFunctions.flatCharCodeOf(src, pos)
   if unit < 0 { return false }
-  let mut method = ValueBits.Undefined
-  if !unsafe properties.readStringCharCodeAtFast(realm, unsafe codeAt(ip, 48), Pointer.fromMutRef<ValueBits>(&mut method)) { return false }
-  if unsafe nativeFunctions.unitMethod(method) != nativeFunctions.UNIT_METHOD_CHAR_CODE_AT { return false }
+  if !unsafe properties.isVerifiedCharCodeAt(runtime, realm, unsafe codeAt(ip, 48)) { return false }
   unsafe Pointer.write<ValueBits>(result, ValueBits.Int { value: unit })
   return true
 }
 /// js_bytecode.charCodeAccessor (`if (arg0 < this.len) return this.s.charCodeAt(arg0)`).
 /// Zero-call leaf.
 @inlineNever
-unsafe fn charCodeArgAccessor(realm: *mut HeapHeader, ip: *const u8, object: *mut HeapHeader, arguments: *mut ValueBits, result: *mut ValueBits) -> bool {
+unsafe fn charCodeArgAccessor(runtime: *mut HeapHeader, realm: *mut HeapHeader, ip: *const u8, object: *mut HeapHeader, arguments: *mut ValueBits, result: *mut ValueBits) -> bool {
   let posVal = unsafe Pointer.read<ValueBits>(arguments)
   let pos = match posVal { ValueBits.Int { value } => value _ => { return false } }
   let anchor = () let data = unsafe HeapCell.payload<ObjectData, ()>(&anchor, object)
@@ -730,9 +728,7 @@ unsafe fn charCodeArgAccessor(realm: *mut HeapHeader, ip: *const u8, object: *mu
   drop data
   let unit = unsafe nativeFunctions.flatCharCodeOf(src, pos)
   if unit < 0 { return false }
-  let mut method = ValueBits.Undefined
-  if !unsafe properties.readStringCharCodeAtFast(realm, unsafe codeAt(ip, 35), Pointer.fromMutRef<ValueBits>(&mut method)) { return false }
-  if unsafe nativeFunctions.unitMethod(method) != nativeFunctions.UNIT_METHOD_CHAR_CODE_AT { return false }
+  if !unsafe properties.isVerifiedCharCodeAt(runtime, realm, unsafe codeAt(ip, 35)) { return false }
   unsafe Pointer.write<ValueBits>(result, ValueBits.Int { value: unit })
   return true
 }
@@ -961,7 +957,7 @@ unsafe fn stringMethodLeaf(runtime: *mut HeapHeader, context: *mut HeapHeader, i
   if !receiver.isString() || !unsafe properties.readStringMethodBorrowedAt(runtime, context, ip, methodOut) { return 0 }
   let method = unsafe Pointer.read<ValueBits>(methodOut)
   if unsafe nativeFunctions.unitMethod(method) == nativeFunctions.UNIT_METHOD_CHAR_CODE_AT {
-    unsafe properties.noteStringCharCodeAt(runtime, context, ip)
+    unsafe properties.noteStringCharCodeAt(runtime, context, ip, method)
     let nextOp = unsafe codeByte(ip, 4)
     let mut width: usize = 0
     let mut index = ValueBits.Undefined

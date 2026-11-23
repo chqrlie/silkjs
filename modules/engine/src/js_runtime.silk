@@ -28,7 +28,7 @@ import js_value { ValueBits }
 import js_owned_value { Value, lendBits }
 import js_realm { lendRealm }
 import js_core_types { LastMatch, USER_VALUE_COUNT, DeferredSource, ForeignFrameSource }
-import js_core_types { blankConstructEntry, EMPTY_REGEXP_STANDARD, TransitionEntry, BLANK_TRANSITION_CHAIN, CHAIN_UNVERIFIED, blankReceiverEntry, InstanceCacheEntry, INSTANCE_CACHE_EMPTY,
+import js_core_types { blankConstructEntry, EMPTY_REGEXP_STANDARD, emptyStringCharCode, TransitionEntry, BLANK_TRANSITION_CHAIN, CHAIN_UNVERIFIED, blankReceiverEntry, InstanceCacheEntry, INSTANCE_CACHE_EMPTY,
   RuntimeState, ContextState, ContextList, ModuleList, HeapList, GcPhase,
   HostHook, ModuleLoaderHooks, SharedArrayBufferHooks, WeakRefList, WeakRefHeader,
   ClassDef, NativeFunctionId, StackFrame, ByteStorage, LeakTrackingState, LocaleCallbacks, SlotBits,
@@ -179,12 +179,13 @@ pub effect fn allocateRuntimeStorage(stackTop: usize) -> *mut HeapHeader
   unsafe Pointer.put(Pointer.fromMutRef(&mut state.spareSlots), move spares)
   unsafe Pointer.put(Pointer.fromMutRef(&mut state.spareValues), move spareValues)
   unsafe Pointer.put(Pointer.fromMutRef(&mut state.spareCells), move cells)
-  state.transitions = [TransitionEntry { base: 0, target: Pointer.null<HeapHeader>(), atom: 0, flags: 0, chainDepth: CHAIN_UNVERIFIED, baseVersion: 0 }; 2048]
+  state.transitions = [TransitionEntry { epoch: 0, target: Pointer.null<HeapHeader>(), atom: 0, flags: 0, chainDepth: CHAIN_UNVERIFIED, baseVersion: 0 }; 2048]
   state.transitionChains = [BLANK_TRANSITION_CHAIN; 2048]
   state.nextShapeVersion = 1
   state.shapeEpoch = 1
   state.plainCloneVersion = 0
   state.regexpStandard = EMPTY_REGEXP_STANDARD
+  state.stringCharCode = emptyStringCharCode()
   state.retiredShapeNext = 0
   state.receiverCache = [blankReceiverEntry(); 64]
   state.instanceCache = [InstanceCacheEntry { version: INSTANCE_CACHE_EMPTY, index: 0 }; 64]
@@ -356,9 +357,10 @@ pub unsafe fn setClassPrototype<H: HeapHooks>(hooks: &mut H, context: *mut HeapH
   let mut anchor = ()
   let data = unsafe HeapCell.payloadMut<ContextState, ()>(&mut anchor, context)
   let runtime = data.runtime
-  let registryAnchor = ()
-  let registry = unsafe HeapCell.payload<RuntimeState, ()>(&registryAnchor, runtime)
+  let mut registryAnchor = ()
+  let registry = unsafe HeapCell.payloadMut<RuntimeState, ()>(&mut registryAnchor, runtime)
   if u32.toUsize(classId) >= registry.classes.length() { Intrinsic.trap("QuickJS invariant violated") }
+  if classId == classes.JS_CLASS_STRING { registry.stringCharCode.protoVersion = 0 }
   drop registry
   let old = data.classPrototypes.get(u32.toUsize(classId))
   data.classPrototypes.set(u32.toUsize(classId), incoming)

@@ -19,7 +19,7 @@ import js_core_types as census
 import js_heap { HeapCell, HeapHeader }
 import js_value { ValueBits }
 import js_owned_value { lendBits, lendFor, Value }
-import js_core_types { storeFieldEntry, fieldGetterKey, LeafUndoSlot, PolyFieldEntry, polyFieldIndex, POLY_OWN, POLY_PROTO, POLY_GETTER, POLY_ABSENT, POLY_WRITABLE, RuntimeState, FieldCacheEntry, TypedLengthEntry, FIELD_PASS_THROUGH, FIELD_PROTO_KEY, fieldAbsentKey, fieldCacheIndex, fieldSpareIndex, ContextState, ObjectData, ObjectPayload, ShapeData, ShapeProperty,
+import js_core_types { storeFieldEntry, fieldGetterKey, LeafUndoSlot, PolyFieldEntry, polyFieldIndex, POLY_OWN, POLY_PROTO, POLY_GETTER, POLY_ABSENT, POLY_WRITABLE, RuntimeState, StringCharCodeCache, FieldCacheEntry, TypedLengthEntry, FIELD_PASS_THROUGH, FIELD_PROTO_KEY, fieldAbsentKey, fieldCacheIndex, fieldSpareIndex, ContextState, ObjectData, ObjectPayload, ShapeData, ShapeProperty,
   PropertySlot, SlotBits, NativeErrorKind, JS_PROP_TMASK, JS_PROP_GETSET, JS_PROP_WRITABLE, JS_PROP_LENGTH, JS_PROP_THROW_STRICT, JS_PROP_C_W_E, JS_PROP_CONFIGURABLE }
 import js_gc { HeapHooks }
 import js_gc as gc
@@ -1664,10 +1664,32 @@ pub unsafe fn readStringCharCodeAtFast(context: *mut HeapHeader, ip: *const u8, 
   unsafe Pointer.write<ValueBits>(target, (unsafe data.slotUnchecked(slot)).valueBits())
   return true
 }
-/// Records String.prototype's current shape version, atom, and own slot for
-/// charCodeAt on ContextState after a verified charCodeAt lookup.
+/// Zero-call inline check that String.prototype at ip still holds the exact
+/// verified String.prototype.charCodeAt NativeFunction cell recorded by
+/// noteStringCharCodeAt, skipping classPrototypes indexing and unitMethod.
+@inlineAlways
+pub unsafe fn isVerifiedCharCodeAt(runtime: *mut HeapHeader, context: *mut HeapHeader, ip: *const u8) -> bool {
+  let anchor = ()
+  let cache = (unsafe HeapCell.payload<RuntimeState, ()>(&anchor, runtime)).stringCharCode
+  if cache.protoVersion == 0 || cache.context != Pointer.address<HeapHeader>(context) || cache.atom != unsafe fieldAtomAt(ip) { return false }
+  let proto = unsafe Intrinsic.pointerRequalify<?*mut HeapHeader, *mut HeapHeader>(cache.proto)
+  let data = unsafe HeapCell.payload<ObjectData, ()>(&anchor, proto)
+  let shape = unsafe HeapCell.payload<ShapeData, ()>(&anchor, data.shape)
+  if shape.version != cache.protoVersion { return false }
+  let found = (unsafe data.slotUnchecked(u32.toUsize(cache.slot))).valueBits()
+  return match found {
+    ValueBits.Object { reference } => Pointer.address<HeapHeader>(reference) == cache.fnCell
+    _ => false
+  }
+}
+/// Records String.prototype's current shape version, atom, own slot, and
+/// verified charCodeAt function cell after a verified charCodeAt lookup.
 @inlineNever
-pub unsafe fn noteStringCharCodeAt(runtime: *mut HeapHeader, context: *mut HeapHeader, ip: *const u8) -> () {
+pub unsafe fn noteStringCharCodeAt(runtime: *mut HeapHeader, context: *mut HeapHeader, ip: *const u8, method: ValueBits) -> () {
+  let fnCell = match method {
+    ValueBits.Object { reference } => Pointer.address<HeapHeader>(reference)
+    _ => { return () }
+  }
   let mut ctxAnchor = ()
   let ctx = unsafe HeapCell.payloadMut<ContextState, ()>(&mut ctxAnchor, context)
   if ctx.classPrototypes.length() <= u32.toUsize(classes.JS_CLASS_STRING) { return () }
@@ -1677,14 +1699,35 @@ pub unsafe fn noteStringCharCodeAt(runtime: *mut HeapHeader, context: *mut HeapH
   }
   let anchor = ()
   let data = unsafe HeapCell.payload<ObjectData, ()>(&anchor, start)
-  let shape = unsafe HeapCell.payload<ShapeData, ()>(&anchor, data.shape)
-  let state = unsafe HeapCell.payload<RuntimeState, ()>(&anchor, runtime)
+  let shapeVersion = (unsafe HeapCell.payload<ShapeData, ()>(&anchor, data.shape)).version
+  drop data
+  let mut stateAnchor = ()
+  let state = unsafe HeapCell.payloadMut<RuntimeState, ()>(&mut stateAnchor, runtime)
   let site = Pointer.address<u8>(ip)
-  let entry = &state.fieldCache[fieldCacheIndex(site)]
-  if entry.site == site && u64.shiftRight(entry.key, 16) == shape.version {
-    ctx.stringCharCodeProtoVersion = shape.version
-    ctx.stringCharCodeAtom = unsafe fieldAtomAt(ip)
-    ctx.stringCharCodeSlot = u64.toU32(entry.key & 0xffff)
+  let idx = fieldCacheIndex(site)
+  let mut key: u64 = 0
+  if state.fieldCache[idx].site == site && u64.shiftRight(state.fieldCache[idx].key, 16) == shapeVersion {
+    key = state.fieldCache[idx].key
+  } else {
+    let spareIdx = fieldSpareIndex(idx)
+    if state.fieldCache[spareIdx].site == site && u64.shiftRight(state.fieldCache[spareIdx].key, 16) == shapeVersion {
+      key = state.fieldCache[spareIdx].key
+    }
+  }
+  if key != 0 {
+    let atom = unsafe fieldAtomAt(ip)
+    let slot = u64.toU32(key & 0xffff)
+    ctx.stringCharCodeProtoVersion = shapeVersion
+    ctx.stringCharCodeAtom = atom
+    ctx.stringCharCodeSlot = slot
+    state.stringCharCode = StringCharCodeCache {
+      context: Pointer.address<HeapHeader>(context),
+      proto: start,
+      protoVersion: shapeVersion,
+      atom: atom,
+      slot: slot,
+      fnCell: fnCell
+    }
   }
 }
 /// It leaves ip and stackTop alone: on true the arm steps over the atom and
@@ -2275,7 +2318,7 @@ unsafe fn writeTypedNumberOperand<H: HeapHooks>(hooks: &mut H, machine: &mut Mac
 unsafe fn writeFieldFast(runtime: *mut HeapHeader, ip: *const u8, node: *mut HeapHeader, source: *mut ValueBits) -> bool {
   let siteKey = unsafe fieldKeyAt(ip)
   if u64.shiftRight(siteKey, 32) == u64.shiftRight(FIELD_ADD_KEY, 32) {
-    return unsafe writeFieldAddFast(runtime, ip, node, source)
+    return unsafe writeFieldAddFast(runtime, ip, node, source, siteKey)
   }
   let atom = unsafe fieldAtomAt(ip)
   let mut anchor = () let data = unsafe HeapCell.payloadMut<ObjectData, ()>(&mut anchor, node)
@@ -2325,9 +2368,8 @@ unsafe fn writeFieldAddTrade(runtime: *mut HeapHeader, ip: *const u8, node: *mut
 // zero non-tail calls so LLVM keeps callee-saved registers untouched.
 // Polymorphic constructor adds tail-call writeFieldAddPoly.
 @inlineNever
-unsafe fn writeFieldAddFast(runtime: *mut HeapHeader, ip: *const u8, node: *mut HeapHeader, source: *mut ValueBits) -> bool {
+unsafe fn writeFieldAddFast(runtime: *mut HeapHeader, ip: *const u8, node: *mut HeapHeader, source: *mut ValueBits, siteKey: u64) -> bool {
   let atom = unsafe fieldAtomAt(ip)
-  let siteKey = unsafe fieldKeyAt(ip)
   let mut addAnchor = () let addData = unsafe HeapCell.payloadMut<ObjectData, ()>(&mut addAnchor, node)
   if !unsafe addsInPlace(&addData) { return false }
   let found = unsafe shapes.verifiedAddAtFast(runtime, u64.toUsize(siteKey & 0xffffffff), addData.shape, atom)

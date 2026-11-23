@@ -3819,7 +3819,7 @@ unsafe effect fn constructInline<H: HeapHooks + CoercionHooks + OwnPropertyHooks
   + PropertyWriteHooks + PrototypeHooks + InterruptHooks + NativeFunctionHooks + CallHooks + ErrorHooks + EvalHooks>(hooks: &mut H,
   memory: &AllocationObserver, machine: &mut Machine) -> *mut Machine ! JsException ? &mut Allocator {
   let count = u16.toUsize(unsafe machine.readU16())
-  let function = unsafe machine.top(count + 2) let newTarget = unsafe machine.top(count + 1)
+  let function = unsafe machine.top(usize.wrappingAdd(count, 2)) let newTarget = unsafe machine.top(usize.wrappingAdd(count, 1))
   unsafe machine.publishPc()
   let data = unsafe operandCell(machine.stackTop, count)
   let argv = FrameSlots { data: data, count: count }
@@ -3827,50 +3827,64 @@ unsafe effect fn constructInline<H: HeapHooks + CoercionHooks + OwnPropertyHooks
   let running = Pointer.fromMutRef<Machine>(&mut machine)
   let context = machine.context
   let mut realm = context
-  let mut result = ValueBits.Undefined
   if unsafe isDerivedConstructor(function, &mut realm) {
     return run unsafe constructDerived(&mut hooks, memory, &mut machine, count)
-  } else {
-    let form = unsafe constructors.formOf(function)
-    // A planned construct runs no JS and cannot recurse: loops still poll on
-    // their back edges, so only the paths that may run code poll here.
-    let mut polled = false
-    if unsafe sameValueBits(function, newTarget) && form != CONSTRUCT_GENERIC {
-      let mut planned = ValueBits.Uninitialized
-      let mut consumed = false
-      if form == CONSTRUCT_STORES { planned = run unsafe constructPlanned(&mut hooks, memory, realm, function, &argv, &mut consumed) }
-      else {
-        if interrupts.due(unsafe lendRealm(&context, context)) { run interrupts.handle(&mut hooks, memory, unsafe lendRealm(&context, context)) }
-        polled = true
-        planned = run unsafe constructRecipe(&mut hooks, memory, realm, machine.runtime, function, form, &argv)
-      }
-      match planned {
-        ValueBits.Object { reference } => {
-          // A plan's shapes are the receiver cache's own (held until collect), so
-          // only recipe forms need their chain pinned.
-          if form != CONSTRUCT_STORES { unsafe gc.pinConstructed(&mut hooks, machine.runtime, reference) }
-          // Consumed arguments moved into the object bitwise: drop them unreleased.
-          if consumed { unsafe releasePlannedFunction(&mut hooks, &mut machine, function, first) }
-          else { unsafe releasePlannedOperands(&mut hooks, &mut machine, function, data, first) }
-          unsafe machine.push(planned)
-          return running
-        }
-        _ => ()
-      }
-    }
-    if !polled && interrupts.due(unsafe lendRealm(&context, context)) { run interrupts.handle(&mut hooks, memory, unsafe lendRealm(&context, context)) }
-    let receiver = run unsafe constructors.createReceiver(&mut hooks, memory, unsafe lendRealm(&realm, realm), newTarget)
-    if form != CONSTRUCT_GENERIC {
-      match Pointer.nonNullMut<Machine>(run unsafe constructSpecial(&mut hooks, &mut machine, function, receiver, newTarget, form, &argv, first, running, context)) {
-        Option<*mut Machine>.Some { value } => { return value }
-        Option<*mut Machine>.None => ()
-      }
-    }
-    let entered = unsafe activation.enterInline(machine.runtime, function, argv, first, running, context, receiver,
-      newTarget, true, false)
-    match entered { Option<*mut Machine>.Some { value } => { return value } Option<*mut Machine>.None => () }
-    result = run unsafe constructWith(&mut hooks, memory, context, function, receiver, newTarget, &argv, JS_CALL_FLAG_CONSTRUCTOR)
   }
+  let form = unsafe constructors.formOf(function)
+  let mut polled = false
+  if form != CONSTRUCT_GENERIC && unsafe sameValueBits(function, newTarget) {
+    if run unsafe constructPlannedOrRecipe(&mut hooks, memory, &mut machine, realm, function, form, &argv, data, first, &mut polled) {
+      return running
+    }
+  }
+  if !polled && interrupts.due(unsafe lendRealm(&context, context)) { run interrupts.handle(&mut hooks, memory, unsafe lendRealm(&context, context)) }
+  let receiver = run unsafe constructors.createReceiver(&mut hooks, memory, unsafe lendRealm(&realm, realm), newTarget)
+  if form != CONSTRUCT_GENERIC {
+    match Pointer.nonNullMut<Machine>(run unsafe constructSpecial(&mut hooks, &mut machine, function, receiver, newTarget, form, &argv, first, running, context)) {
+      Option<*mut Machine>.Some { value } => { return value }
+      Option<*mut Machine>.None => ()
+    }
+  }
+  let entered = unsafe activation.enterInline(machine.runtime, function, argv, first, running, context, receiver,
+    newTarget, true, false)
+  match entered { Option<*mut Machine>.Some { value } => { return value } Option<*mut Machine>.None => () }
+  return run unsafe constructInlineFallback(&mut hooks, memory, &mut machine, context, function, receiver, newTarget, &argv, first, running)
+}
+/// Out-of-line planned/recipe fast path for non-generic constructors.
+@inlineNever
+unsafe effect fn constructPlannedOrRecipe<H: HeapHooks + CoercionHooks + InterruptHooks>(hooks: &mut H,
+  memory: &AllocationObserver, machine: &mut Machine, realm: *mut HeapHeader, function: ValueBits, form: u8,
+  argv: &FrameSlots, data: *mut ValueBits, first: *mut ValueBits, polled: &mut bool) -> bool ! JsException ? &mut Allocator {
+  let mut planned = ValueBits.Uninitialized
+  let mut consumed = false
+  if form == CONSTRUCT_STORES { planned = run unsafe constructPlanned(&mut hooks, memory, realm, function, &argv, &mut consumed) }
+  else {
+    let context = machine.context
+    if interrupts.due(unsafe lendRealm(&context, context)) { run interrupts.handle(&mut hooks, memory, unsafe lendRealm(&context, context)) }
+    polled.* = true
+    planned = run unsafe constructRecipe(&mut hooks, memory, realm, machine.runtime, function, form, &argv)
+  }
+  match planned {
+    ValueBits.Object { reference } => {
+      // A plan's shapes are the receiver cache's own (held until collect), so
+      // only recipe forms need their chain pinned.
+      if form != CONSTRUCT_STORES { unsafe gc.pinConstructed(&mut hooks, machine.runtime, reference) }
+      // Consumed arguments moved into the object bitwise: drop them unreleased.
+      if consumed { unsafe releasePlannedFunction(&mut hooks, &mut machine, function, first) }
+      else { unsafe releasePlannedOperands(&mut hooks, &mut machine, function, data, first) }
+      unsafe machine.push(planned)
+      return true
+    }
+    _ => { return false }
+  }
+}
+/// Out-of-line fallback when enterInline declines (call frame region full).
+@inlineNever
+unsafe effect fn constructInlineFallback<H: HeapHooks + CoercionHooks + OwnPropertyHooks + GetPropertyHooks + HasPropertyHooks + OwnKeysHooks
+  + PropertyWriteHooks + PrototypeHooks + InterruptHooks + NativeFunctionHooks + CallHooks + ErrorHooks + EvalHooks>(hooks: &mut H,
+  memory: &AllocationObserver, machine: &mut Machine, context: *mut HeapHeader, function: ValueBits, receiver: ValueBits,
+  newTarget: ValueBits, argv: &FrameSlots, first: *mut ValueBits, running: *mut Machine) -> *mut Machine ! JsException ? &mut Allocator {
+  let result = run unsafe constructWith(&mut hooks, memory, context, function, receiver, newTarget, &argv, JS_CALL_FLAG_CONSTRUCTOR)
   unsafe releaseOperandsFrom(&mut hooks, &mut machine, first) unsafe machine.push(result)
   return running
 }

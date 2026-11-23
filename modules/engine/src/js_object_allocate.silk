@@ -508,6 +508,72 @@ pub unsafe effect fn ordinaryFromPlanFast<H: HeapHooks>(hooks: &mut H, observer:
   unsafe gc.publishObject(runtime, fresh)
   return fresh
 }
+/// Lean fast path of ordinaryFromShape for an empty plain object shape
+/// (createReceiver's cached empty shape): one inline allocation path with no
+/// extra/record/plan branches or OOM landing pads; returns Uninitialized on OOM
+/// after releasing ownedShape.
+@inlineAlways
+pub unsafe effect fn ordinaryFromEmptyShapeOrUninit<'a, H: HeapHooks>(hooks: &mut H, observer: &AllocationObserver,
+  realm: Realm<'a>, ownedShape: *mut HeapHeader) -> ValueBits ? &mut Allocator {
+  let runtime = realm.runtime()
+  if unsafe gc.observesFresh(runtime) {
+    return run unsafe ordinaryFromShapeOrUninitSlow(&mut hooks, observer, realm, ownedShape)
+  }
+  let mut tail = unsafe shapes.planInline(ownedShape, 0)
+  if tail == 0 {
+    let anchor = ()
+    let built = u8.toUsize((unsafe HeapCell.payload<ShapeData, ()>(&anchor, ownedShape)).builtSlots)
+    if built == 0 {
+      return run unsafe ordinaryFromShapeOrUninitSlow(&mut hooks, observer, realm, ownedShape)
+    }
+    tail = built
+  }
+  let mut spare = Pointer.null<HeapHeader>()
+  if tail == shapes.INLINE_SLOTS || tail == shapes.PAIR_SLOTS {
+    spare = unsafe gc.takeSpareCell(runtime, tail, true)
+  }
+  let fresh = match Pointer.nonNullMut<HeapHeader>(spare) {
+    Option<*mut HeapHeader>.Some { value } => unsafe HeapCell.reviveUninit<ObjectData>(HeapKind.Object, value)
+    Option<*mut HeapHeader>.None => {
+      let mut tailBytes = usize.wrappingMultiply(tail, Layout.of<SlotBits>().bytes)
+      let reused = Layout.of<ObjectPayload>().bytes - PAYLOAD_TAG_BYTES
+      if tailBytes > reused { tailBytes = usize.wrappingSubtract(tailBytes, reused) } else { tailBytes = 0 }
+      match Pointer.nonNullMut<HeapHeader>(run unsafe allocateInlineCellOrNull(&mut hooks, observer, runtime, tailBytes)) {
+        Option<*mut HeapHeader>.Some { value } => value
+        Option<*mut HeapHeader>.None => {
+          unsafe gc.releaseHeader(&mut hooks, runtime, ownedShape)
+          return ValueBits.Uninitialized
+        }
+      }
+    }
+  }
+  unsafe census.censusBump(runtime, census.CENSUS_OBJECTS_ALLOCATED, 1)
+  unsafe memory.prefetch(usize.wrappingAdd(Pointer.address<HeapHeader>(fresh), 64))
+  let mut nodeAnchor = ()
+  let data = unsafe HeapCell.payloadMut<ObjectData, ()>(&mut nodeAnchor, fresh)
+  let payload = Pointer.fromMutRef<ObjectPayload>(&mut data.payload)
+  unsafe Pointer.put<ObjectPayload>(payload, ObjectPayload.Empty)
+  let slotBase = unsafe Intrinsic.pointerReinterpret<*mut u8, *mut SlotBits>(unsafe Pointer.atMut<u8>(unsafe Pointer.assumeManyMut<u8>(
+    unsafe Intrinsic.pointerReinterpret<*mut ObjectPayload, *mut u8>(payload)), PAYLOAD_TAG_BYTES))
+  let slots = unsafe ThinList<SlotBits>.borrowing(slotBase, tail)
+  unsafe Pointer.put<ThinList<SlotBits>>(Pointer.fromMutRef<ThinList<SlotBits>>(data.slotListMut()), move slots)
+  data.setIsStandardArrayPrototype(false) data.setExtensible(true) data.setFreeMark(false) data.setIsExotic(false)
+  data.setFastArray(false) data.setIsConstructor(false) data.setHasImmutablePrototype(false)
+  data.setIsHtmlDda(false) data.clearRoles() data.setClassId(classes.JS_CLASS_OBJECT) data.weakRefCount = 0 data.shape = ownedShape
+  drop data
+  unsafe gc.publishObject(runtime, fresh)
+  return ValueBits.Object { reference: fresh }
+}
+@inlineNever
+unsafe effect fn ordinaryFromShapeOrUninitSlow<'a, H: HeapHooks>(hooks: &mut H, observer: &AllocationObserver,
+  realm: Realm<'a>, ownedShape: *mut HeapHeader) -> ValueBits ? &mut Allocator {
+  let created = run Intrinsic.catchFailure<OutOfMemoryError>(
+    unsafe freshNode(&mut hooks, observer, realm, ownedShape, classes.JS_CLASS_OBJECT, false, false, 0, Pointer.null<HeapHeader>()), failedOom)
+  return match move created {
+    ValueBits value => value
+    FailedOom { error } => { drop error ValueBits.Uninitialized }
+  }
+}
 /// fromShape for a plain JS_CLASS_OBJECT with no supplied slots (constructed
 /// receivers, object literals): the class table lookup and the array and
 /// exotic-class branches fold away.
