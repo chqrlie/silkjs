@@ -1,6 +1,7 @@
 // Native QuickJS stack analysis and serialization operand rewriting.
 // Algorithms from quickjs.c; Fabrice Bellard and Charlie Gordon, LICENSE.quickjs.
 import silk.mem.allocator { Allocator, OutOfMemoryError }
+import silk.mem.pointer { Pointer }
 import silk.collections.list { List }
 import silk.core.ownership { Copy }
 import silk.core.effect { Effect }
@@ -59,11 +60,6 @@ impl StackState {
     return u64.toI64(u64.shiftRight(self.entries.asSlice()[index], 16) & 0xffffffff) - 1
   }
   @inlineAlways
-  fn record(self: &mut Self, index: usize, level: i32, catchPc: i64) -> () {
-    let entries = self.entries.asMutSlice()
-    entries[index] = u64.shiftLeft(self.epoch, 48) | u64.shiftLeft(i64.toU64(catchPc + 1), 16) | u16.toU64(i32.toU16(level))
-  }
-  @inlineAlways
   effect fn checkMaximum(self: &mut Self, pc: i64, opcode: u8, level: i32) -> () ! BytecodeError {
     if level > self.maximum {
       self.maximum = level
@@ -91,20 +87,22 @@ impl StackState {
   effect fn claimChecked(self: &mut Self, pc: i64, opcode: u8, level: i32, catchPc: i64) -> bool
     ! BytecodeError {
     let index = i64.toUsize(pc)
-    let previous = self.level(index)
-    if previous != 65535 {
+    let entries = self.entries.asMutSlice()
+    let entry = entries[index]
+    if u64.shiftRight(entry, 48) == self.epoch {
+      let previous = u64.toU16(entry & 0xffff)
       if u16.toI32(previous) != level {
         fail BytecodeError { kind: BytecodeErrorKind.InconsistentStack, pc: pc, opcode: opcode,
           expected: u16.toI64(previous), actual: i32.toI64(level) }
       }
-      let previousCatch = self.catchPc(index)
+      let previousCatch = u64.toI64(u64.shiftRight(entry, 16) & 0xffffffff) - 1
       if previousCatch != catchPc {
         fail BytecodeError { kind: BytecodeErrorKind.InconsistentCatch, pc: pc, opcode: opcode,
           expected: previousCatch, actual: catchPc }
       }
       return false
     }
-    self.record(index, level, catchPc)
+    entries[index] = u64.shiftLeft(self.epoch, 48) | u64.shiftLeft(i64.toU64(catchPc + 1), 16) | u16.toU64(i32.toU16(level))
     return true
   }
 }
@@ -235,45 +233,69 @@ pub effect fn analyzeWith(code: &[u8], scratch: &mut StackScratch) -> CodeFacts
   let mut state = StackState { entries: move entries, size: code.length, epoch: epoch,
     pending: List<usize>.make(), maximum: 0 }
   run state.enqueue(0, op.OP_invalid, 0, -1)
+  let codeLen = code.length
+  let codePtr = unsafe Intrinsic.pointerRequalify<?[*]const u8, [*]const u8>(Pointer.fromSlice<u8>(code))
+  let entriesPtr = unsafe Intrinsic.pointerRequalify<?[*]mut u64, [*]mut u64>(Intrinsic.pointerFromMutSlice<u64>(&mut state.entries.asMutSlice()))
+  let epochShift = u64.shiftLeft(epoch, 48)
   while state.pending.length() != 0 {
     let last = state.pending.length() - 1
     let mut pos = state.pending.get(last)
     state.pending.truncate(last)
+    let entry0 = unsafe Pointer.read<u64>(unsafe Pointer.atMut<u64>(entriesPtr, pos))
+    let mut level = u16.toI32(u64.toU16(entry0 & 0xffff))
+    let mut catchPc = u64.toI64(u64.shiftRight(entry0, 16) & 0xffffffff) - 1
+    let mut entryPrefix = epochShift | (entry0 & 0x0000ffffffff0000)
     // Follow fall-through edges directly. Pushing next and popping it again at
     // once is what the LIFO order would do anyway, so the visit order is kept.
     while true {
-      let pc = usize.toI64(pos)
-      let opcode = code[pos]
-      let mut level = u16.toI32(state.level(pos))
-      let mut catchPc = state.catchPc(pos)
+      let opcode = unsafe Pointer.read<u8>(unsafe Pointer.at<u8>(codePtr, pos))
       let extra = ANALYZE_CLASS[u8.toUsize(opcode)]
       if extra != ANALYZE_SLOW {
         // Fixed pops and pushes, falls through: the full step below, less its tests.
         let info = op.opcodeInfo(opcode, true)
-        let next = pc + u8.toI64(info.size)
-        if next > usize.toI64(code.length) {
-          fail BytecodeError { kind: BytecodeErrorKind.BufferOverflow, pc: pc, opcode: opcode,
-            expected: usize.toI64(code.length), actual: next }
+        let nextPos = usize.wrappingAdd(pos, u8.toUsize(info.size))
+        if nextPos > codeLen {
+          fail BytecodeError { kind: BytecodeErrorKind.BufferOverflow, pc: usize.toI64(pos), opcode: opcode,
+            expected: usize.toI64(codeLen), actual: usize.toI64(nextPos) }
         }
         let pops = u8.toI32(info.pops)
         if level < pops {
-          fail BytecodeError { kind: BytecodeErrorKind.StackUnderflow, pc: pc, opcode: opcode,
+          fail BytecodeError { kind: BytecodeErrorKind.StackUnderflow, pc: usize.toI64(pos), opcode: opcode,
             expected: i32.toI64(pops), actual: i32.toI64(level) }
         }
-        level = level + u8.toI32(info.pushes) - pops
-        if level + u8.toI32(extra) > state.maximum {
-          run state.checkMaximum(pc, opcode, level)
-          run state.checkMaximum(pc, opcode, level + u8.toI32(extra))
+        level = i32.wrappingAdd(i32.wrappingSubtract(level, pops), u8.toI32(info.pushes))
+        let peak = i32.wrappingAdd(level, u8.toI32(extra))
+        if peak > state.maximum {
+          state.maximum = peak
+          if peak > JS_STACK_SIZE_MAX {
+            run overflow(usize.toI64(pos), opcode, if level > JS_STACK_SIZE_MAX { level } else { peak })
+          }
         }
-        if next == usize.toI64(code.length) {
-          fail BytecodeError { kind: BytecodeErrorKind.BufferOverflow, pc: next, opcode: opcode,
-            expected: usize.toI64(code.length), actual: next }
+        if nextPos == codeLen {
+          fail BytecodeError { kind: BytecodeErrorKind.BufferOverflow, pc: usize.toI64(nextPos), opcode: opcode,
+            expected: usize.toI64(codeLen), actual: usize.toI64(nextPos) }
         }
-        if !(run state.claimChecked(next, opcode, level, catchPc)) { break }
-        pos = i64.toUsize(next)
+        let expectedEntry = entryPrefix | u32.toU64(i32.wrappingToU32(level))
+        let entry = unsafe Pointer.read<u64>(unsafe Pointer.atMut<u64>(entriesPtr, nextPos))
+        if u64.shiftRight(entry, 48) != epoch {
+          unsafe Pointer.write<u64>(unsafe Pointer.atMut<u64>(entriesPtr, nextPos), expectedEntry)
+          pos = nextPos
+        } else if entry == expectedEntry {
+          break
+        } else {
+          let previous = u64.toU16(entry & 0xffff)
+          if u16.toI32(previous) != level {
+            fail BytecodeError { kind: BytecodeErrorKind.InconsistentStack, pc: usize.toI64(nextPos), opcode: opcode,
+              expected: u16.toI64(previous), actual: i32.toI64(level) }
+          }
+          let previousCatch = u64.toI64(u64.shiftRight(entry, 16) & 0xffffffff) - 1
+          fail BytecodeError { kind: BytecodeErrorKind.InconsistentCatch, pc: usize.toI64(nextPos), opcode: opcode,
+            expected: previousCatch, actual: catchPc }
+        }
       } else {
+      let pc = usize.toI64(pos)
       if opcode == 0 || u8.toUsize(opcode) >= op.OP_COUNT || op.freedByExtended(opcode)
-        || (opcode == op.OP_extended && (pos + 1 >= code.length || !op.movedToExtended(code[pos + 1]))) {
+        || (opcode == op.OP_extended && (pos + 1 >= codeLen || !op.movedToExtended(code[pos + 1]))) {
         fail BytecodeError { kind: BytecodeErrorKind.InvalidOpcode, pc: pc, opcode: opcode,
           expected: 0, actual: u8.toI64(opcode) }
       }
@@ -284,9 +306,9 @@ pub effect fn analyzeWith(code: &[u8], scratch: &mut StackScratch) -> CodeFacts
         info = op.OpcodeInfo { size: info.size, pops: moved.pops, pushes: moved.pushes, format: info.format }
       }
       let mut next = pc + u8.toI64(info.size)
-      if next > usize.toI64(code.length) {
+      if next > usize.toI64(codeLen) {
         fail BytecodeError { kind: BytecodeErrorKind.BufferOverflow, pc: pc, opcode: opcode,
-          expected: usize.toI64(code.length), actual: next }
+          expected: usize.toI64(codeLen), actual: next }
       }
       let mut pops = u8.toI32(info.pops)
       if info.format == op.OP_FMT_npop || info.format == op.OP_FMT_npop_u16 {
@@ -366,10 +388,12 @@ pub effect fn analyzeWith(code: &[u8], scratch: &mut StackScratch) -> CodeFacts
         } else if opcode == op.OP_catch {
           run state.enqueue(pc + 1 + signed32(readU32(code, pos + 1)), opcode, level, catchPc)
           catchPc = pc
+          entryPrefix = epochShift | u64.shiftLeft(i64.toU64(catchPc + 1), 16)
         } else if opcode == op.OP_for_of_start || opcode == op.OP_for_await_of_start {
           // for await's throw handler is entered as a catch's: [iterator, next, exception].
           if opcode == op.OP_for_await_of_start { run state.enqueue(pc + 1 + signed32(readU32(code, pos + 1)), opcode, level, catchPc) }
           catchPc = pc
+          entryPrefix = epochShift | u64.shiftLeft(i64.toU64(catchPc + 1), 16)
         } else if opcode == op.OP_drop || opcode == op.OP_nip || opcode == op.OP_nip1 || opcode == op.OP_iterator_close {
           let mut catchLevel = level
           if opcode == op.OP_nip || opcode == op.OP_nip1 { catchLevel = level - 1 }
@@ -378,7 +402,10 @@ pub effect fn analyzeWith(code: &[u8], scratch: &mut StackScratch) -> CodeFacts
             let index = i64.toUsize(catchPc)
             let mut priorLevel = u16.toI32(state.level(index))
             if code[index] != op.OP_catch { priorLevel = priorLevel + 1 }
-            if catchLevel == priorLevel { catchPc = state.catchPc(index) }
+            if catchLevel == priorLevel {
+              catchPc = state.catchPc(index)
+              entryPrefix = epochShift | u64.shiftLeft(i64.toU64(catchPc + 1), 16)
+            }
           }
         } else if opcode == op.OP_nip_catch {
           if catchPc < 0 {
@@ -390,6 +417,7 @@ pub effect fn analyzeWith(code: &[u8], scratch: &mut StackScratch) -> CodeFacts
           if code[index] != op.OP_catch { level = level + 1 }
           level = level + 1
           catchPc = state.catchPc(index)
+          entryPrefix = epochShift | u64.shiftLeft(i64.toU64(catchPc + 1), 16)
         }
       }
       if !(run state.claim(next, opcode, level, catchPc)) { break }
@@ -667,7 +695,7 @@ pub fn swapBytecodeEndian(code: &mut [u8]) -> () {
 /// sit on the cold arms of small helpers, such as a default for a missing
 /// argument or an assertion's throw.
 fn leafOpcode(opcode: u8) -> bool {
-  let table = b"\x00\x01\x01\x00\x01\x00\x01\x01\x01\x01\x01\x00\x00\x00\x01\x01\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x01\x00\x00\x01\x01\x00\x00\x00\x01\x00\x00\x00\x01\x01\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x01\x01\x00\x00\x00\x00\x01\x01\x01\x01\x00\x00\x01\x00\x00\x00\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x01\x01\x01\x01\x01\x01\x00\x00\x00\x01\x00\x00\x00\x01\x01\x00\x00\x00\x01\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x01\x01\x00\x00\x00\x00\x00\x01\x00\x00\x00\x01\x01\x00\x01\x01\x00\x01\x01\x01\x01\x01\x01\x01\x00\x00\x01\x01\x01\x01\x01\x01\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x00\x00\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x00\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x00\x01\x00\x00\x01\x01\x01\x01\x00\x00\x01\x01\x01\x01\x01\x00\x00\x00\x00\x01\x01\x00\x00\x01\x01\x01\x01\x01\x01"
+  let table = b"\x00\x01\x01\x00\x01\x00\x01\x01\x01\x01\x01\x00\x00\x00\x01\x01\x00\x01\x01\x01\x00\x01\x00\x00\x01\x00\x01\x01\x01\x00\x00\x01\x01\x00\x00\x00\x01\x00\x00\x00\x01\x01\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x01\x01\x00\x00\x00\x00\x01\x01\x01\x01\x00\x00\x01\x00\x00\x00\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x01\x01\x01\x01\x01\x01\x00\x00\x00\x01\x00\x00\x00\x01\x01\x00\x00\x00\x01\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x01\x01\x01\x01\x00\x00\x00\x00\x01\x00\x00\x00\x01\x01\x00\x01\x01\x00\x01\x01\x01\x01\x01\x01\x01\x00\x00\x01\x01\x01\x01\x01\x01\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x00\x00\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x00\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x00\x01\x00\x00\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x00\x00\x00\x00\x01\x01\x00\x00\x01\x01\x01\x01\x01\x01"
   return table[u8.toUsize(opcode)] != 0
 }
 /// Scratch cells a leaf run may use: its locals and operand stack (a bigger
@@ -722,6 +750,50 @@ pub fn forwardingAccessor(code: &[u8]) -> bool {
   return code.length == call + 5 && code[call] == op.OP_get_arg0 && code[call + 1] == op.OP_call_method && code[call + 2] == 1 && code[call + 3] == 0
     && code[call + 4] == op.OP_return
 }
+/// Whether a leaf's code is a guarded string code-unit read:
+/// `if (this.i < this.len) return this.s.charCodeAt(this.i); else ...`
+/// or `if (arg0 < this.len) return this.s.charCodeAt(arg0); else ...`.
+/// js_vm_leaf.accessor runs the in-bounds fast path without entering evaluate.
+pub fn charCodeAccessor(code: &[u8]) -> bool {
+  if code.length < 44 || code[0] != op.OP_push_this || code[1] != op.OP_put_loc0 { return false }
+  let fieldLen = FUSED_SLOT + 1
+  if code[2] == op.OP_get_arg0 {
+    // push_this put_loc0 | get_arg0 | get_loc_field8(len,0) | lt | if_false8 d | get_loc_field8(s,0) | get_field2 | get_arg0 | call_method 1 | return
+    let pLen: usize = 3
+    let pCmp = pLen + fieldLen
+    let pSrc = pCmp + 3
+    let pGet2 = pSrc + fieldLen
+    let pArg = pGet2 + 5
+    let pCall = pArg + 1
+    return code.length > pCall + 3
+      && code[pLen] == op.OP_get_loc_field8 && code[pLen + FUSED_SLOT] == 0
+      && code[pCmp] == op.OP_lt && code[pCmp + 1] == op.OP_if_false8 && displacement8(code[pCmp + 2]) > 0
+      && code[pSrc] == op.OP_get_loc_field8 && code[pSrc + FUSED_SLOT] == 0
+      && code[pGet2] == op.OP_get_field2
+      && code[pArg] == op.OP_get_arg0
+      && code[pCall] == op.OP_call_method && code[pCall + 1] == 1 && code[pCall + 2] == 0
+      && code[pCall + 3] == op.OP_return
+  }
+  if code[2] == op.OP_get_loc_field8 && code[2 + FUSED_SLOT] == 0 {
+    // push_this put_loc0 | get_loc_field8(i,0) | get_loc_field8(len,0) | lt | if_false8 d | get_loc_field8(s,0) | get_field2 | get_loc_field8(i,0) | call_method 1 | return
+    let pLen = 2 + fieldLen
+    let pCmp = pLen + fieldLen
+    let pSrc = pCmp + 3
+    let pGet2 = pSrc + fieldLen
+    let pIdx = pGet2 + 5
+    let pCall = pIdx + fieldLen
+    return code.length > pCall + 3
+      && code[pLen] == op.OP_get_loc_field8 && code[pLen + FUSED_SLOT] == 0
+      && code[pCmp] == op.OP_lt && code[pCmp + 1] == op.OP_if_false8 && displacement8(code[pCmp + 2]) > 0
+      && code[pSrc] == op.OP_get_loc_field8 && code[pSrc + FUSED_SLOT] == 0
+      && code[pGet2] == op.OP_get_field2
+      && code[pIdx] == op.OP_get_loc_field8 && code[pIdx + FUSED_SLOT] == 0
+      && readU32(code, 3) == readU32(code, pIdx + 1)
+      && code[pCall] == op.OP_call_method && code[pCall + 1] == 1 && code[pCall + 2] == 0
+      && code[pCall + 3] == op.OP_return
+  }
+  return false
+}
 /// Whether a leaf's code is `return this.f`, `return this.f.length` or
 /// `return this.f[a]` (a its first parameter): push_this put_loc0
 /// get_loc_field8(f, 0), then return, get_length return, or get_arg0
@@ -729,16 +801,20 @@ pub fn forwardingAccessor(code: &[u8]) -> bool {
 pub fn leafAccessor(code: &[u8]) -> bool {
   if forwardingAccessor(code) { return true }
   if selectAccessor(code) { return true }
+  if charCodeAccessor(code) { return true }
   if code.length < TAIL + 1 || code[0] != op.OP_push_this || code[1] != op.OP_put_loc0 || code[2] != op.OP_get_loc_field8 || code[2 + FUSED_SLOT] != 0 { return false }
   if code.length == TAIL + 1 { return code[TAIL] == op.OP_return }
   if code.length == TAIL + 2 { return code[TAIL] == op.OP_get_length && code[TAIL + 1] == op.OP_return }
   return code.length == TAIL + 3 && code[TAIL] == op.OP_get_arg0 && code[TAIL + 1] == op.OP_get_array_el && code[TAIL + 2] == op.OP_return
 }
-/// Whether final bytecode is a leaf js_vm_leaf can run in place of a call: every
-/// instruction is a leafOpcode and every branch goes forward, so a run ends in at
-/// most one pass with no interrupt poll or call, and its one possible store (a
-/// put_field or put_scope0 right before return_undef) is its last step.
+/// Whether final bytecode is eligible for frameless execution in js_vm_leaf.
+/// Every instruction in the entry block up to the first conditional branch or
+/// return must be a leafOpcode with forward jumps and no non-final scope store;
+/// any cold arm after a conditional branch may hold non-leaf opcodes or loops,
+/// because js_vm_leaf rolls back undo-logged field stores and declines cleanly
+/// on any unsupported opcode, backward branch, or slow path.
 pub fn leafCode(code: &[u8]) -> bool {
+  if code.length == 0 { return false }
   let mut pos: usize = 0
   while pos < code.length {
     let opcode = code[pos]
@@ -747,16 +823,20 @@ pub fn leafCode(code: &[u8]) -> bool {
     let size = u8.toUsize(info.size)
     if pos + size > code.length { return false }
     let mut displacement: i64 = 1
-    if opcode == op.OP_goto || opcode == op.OP_if_true || opcode == op.OP_if_false { displacement = signed32(readU32(code, pos + 1)) }
+    let mut conditional = false
+    if opcode == op.OP_goto { displacement = signed32(readU32(code, pos + 1)) }
+    else if opcode == op.OP_if_true || opcode == op.OP_if_false { displacement = signed32(readU32(code, pos + 1)) conditional = true }
     else if opcode == op.OP_goto16 { displacement = displacement16(readU16(code, pos + 1)) }
-    else if opcode == op.OP_goto8 || opcode == op.OP_if_true8 || opcode == op.OP_if_false8 { displacement = displacement8(code[pos + 1]) }
+    else if opcode == op.OP_goto8 { displacement = displacement8(code[pos + 1]) }
+    else if opcode == op.OP_if_true8 || opcode == op.OP_if_false8 { displacement = displacement8(code[pos + 1]) conditional = true }
     else if opcode == op.OP_if_nullish8 || opcode == op.OP_if_not_nullish8 || opcode == op.OP_if_null8 || opcode == op.OP_if_not_null8
-      || opcode == op.OP_if_true_keep8 || opcode == op.OP_if_false_keep8 { displacement = displacement8(code[pos + 2]) }
-    else if opcode == op.OP_if_not_nullish_keep8 { displacement = displacement8(code[pos + 3]) }
+      || opcode == op.OP_if_true_keep8 || opcode == op.OP_if_false_keep8 { displacement = displacement8(code[pos + 2]) conditional = true }
+    else if opcode == op.OP_if_not_nullish_keep8 { displacement = displacement8(code[pos + 3]) conditional = true }
     if displacement <= 0 { return false }
-    // A store must be the run's last step: js_vm_leaf cannot undo it.
-    if (opcode == op.OP_put_field || opcode == op.OP_put_loc_field_loc8 || opcode == op.OP_put_loc_field_arg8 || opcode == op.OP_put_scope0)
-      && !returnsUndefined(code, pos + size) { return false }
+    // Scope stores are not undo-logged, so they must be the run's last step.
+    if opcode == op.OP_put_scope0 && !returnsUndefined(code, pos + size) { return false }
+    if conditional { return true }
+    if opcode == op.OP_return || opcode == op.OP_return_undef { return true }
     pos = pos + size
   }
   return true

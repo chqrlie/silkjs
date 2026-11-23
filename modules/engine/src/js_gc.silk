@@ -37,7 +37,7 @@ import js_compiler_types { PendingFunction, LazyStub }
 import js_compiler_state as compilerState
 import js_core_types { HostEdges, hostImportView, hostModuleView, hostScriptMetadataView }
 import js_core_types { USER_VALUE_COUNT, ClosureKind }
-import js_core_types { blankConstructEntry, NO_SP, ScopeData, scopeSlot, LiteralCacheEntry, literalCacheIndex, FieldCacheEntry, fieldCacheIndex, fieldSpareIndex, ConstructPin, blankReceiverEntry, ForwardEntry, blankForwardEntry, EmptyShapeEntry,
+import js_core_types { blankConstructEntry, constructCacheSlot, NO_SP, ScopeData, scopeSlot, LiteralCacheEntry, literalCacheIndex, FieldCacheEntry, fieldCacheIndex, fieldSpareIndex, ConstructPin, blankReceiverEntry, ForwardEntry, blankForwardEntry, EmptyShapeEntry,
   RuntimeState, ContextState, GcPhase, HeapList, ObjectData, ObjectPayload,
   PropertySlot, ShapeData, ShapeProperty, JS_PROP_TMASK, JS_PROP_AUTOINIT, FunctionBytecode, VarRef, VarRefState, 
   StackFrame, AsyncFrame, ModuleDef, ExportBinding, NativeFunctionId, BuiltinFamily,
@@ -767,7 +767,7 @@ pub unsafe fn pinConstructed<H: HeapHooks>(hooks: &mut H, runtime: *mut HeapHead
   let final = data.shape
   drop data
   let address = Pointer.address<HeapHeader>(final)
-  let slot = u64.toUsize(u64.shiftRight(u64.wrappingMultiply(usize.toU64(address / 16), 0x9e3779b97f4a7c15), 58)) & 62
+  let slot = u64.toUsize(u64.shiftRight(u64.wrappingMultiply(usize.toU64(address / 16), 0x9e3779b97f4a7c15), 56)) & 254
   let state = unsafe HeapCell.payload<RuntimeState, ()>(&anchor, runtime)
   if state.constructPins[slot].final == address || state.constructPins[slot + 1].final == address { return () }
   drop state
@@ -775,7 +775,7 @@ pub unsafe fn pinConstructed<H: HeapHooks>(hooks: &mut H, runtime: *mut HeapHead
 }
 @inlineNever
 unsafe fn repin<H: HeapHooks>(hooks: &mut H, runtime: *mut HeapHeader, slot: usize, final: *mut HeapHeader) -> () {
-  let mut chain: [?*mut HeapHeader; 8] = [Pointer.null<HeapHeader>(); 8]
+  let mut chain: [?*mut HeapHeader; 16] = [Pointer.null<HeapHeader>(); 16]
   let count = unsafe js_shapes.constructChain(runtime, final, &mut chain)
   let mut i: usize = 0
   while i < count { unsafe js_shapes.take(runtime, unsafe nonnull(chain[i])) i = i + 1 }
@@ -1085,17 +1085,23 @@ unsafe effect fn refillEmpty<H: HeapHooks>(hooks: &mut H, runtime: *mut HeapHead
 pub unsafe fn releasePins<H: HeapHooks>(hooks: &mut H, runtime: *mut HeapHeader) -> () {
   let mut anchor = ()
   let mut slot: usize = 0
-  while slot < 64 {
+  while slot < 256 {
     let state = unsafe HeapCell.payloadMut<RuntimeState, ()>(&mut anchor, runtime)
     let old = state.constructPins[slot]
-    state.constructPins[slot] = ConstructPin { final: 0, count: 0, shapes: [Pointer.null<HeapHeader>(); 8] }
+    state.constructPins[slot] = ConstructPin { final: 0, count: 0, shapes: [Pointer.null<HeapHeader>(); 16] }
+    drop state
+    let mut i: usize = 0
+    while i < old.count { unsafe releaseHeader(&mut hooks, runtime, unsafe nonnull(old.shapes[i])) i = i + 1 }
+    slot = slot + 1
+  }
+  slot = 0
+  while slot < 64 {
+    let state = unsafe HeapCell.payloadMut<RuntimeState, ()>(&mut anchor, runtime)
     let receiver = state.receiverCache[slot]
     state.receiverCache[slot] = blankReceiverEntry()
     drop state
     unsafe releaseOptional(&mut hooks, runtime, receiver.empty)
     unsafe releaseOptional(&mut hooks, runtime, receiver.final)
-    let mut i: usize = 0
-    while i < old.count { unsafe releaseHeader(&mut hooks, runtime, unsafe nonnull(old.shapes[i])) i = i + 1 }
     slot = slot + 1
   }
   slot = 0
@@ -1190,17 +1196,16 @@ pub unsafe fn noteLiteral<H: HeapHooks>(hooks: &mut H, runtime: *mut HeapHeader,
 unsafe fn forgetConstructCode<H: HeapHooks>(hooks: &mut H, runtime: *mut HeapHeader, code: usize) -> () {
   let mut anchor = ()
   let state = unsafe HeapCell.payloadMut<RuntimeState, ()>(&mut anchor, runtime)
-  let mut slot: usize = 0
-  while slot < 64 {
-    if state.constructCache[slot].code == code {
-      let old = state.constructCache[slot].final
-      state.constructCache[slot] = blankConstructEntry()
-      drop state
-      unsafe releaseOptional(&mut hooks, runtime, old)
-      return ()
-    }
-    slot = slot + 1
+  let first = constructCacheSlot(code)
+  let mut slot = first
+  if state.constructCache[first].code != code {
+    slot = first + 1
+    if state.constructCache[slot].code != code { return () }
   }
+  let old = state.constructCache[slot].final
+  state.constructCache[slot] = blankConstructEntry()
+  drop state
+  unsafe releaseOptional(&mut hooks, runtime, old)
 }
 /// Empties the literal cache entry filled for the site at address site, if any.
 unsafe fn forgetLiteralSite<H: HeapHooks>(hooks: &mut H, runtime: *mut HeapHeader, site: usize) -> () {
@@ -2185,31 +2190,102 @@ unsafe fn traceAs<H: HeapHooks>(hooks: &mut H, node: *mut HeapHeader, tracer: &m
   unsafe tracer.edgeAs(object.shape, operation)
   if object.hasRecordedRealm() { unsafe traceRecordedRealm(node, &mut tracer) }
   let metadata = unsafe HeapCell.payload<ShapeData, ()>(&anchor, object.shape)
+  let plain = metadata.plainVersion == metadata.version
   // Counts are read once: the edge updates store to headers, which the
   // compiler cannot tell apart from these lists. An object has a slot for each
   // record of its shape.
   let propertyCount = metadata.properties.length()
-  let mut index: usize = 0
-  while index < propertyCount {
-    let entry = unsafe js_shapes.unchecked<ShapeProperty>(&metadata.properties, index)
-    if entry.atom != 0 {
-      let slot = unsafe object.slotUnchecked(index)
-      if (u8.toU32(entry.flags) & JS_PROP_TMASK) == 0 { unsafe tracer.valueAs(slot.valueBits(), operation) }
-      else { unsafe traceProperty(slot.view(entry.flags), &mut tracer) }
-    }
-    index = index + 1
-  }
   drop metadata
+  if plain || unsafe js_shapes.plainRecords(object.shape) {
+    let values = unsafe js_shapes.objectSlotValues(&object)
+    let count = values.length
+    if count <= 3 {
+      let mut index: usize = 0
+      while index < count {
+        unsafe tracer.valueAs(values[index], operation)
+        index = index + 1
+      }
+    } else if ValueBits.anyHeapEarly(values) {
+      let pre = if count < 8 { count } else { 8 }
+      let mut ahead: usize = 0
+      while ahead < pre {
+        match values[ahead] {
+          ValueBits.Object { reference } => { unsafe memory.prefetch(Pointer.address<HeapHeader>(reference)) }
+          ValueBits.FunctionBytecode { reference } => { unsafe memory.prefetch(Pointer.address<HeapHeader>(reference)) }
+          ValueBits.Module { reference } => { unsafe memory.prefetch(Pointer.address<HeapHeader>(reference)) }
+          _ => ()
+        }
+        ahead = ahead + 1
+      }
+      let mut index: usize = 0
+      while index + 8 < count {
+        match values[index + 8] {
+          ValueBits.Object { reference } => { unsafe memory.prefetch(Pointer.address<HeapHeader>(reference)) }
+          ValueBits.FunctionBytecode { reference } => { unsafe memory.prefetch(Pointer.address<HeapHeader>(reference)) }
+          ValueBits.Module { reference } => { unsafe memory.prefetch(Pointer.address<HeapHeader>(reference)) }
+          _ => ()
+        }
+        unsafe tracer.valueAs(values[index], operation)
+        index = index + 1
+      }
+      while index < count {
+        unsafe tracer.valueAs(values[index], operation)
+        index = index + 1
+      }
+    }
+  } else {
+    let metadata2 = unsafe HeapCell.payload<ShapeData, ()>(&anchor, object.shape)
+    let mut index: usize = 0
+    while index < propertyCount {
+      let entry = unsafe js_shapes.unchecked<ShapeProperty>(&metadata2.properties, index)
+      if entry.atom != 0 {
+        let slot = unsafe object.slotUnchecked(index)
+        if (u8.toU32(entry.flags) & JS_PROP_TMASK) == 0 { unsafe tracer.valueAs(slot.valueBits(), operation) }
+        else { unsafe traceProperty(slot.view(entry.flags), &mut tracer) }
+      }
+      index = index + 1
+    }
+  }
   if classId == JS_CLASS_OBJECT { return () }
   // An Array's mark callback traces exactly its fast element list.
   if classId == JS_CLASS_ARRAY {
     match &object.payload {
       ObjectPayload.FastArray { array } => {
-        let elementCount = array.values().length()
-        let mut element: usize = 0
-        while element < elementCount {
-          unsafe tracer.valueAs(unsafe js_shapes.unchecked<ValueBits>(array.values(), element), operation)
-          element = element + 1
+        let elements = array.values().asSlice()
+        let elementCount = elements.length
+        if elementCount <= 3 {
+          let mut element: usize = 0
+          while element < elementCount {
+            unsafe tracer.valueAs(elements[element], operation)
+            element = element + 1
+          }
+        } else if ValueBits.anyHeapEarly(elements) {
+          let pre = if elementCount < 8 { elementCount } else { 8 }
+          let mut ahead: usize = 0
+          while ahead < pre {
+            match elements[ahead] {
+              ValueBits.Object { reference } => { unsafe memory.prefetch(Pointer.address<HeapHeader>(reference)) }
+              ValueBits.FunctionBytecode { reference } => { unsafe memory.prefetch(Pointer.address<HeapHeader>(reference)) }
+              ValueBits.Module { reference } => { unsafe memory.prefetch(Pointer.address<HeapHeader>(reference)) }
+              _ => ()
+            }
+            ahead = ahead + 1
+          }
+          let mut element: usize = 0
+          while element + 8 < elementCount {
+            match elements[element + 8] {
+              ValueBits.Object { reference } => { unsafe memory.prefetch(Pointer.address<HeapHeader>(reference)) }
+              ValueBits.FunctionBytecode { reference } => { unsafe memory.prefetch(Pointer.address<HeapHeader>(reference)) }
+              ValueBits.Module { reference } => { unsafe memory.prefetch(Pointer.address<HeapHeader>(reference)) }
+              _ => ()
+            }
+            unsafe tracer.valueAs(elements[element], operation)
+            element = element + 1
+          }
+          while element < elementCount {
+            unsafe tracer.valueAs(elements[element], operation)
+            element = element + 1
+          }
         }
         return ()
       }
@@ -2915,8 +2991,9 @@ unsafe fn destroyObject<H: HeapHooks>(hooks: &mut H, runtime: *mut HeapHeader, n
     // Start every child's header load first: a dying pair's car and cdr then
     // miss in parallel instead of one release after the other.
     let values = unsafe js_shapes.slotValues(&properties)
+    let pre = if slotCount < 8 { slotCount } else { 8 }
     let mut ahead = index
-    while ahead < slotCount && ahead < 8 {
+    while ahead < pre {
       match ValueBits.heapReference(&values[ahead]) {
         Option<*mut HeapHeader>.Some { value } => { unsafe memory.prefetch(Pointer.address<HeapHeader>(value)) }
         Option<*mut HeapHeader>.None => ()
@@ -2924,6 +3001,18 @@ unsafe fn destroyObject<H: HeapHooks>(hooks: &mut H, runtime: *mut HeapHeader, n
       ahead = ahead + 1
     }
     drop values
+    while index + 8 < slotCount {
+      let nextVal = (unsafe properties.getUnchecked(index + 8)).valueBits()
+      match ValueBits.heapReference(&nextVal) {
+        Option<*mut HeapHeader>.Some { value } => { unsafe memory.prefetch(Pointer.address<HeapHeader>(value)) }
+        Option<*mut HeapHeader>.None => ()
+      }
+      let slot = unsafe properties.getUnchecked(index)
+      if deferred { unsafe deferRelease(&mut hooks, runtime, ring, slot.valueBits()) }
+      else if linked { unsafe releaseDraining(&mut hooks, runtime, slot.valueBits()) }
+      else { unsafe release(&mut hooks, runtime, slot.valueBits()) }
+      index = index + 1
+    }
     while index < slotCount {
       let slot = unsafe properties.getUnchecked(index)
       if deferred { unsafe deferRelease(&mut hooks, runtime, ring, slot.valueBits()) }
@@ -3584,22 +3673,33 @@ unsafe fn destroyBytecode<H: HeapHooks>(hooks: &mut H, runtime: *mut HeapHeader,
       let size = u8.toUsize(shape & FINAL_SIZE)
       if (shape & FINAL_ATOM) != 0 {
         // Incomplete final operands occur on compiler allocation failure.
-        if length - position >= 5 {
-          let atom = u8.toU32(unsafe Pointer.read<u8>(unsafe Pointer.at<u8>(base, position + 1)))
-            | u32.shiftLeft(u8.toU32(unsafe Pointer.read<u8>(unsafe Pointer.at<u8>(base, position + 2))), 8)
-            | u32.shiftLeft(u8.toU32(unsafe Pointer.read<u8>(unsafe Pointer.at<u8>(base, position + 3))), 16)
-            | u32.shiftLeft(u8.toU32(unsafe Pointer.read<u8>(unsafe Pointer.at<u8>(base, position + 4))), 24)
-          unsafe releaseAtom(runtime, atom)
-          // The site's address may be reused by later bytecode with another atom,
-          // which the field cache's site and shape version checks would not tell apart.
-          unsafe forgetFieldSite(runtime, Pointer.address<u8>(unsafe Pointer.at<u8>(base, position + 1)))
+        if usize.wrappingSubtract(length, position) >= 5 {
+          let at = unsafe Pointer.at<u8>(base, usize.wrappingAdd(position, 1))
+          let atom = unsafe Pointer.readUnaligned<u32>(unsafe Intrinsic.pointerReinterpret<*const u8, *const align(1) u32>(at))
+          let mut stateAnchor = ()
+          let state = unsafe HeapCell.payloadMut<RuntimeState, ()>(&mut stateAnchor, runtime)
+          state.atoms.release(atom)
+          if !placeholder {
+            // The site's address may be reused by later bytecode with another atom,
+            // which the field cache's site and shape version checks would not tell apart.
+            let site = Pointer.address<u8>(at)
+            let slot = fieldCacheIndex(site)
+            if state.fieldCache[slot].site == site {
+              state.fieldCache[slot] = FieldCacheEntry { site: 0, key: 0, protoKey: 0, midKey: 0, farKey: 0, epoch: 0, holder: Pointer.null<HeapHeader>(), holderIndex: 0 }
+            }
+            let spare = fieldSpareIndex(slot)
+            if state.fieldCache[spare].site == site {
+              state.fieldCache[spare] = FieldCacheEntry { site: 0, key: 0, protoKey: 0, midKey: 0, farKey: 0, epoch: 0, holder: Pointer.null<HeapHeader>(), holderIndex: 0 }
+            }
+          }
+          drop state
         }
       }
-      if (shape & FINAL_OBJECT) != 0 {
-        unsafe forgetLiteralSite(&mut hooks, runtime, Pointer.address<u8>(unsafe Pointer.at<u8>(base, position)) + 1)
+      if (shape & FINAL_OBJECT) != 0 && !placeholder {
+        unsafe forgetLiteralSite(&mut hooks, runtime, usize.wrappingAdd(Pointer.address<u8>(unsafe Pointer.at<u8>(base, position)), 1))
       }
       require(size != 0)
-      position = position + size
+      position = usize.wrappingAdd(position, size)
     }
   }
   if code.length() != 0 && !placeholder { unsafe forgetConstructCode(&mut hooks, runtime, Pointer.address<u8>(unsafe code.pointerAt(0))) }

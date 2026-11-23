@@ -1097,6 +1097,29 @@ pub unsafe fn charCodeOf(receiver: ValueBits, value: ValueBits) -> i32 {
   if text.tag() != -7 || i32.toUsize(index) >= Strings.length(text) { return -1 }
   return u16.toI32(Strings.codeUnit(text, i32.toUsize(index)))
 }
+/// Zero-call flat Latin-1 charCodeAt for leaf charCode accessors: handles both
+/// compact and out-of-line Latin-1 flat strings without bounds-check fatals;
+/// returns -1 on wide strings, ropes, non-strings, or out-of-range indices.
+@inlineAlways
+pub unsafe fn flatCharCodeOf(receiver: ValueBits, index: i32) -> i32 {
+  if index < 0 { return -1 }
+  if let ValueBits.String { reference } = receiver {
+    let anchor = ()
+    let data = unsafe HeapCell.shortPayload<FlatString, ()>(&anchor, reference)
+    let at = i32.toUsize(index)
+    if at >= data.length() || data.wide { return -1 }
+    if data.compact {
+      return u8.toI32(unsafe Pointer.read<u8>(unsafe Pointer.atMut<u8>(unsafe Pointer.assumeManyMut<u8>(data.textAddress()), at)))
+    }
+    let bytes = data.latin1.asSlice()
+    let pos = data.frontGap() + at
+    if pos < bytes.length {
+      let ptr = unsafe Intrinsic.pointerRequalify<?[*]const u8, [*]const u8>(Pointer.fromSlice<u8>(bytes))
+      return u8.toI32(unsafe Pointer.read<u8>(unsafe Pointer.at<u8>(ptr, pos)))
+    }
+  }
+  return -1
+}
 /// Array.prototype.pop on a fast Array whose writable length matches its dense
 /// count: remove the last value and publish the new length, with no frame.
 pub unsafe fn quickPop(receiver: ValueBits) -> Option<ValueBits> {

@@ -781,9 +781,9 @@ pub struct RuntimeState {
   /// unlinking a target clears the one slot that names it (ShapeData.memoSlot).
   /// Two ways of 32 bytes per set, so a lookup reads one set's pair of lines at most;
   /// each entry's prototype chain versions live apart, in transitionChains.
-  pub transitions: [TransitionEntry; 512],
+  pub transitions: [TransitionEntry; 2048],
   /// The verified prototype chain of transitions[i], read only once its entry matches.
-  pub transitionChains: [TransitionChain; 512],
+  pub transitionChains: [TransitionChain; 2048],
   /// The next ShapeData.version; starts at 1 so no live shape has version 0.
   pub nextShapeVersion: u64,
   /// Bumped whenever any shape gets a new version or any existing object changes
@@ -799,7 +799,7 @@ pub struct RuntimeState {
   /// The polymorphic field cache: what a named get of an atom finds on objects
   /// of a shape version, shared by every site (V8's stub cache). Zero until a
   /// field site misses its own entry; js_vm_property_ops owns it.
-  pub polyFields: [PolyFieldEntry; 256],
+  pub polyFields: [PolyFieldEntry; 4096],
   /// get_length on typed arrays, one entry per typed array class; js_vm_property_ops owns it.
   pub typedLengthCache: [TypedLengthEntry; 12],
   /// The last RegExp layout js_regexp_intrinsics_symbols.standard proved; it owns it.
@@ -807,7 +807,7 @@ pub struct RuntimeState {
   /// Shape chains of recently constructed objects, each held by one reference
   /// so that `new F()` revives no parked shape on its way from the empty shape
   /// to the final one; js_gc owns these and releases them before each collection.
-  pub constructPins: [ConstructPin; 64],
+  pub constructPins: [ConstructPin; 256],
   /// Small interned shapes an add just left with no other reference, each held
   /// by one reference instead of being parked, so the next object built the same
   /// way finds them alive (a ring, next names the oldest); js_gc owns these and
@@ -902,6 +902,9 @@ pub struct RuntimeState {
   /// set (js_gc.spareClosureSet). js_gc.parkClosure
   /// fills it, js_closures.takeSpare empties it, releasePins flushes it.
   pub spareClosures: [?*mut HeapHeader; 256],
+  /// Scratch undo log for outermost frameless leaf field stores (js_vm_leaf):
+  /// never re-entered and never live across GC, so kept off evaluate's stack.
+  pub leafUndo: [LeafUndoSlot; 8],
   pub userOpaque: ?*mut u8,
   /// Storage for frames of JS-to-JS calls the dispatch loop makes without native
   /// recursion (js_vm.callInline). Allocated once and never moved; the slots
@@ -1048,16 +1051,19 @@ pub const POLY_PROTO: u32 = 2
 pub const POLY_GETTER: u32 = 3
 /// No object on the chain has the atom: the get answers undefined.
 pub const POLY_ABSENT: u32 = 4
+/// Set in PolyFieldEntry.kind alongside POLY_OWN when the slot is an own
+/// writable plain data property (non-length), so polymorphic writes can hit it too.
+pub const POLY_WRITABLE: u32 = 0x80
 pub fn blankPolyField() -> PolyFieldEntry { return PolyFieldEntry { version: 0, atom: 0, kind: 0, holder: Pointer.null<HeapHeader>(), stamp: 0 } }
 /// The RuntimeState.polyFields entry for atom on objects of shape version.
 @inlineAlways
 pub fn polyFieldIndex(version: u64, atom: u32) -> usize {
-  return u64.toUsize(u64.shiftRight(u64.wrappingMultiply(version ^ u64.shiftLeft(u32.toU64(atom), 20), 0x9e3779b97f4a7c15), 56))
+  return u64.toUsize(u64.shiftRight(u64.wrappingMultiply(version ^ u64.shiftLeft(u32.toU64(atom), 20), 0x9e3779b97f4a7c15), 52))
 }
 impl Copy for TypedLengthEntry {}
 /// The RuntimeState.fieldCache entry for the get_field site whose operand starts at site.
 @inlineAlways
-pub fn fieldCacheIndex(site: usize) -> usize { return site & 4095 }
+pub fn fieldCacheIndex(site: usize) -> usize { return (site ^ usize.shiftRight(site, 12)) & 4095 }
 /// Where the fieldCache entry at slot goes when another site takes that slot:
 /// a slot far from it, which bytecode near the site rarely indexes.
 @inlineAlways
@@ -1090,7 +1096,7 @@ pub fn storeFieldEntry(state: &mut RuntimeState, slot: usize, entry: FieldCacheE
 pub struct ConstructPin {
   pub final: usize,
   pub count: usize,
-  pub shapes: [?*mut HeapHeader; 8]
+  pub shapes: [?*mut HeapHeader; 16]
 }
 impl Copy for ConstructPin {}
 /// One RuntimeState.instanceCache entry: a bytecode function of shape version
@@ -1212,6 +1218,12 @@ pub fn blankRecipe() -> ConstructRecipe {
 pub fn blankConstructEntry() -> ConstructCacheEntry {
   return ConstructCacheEntry { code: 0, recipe: blankRecipe(), base: 0, baseVersion: 0, final: Pointer.null<HeapHeader>(), chain: [0; 3], depth: 0, epoch: 0, fieldCount: 0, fieldAtoms: [0; 8] }
 }
+/// The first of the two RuntimeState.constructCache ways for the body whose
+/// code starts at code.
+@inlineAlways
+pub fn constructCacheSlot(code: usize) -> usize {
+  return u64.toUsize(u64.shiftRight(u64.wrappingMultiply(usize.toU64(code / 16), 0x9e3779b97f4a7c15), 58)) & 62
+}
 @inlineAlways
 pub fn literalCacheIndex(site: usize) -> usize { return (site ^ usize.shiftRight(site, 8)) & 255 }
 pub const INSTANCE_CACHE_EMPTY: u64 = 0xffffffffffffffff
@@ -1276,6 +1288,11 @@ pub struct ContextState {
   pub regexpExecShape: u64,
   pub regexpExecProto: u64,
   pub regexpExecSlot: usize,
+  /// Cached String.prototype.charCodeAt lookup: valid while String.prototype's
+  /// shape version equals stringCharCodeProtoVersion (0: nothing remembered).
+  pub stringCharCodeProtoVersion: u64,
+  pub stringCharCodeAtom: u32,
+  pub stringCharCodeSlot: u32,
   /// Where Array.prototype holds @@iterator and %ArrayIteratorPrototype% holds
   /// next as data slots (js_iterators.spreadCount), remembered at the
   /// RuntimeState.shapeEpoch spreadEpoch (0: nothing remembered). Both objects
@@ -2211,10 +2228,20 @@ pub enum FunctionKind { Normal, Generator, Async, AsyncGenerator }
 /// texts nest inside each other. plain: the whole shared input has no CR, LS, PS or
 /// four-byte sequence, so its two coordinate systems never drift apart
 /// (js_debug_positions.SourcePositionCache.shareCoordinates).
-/// A spelling seen at source offset `start` with `length` bytes and ASCII hash
-/// `hash`, and its atom (held by the lexer or the runtime, or a constant keyword
-/// atom): js_lexer's identifier cache.
-pub struct NameSlot { pub hash: u32, pub length: u32, pub start: u32, pub atom: u32 }
+/// One overwritten own object slot recorded by an outermost frameless leaf run
+/// (js_vm_leaf) so it can release the old value on commit or restore on decline.
+pub struct LeafUndoSlot { pub node: ?*mut HeapHeader, pub index: usize, pub old: ValueBits }
+impl Copy for LeafUndoSlot {}
+pub fn blankLeafUndo() -> LeafUndoSlot {
+  return LeafUndoSlot { node: Pointer.null<HeapHeader>(), index: 0, old: ValueBits.Undefined }
+}
+/// An identifier spelling cached by js_lexer.
+/// For 1..8-byte plain ASCII identifiers, `word` holds the exact zero-padded
+/// little-endian bytes (bit 63 == 0), so hits require no source-buffer read and
+/// remain valid across scripts via adoptNames. For >8-byte identifiers, bit 63
+/// of `word` is set with the 32-bit ASCII hash in the low half and `startLen`
+/// packs `(start << 8) | length`.
+pub struct NameSlot { pub word: u64, pub startLen: u32, pub atom: u32 }
 impl Copy for NameSlot {}
 pub union SourceText {
   Owned { pub bytes: List<u8> },

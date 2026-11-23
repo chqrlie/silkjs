@@ -214,7 +214,7 @@ pub unsafe fn swapAdd(object: &mut ObjectData, target: *mut HeapHeader, value: V
 /// swapAdd for a fresh object's step along a chain nothing else holds: object is
 /// old's only owner and target is parked, so trade swaps their places and no
 /// reference count reaches or leaves zero outside it. False changes nothing.
-@inlineAlways
+@inlineNever
 pub unsafe fn tradeAdd(runtime: *mut HeapHeader, object: &mut ObjectData, target: *mut HeapHeader, value: ValueBits) -> bool {
   if object.slotCount() >= object.slotCapacity() { return false }
   if !unsafe trade(runtime, object.shape, target) { return false }
@@ -776,6 +776,12 @@ pub unsafe fn slotValues(properties: &ThinList<SlotBits>) -> &[ValueBits] {
   let first = unsafe Intrinsic.pointerRequalify<?[*]const SlotBits, [*]const SlotBits>(Pointer.fromSlice<SlotBits>(properties.asSlice()))
   return unsafe Pointer.borrowMany<ThinList<SlotBits>, ValueBits>(&properties.*, unsafe Intrinsic.pointerReinterpret<[*]const SlotBits, [*]const ValueBits>(first), properties.length())
 }
+@inlineAlways
+pub unsafe fn objectSlotValues(object: &ObjectData) -> &[ValueBits] {
+  let slots = object.slotView()
+  let first = unsafe Intrinsic.pointerRequalify<?[*]const SlotBits, [*]const SlotBits>(Pointer.fromSlice<SlotBits>(slots))
+  return unsafe Pointer.borrowMany<ObjectData, ValueBits>(&object.*, unsafe Intrinsic.pointerReinterpret<[*]const SlotBits, [*]const ValueBits>(first), slots.length)
+}
 /// Whether every record of shape is a plain data property, so each slot of an
 /// object of this shape holds a ValueBits. The answer is kept for the shape's
 /// current version.
@@ -1153,7 +1159,7 @@ const MEMO_WAYS: usize = 4
 @inlineAlways
 fn memoSet(base: *mut HeapHeader, atom: u32, flags: u8) -> usize {
   let key = usize.toU64(Pointer.address<HeapHeader>(base) / 16) ^ u64.shiftLeft(u32.toU64(atom), 24) ^ u32.toU64(u8.toU32(flags))
-  return u64.toUsize(u64.shiftRight(u64.wrappingMultiply(key, 0x9e3779b97f4a7c15), 57)) * MEMO_WAYS
+  return u64.toUsize(u64.shiftRight(u64.wrappingMultiply(key, 0x9e3779b97f4a7c15), 55)) * MEMO_WAYS
 }
 /// Whether the prototypes of a shape whose prototype is first still have the
 /// shape versions an entry recorded for its first depth links.
@@ -1162,10 +1168,19 @@ unsafe fn chainHolds(runtime: *mut HeapHeader, index: usize, entry: &TransitionE
   let depth = u8.toUsize(entry.chainDepth)
   if depth > 6 { return false }
   let anchor = ()
-  let epoch = (unsafe HeapCell.payload<RuntimeState, ()>(&anchor, runtime)).shapeEpoch
-  let chain = (unsafe HeapCell.payload<RuntimeState, ()>(&anchor, runtime)).transitionChains[index]
+  let state = unsafe HeapCell.payload<RuntimeState, ()>(&anchor, runtime)
+  let epoch = state.shapeEpoch
   // No prototype changed since the chain last held (the epoch starts at 1).
-  if chain.epoch == epoch { return true }
+  if state.transitionChains[index].epoch == epoch { return true }
+  drop state
+  return unsafe chainHoldsSlow(runtime, index, depth, first)
+}
+@inlineNever
+unsafe fn chainHoldsSlow(runtime: *mut HeapHeader, index: usize, depth: usize, first: ?*mut HeapHeader) -> bool {
+  let anchor = ()
+  let state = unsafe HeapCell.payload<RuntimeState, ()>(&anchor, runtime)
+  let epoch = state.shapeEpoch
+  let chain = &state.transitionChains[index]
   let mut current = first
   let mut level: usize = 0
   while level < depth {
@@ -1175,9 +1190,10 @@ unsafe fn chainHolds(runtime: *mut HeapHeader, index: usize, entry: &TransitionE
     current = linkShape.prototype
     level = level + 1
   }
+  drop state
   let mut stateAnchor = ()
-  let state = unsafe HeapCell.payloadMut<RuntimeState, ()>(&mut stateAnchor, runtime)
-  state.transitionChains[index].epoch = epoch
+  let writeState = unsafe HeapCell.payloadMut<RuntimeState, ()>(&mut stateAnchor, runtime)
+  writeState.transitionChains[index].epoch = epoch
   return true
 }
 /// The memoized target of a plain (C_W_E) add of atom to base whose prototype
@@ -1231,13 +1247,90 @@ pub unsafe fn verifiedAddAt(runtime: *mut HeapHeader, index: usize, base: *mut H
   let anchor = ()
   let shape = unsafe HeapCell.payload<ShapeData, ()>(&anchor, base)
   let state = unsafe HeapCell.payload<RuntimeState, ()>(&anchor, runtime)
-  let entry = &state.transitions[index & 511]
+  let entry = &state.transitions[index & 2047]
   // The base test also rejects an entry remember cleared (base 0) when its
   // target was unlinked, which keeps its baseVersion.
   if entry.baseVersion == shape.version && entry.base == Pointer.address<HeapHeader>(base) && entry.atom == atom
     && entry.flags == u32.toU8(JS_PROP_C_W_E)
-    && unsafe chainHolds(runtime, index & 511, entry, shape.prototype) { return entry.target }
+    && unsafe chainHolds(runtime, index & 2047, entry, shape.prototype) { return entry.target }
   return Pointer.null<HeapHeader>()
+}
+/// Zero-call epoch-hit variant of verifiedAddAt for writeFieldAddFast: checks
+/// entry.base first (skipping shape.version load on polymorphic misses) and
+/// requires transitionChains[idx].epoch == state.shapeEpoch (no chainHoldsSlow
+/// call, keeping writeFieldAddFast a zero-push leaf).
+@inlineAlways
+pub unsafe fn verifiedAddAtFast(runtime: *mut HeapHeader, index: usize, base: *mut HeapHeader, atom: u32) -> ?*mut HeapHeader {
+  let slot = index & 2047
+  let anchor = ()
+  let state = unsafe HeapCell.payload<RuntimeState, ()>(&anchor, runtime)
+  let entry = &state.transitions[slot]
+  if entry.base == Pointer.address<HeapHeader>(base) && entry.atom == atom
+    && entry.flags == u32.toU8(JS_PROP_C_W_E) && entry.chainDepth <= 6
+    && state.transitionChains[slot].epoch == state.shapeEpoch {
+    let shape = unsafe HeapCell.payload<ShapeData, ()>(&anchor, base)
+    if entry.baseVersion == shape.version { return entry.target }
+  }
+  return Pointer.null<HeapHeader>()
+}
+/// Zero-call epoch-hit variants of verifiedAddIndex for writeFieldAddPoly.
+@inlineAlways
+pub unsafe fn verifiedAddWay0Fast(runtime: *mut HeapHeader, base: *mut HeapHeader, atom: u32) -> usize {
+  let flags = u32.toU8(JS_PROP_C_W_E)
+  let set = memoSet(base, atom, flags)
+  let address = Pointer.address<HeapHeader>(base)
+  let anchor = ()
+  let version = (unsafe HeapCell.payload<ShapeData, ()>(&anchor, base)).version
+  let state = unsafe HeapCell.payload<RuntimeState, ()>(&anchor, runtime)
+  let entry = &state.transitions[set]
+  if entry.base == address && entry.atom == atom && entry.flags == flags && entry.baseVersion == version
+    && entry.chainDepth <= 6 && state.transitionChains[set].epoch == state.shapeEpoch {
+    return set
+  }
+  return usize.MAX
+}
+@inlineAlways
+pub unsafe fn verifiedAddWays1to3Fast(runtime: *mut HeapHeader, base: *mut HeapHeader, atom: u32) -> usize {
+  let flags = u32.toU8(JS_PROP_C_W_E)
+  let set = memoSet(base, atom, flags)
+  let address = Pointer.address<HeapHeader>(base)
+  let anchor = ()
+  let version = (unsafe HeapCell.payload<ShapeData, ()>(&anchor, base)).version
+  let state = unsafe HeapCell.payload<RuntimeState, ()>(&anchor, runtime)
+  let epoch = state.shapeEpoch
+  let mut way: usize = 1
+  while way < MEMO_WAYS {
+    let idx = set + way
+    let entry = &state.transitions[idx]
+    if entry.base == address && entry.atom == atom && entry.flags == flags && entry.baseVersion == version {
+      if entry.chainDepth <= 6 && state.transitionChains[idx].epoch == epoch { return idx }
+      return usize.MAX
+    }
+    way = way + 1
+  }
+  return usize.MAX
+}
+pub unsafe fn verifiedAddIndexFast(runtime: *mut HeapHeader, base: *mut HeapHeader, atom: u32) -> usize {
+  let flags = u32.toU8(JS_PROP_C_W_E)
+  let set = memoSet(base, atom, flags)
+  let address = Pointer.address<HeapHeader>(base)
+  let anchor = ()
+  let shape = unsafe HeapCell.payload<ShapeData, ()>(&anchor, base)
+  let version = shape.version
+  drop shape
+  let state = unsafe HeapCell.payload<RuntimeState, ()>(&anchor, runtime)
+  let epoch = state.shapeEpoch
+  let mut way: usize = 0
+  while way < MEMO_WAYS {
+    let idx = set + way
+    let entry = &state.transitions[idx]
+    if entry.base == address && entry.atom == atom && entry.flags == flags && entry.baseVersion == version {
+      if entry.chainDepth <= 6 && state.transitionChains[idx].epoch == epoch { return idx }
+      return usize.MAX
+    }
+    way = way + 1
+  }
+  return usize.MAX
 }
 /// Records on base's memo entry for atom/flags (when there is one) that an add's
 /// prototype walk passed depth links of these shape versions.
@@ -1341,7 +1434,7 @@ pub unsafe fn transitionChain(runtime: *mut HeapHeader, base: *mut HeapHeader,
   return shape
 }
 /// The most shapes one RuntimeState.constructPins entry holds.
-pub const PIN_SHAPES: usize = 8
+pub const PIN_SHAPES: usize = 16
 /// The most slots ShapeData.builtSlots records: a 592-byte cell at most.
 pub const BUILT_SLOTS_LIMIT: usize = 32
 /// The longest shape chain constructChain walks to pin its end.
@@ -1351,7 +1444,7 @@ const PIN_WALK: usize = 64
 /// and counted, or 0 when final is not such a chain's end or the chain is longer
 /// than PIN_WALK. A chain longer than PIN_SHAPES leaves its last PIN_SHAPES
 /// shapes, in no order. No reference count changes; the caller takes what it keeps.
-pub unsafe fn constructChain(runtime: *mut HeapHeader, final: *mut HeapHeader, chain: &mut [?*mut HeapHeader; 8]) -> usize {
+pub unsafe fn constructChain(runtime: *mut HeapHeader, final: *mut HeapHeader, chain: &mut [?*mut HeapHeader; 16]) -> usize {
   let anchor = ()
   let data = unsafe HeapCell.payload<ShapeData, ()>(&anchor, final)
   let count = data.properties.length()

@@ -194,27 +194,36 @@ impl Machine {
     frame.currentPc = self.pc()
     drop frame
     let state = unsafe HeapCell.payload<RuntimeState, ()>(&anchor, self.runtime)
-    // An unobserved run has the debugger, coverage and profiler off, so no
-    // evaluation or callback is under way either: one flag answers all five.
+    let current = state.debugger.active
+    drop state
+    if !Pointer.isNull<DebugActivation>(current) {
+      let ptr = unsafe Intrinsic.pointerRequalify<?*mut DebugActivation, *mut DebugActivation>(current)
+      let active = unsafe Pointer.borrow<(), DebugActivation>(&anchor, ptr)
+      if Pointer.address<StackFrame>(active.frame) == Pointer.address<StackFrame>(self.frame) {
+        drop active
+        unsafe self.publishDebugPc(ptr)
+      }
+    }
+  }
+  @inlineNever
+  unsafe fn publishDebugPc(self: &Self, value: *mut DebugActivation) -> () {
+    let mut anchor = ()
+    let state = unsafe HeapCell.payload<RuntimeState, ()>(&anchor, self.runtime)
     let observing = state.observeInstructions
     if observing && (state.debugger.evaluating || state.debugger.callbackActive) { return }
-    let current = state.debugger.active drop state
-    if let Option<*mut DebugActivation>.Some { value } = Pointer.nonNullMut<DebugActivation>(current) {
-      let active = unsafe Pointer.borrowMut<(), DebugActivation>(&mut anchor, value)
-      if Pointer.address<StackFrame>(active.frame) == Pointer.address<StackFrame>(self.frame) {
-        active.sp = self.sp()
-        if !observing {
-          // A parked return PC points past the call; use a byte inside it so a
-          // following scope exit cannot hide the caller's lexical bindings.
-          let pc = self.pc()
-          let parked = if pc == 0 { 0 } else { pc - 1 }
-          let codeAnchor = () let code = unsafe HeapCell.payload<FunctionBytecode, ()>(&codeAnchor, self.bytecode)
-          // Without debugger metadata (the usual case) there is no location to
-          // snap to: no search, and no empty stand-in metadata to build and drop
-          // on every call.
-          if code.debugger.isSome() { active.pc = snappedPc(&code, parked) } else { active.pc = parked }
-        }
-      }
+    drop state
+    let active = unsafe Pointer.borrowMut<(), DebugActivation>(&mut anchor, value)
+    active.sp = self.sp()
+    if !observing {
+      // A parked return PC points past the call; use a byte inside it so a
+      // following scope exit cannot hide the caller's lexical bindings.
+      let pc = self.pc()
+      let parked = if pc == 0 { 0 } else { pc - 1 }
+      let codeAnchor = () let code = unsafe HeapCell.payload<FunctionBytecode, ()>(&codeAnchor, self.bytecode)
+      // Without debugger metadata (the usual case) there is no location to
+      // snap to: no search, and no empty stand-in metadata to build and drop
+      // on every call.
+      if code.debugger.isSome() { active.pc = snappedPc(&code, parked) } else { active.pc = parked }
     }
   }
   @inlineAlways

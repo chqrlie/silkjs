@@ -23,7 +23,7 @@ import silk.num.i64
 import silk.num.usize
 import js_heap { HeapCell, HeapHeader }
 import js_value { ValueBits }
-import js_core_types { ObjectData, ObjectPayload, FunctionBytecode, FrameSlots, RuntimeState, ShapeData, SlotBits, ConstructCacheEntry, ConstructRecipe, blankRecipe, JS_PROP_C_W_E }
+import js_core_types { ObjectData, ObjectPayload, FunctionBytecode, FrameSlots, RuntimeState, ShapeData, SlotBits, ConstructCacheEntry, ConstructRecipe, blankRecipe, constructCacheSlot, JS_PROP_C_W_E }
 import js_shapes as shapes
 import js_primitives as primitives
 import js_class_data as classes
@@ -76,7 +76,7 @@ fn truthy(value: ValueBits) -> bool {
 /// barely vary: a multiplicative hash spreads them over all 64 entries.
 @inlineAlways
 fn cacheSlot(code: usize) -> usize {
-  return u64.toUsize(u64.shiftRight(u64.wrappingMultiply(usize.toU64(code / 16), 0x9e3779b97f4a7c15), 58)) & 62
+  return constructCacheSlot(code)
 }
 /// The entry holding code's body, else the one to fill: each hash has two ways,
 /// so two hot constructors that hash alike do not evict each other on every new.
