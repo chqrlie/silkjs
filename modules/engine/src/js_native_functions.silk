@@ -1161,16 +1161,9 @@ pub unsafe fn flatCharCodeOf(receiver: ValueBits, index: i32) -> i32 {
 }
 /// Array.prototype.pop on a fast Array whose writable length matches its dense
 /// count: remove the last value and publish the new length, with no frame.
+@inlineAlways
 pub unsafe fn quickPop(receiver: ValueBits) -> Option<ValueBits> {
-  let held = unsafe lendBits(&receiver, receiver)
-  let count = arraySupport.fastCount(held)
-  if count < 0 || arraySupport.intLength(held) != count || !arraySupport.writableLength(held) {
-    return Option<ValueBits>.none()
-  }
-  if count == 0 { return Option<ValueBits>.some(ValueBits.Undefined) }
-  let removed = arraySupport.popFast(held, false).intoBits()
-  arraySupport.publishLength(held, count - 1)
-  return Option<ValueBits>.some(removed)
+  return unsafe arraySupport.popOne(receiver)
 }
 /// The decimal text of an Int for Number.prototype.toString: the realm's cached
 /// text below 256, else a new string. None only on allocation failure, which the

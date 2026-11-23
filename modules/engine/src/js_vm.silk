@@ -905,7 +905,7 @@ unsafe effect fn executeLoop<H: HeapHooks + CoercionHooks + OwnPropertyHooks + G
           unsafe m.pushCopy(left) unsafe m.pushCopy(right)
           unsafe sync(&m, &mut machine)
           if !(unsafe operators.bigIntOperands(&machine) && run unsafe operators.bigOperands(&mut hooks, &mut machine, op.OP_add)) {
-            if !run unsafe operators.addTextEntry(&mut machine) { drop run unsafe operators.step(&mut hooks, memory, &mut machine, op.OP_add) }
+            if !unsafe operators.addStoredShort(&mut machine) && !run unsafe operators.addTextEntry(&mut machine) { drop run unsafe operators.step(&mut hooks, memory, &mut machine, op.OP_add) }
           }
           unsafe sync(&machine, &mut m)
         }
@@ -945,7 +945,7 @@ unsafe effect fn executeLoop<H: HeapHooks + CoercionHooks + OwnPropertyHooks + G
           unsafe m.pushCopy(right)
           unsafe sync(&m, &mut machine)
           if !(unsafe operators.bigIntOperands(&machine) && run unsafe operators.bigOperands(&mut hooks, &mut machine, op.OP_add)) {
-            if !run unsafe operators.addTextEntry(&mut machine) { drop run unsafe operators.step(&mut hooks, memory, &mut machine, op.OP_add) }
+            if !unsafe operators.addStoredShort(&mut machine) && !run unsafe operators.addTextEntry(&mut machine) { drop run unsafe operators.step(&mut hooks, memory, &mut machine, op.OP_add) }
           }
           unsafe sync(&machine, &mut m)
         }
@@ -1133,7 +1133,7 @@ unsafe effect fn executeLoop<H: HeapHooks + CoercionHooks + OwnPropertyHooks + G
         if !unsafe operators.cellArithmetic(left, right, left, op.OP_add) {
           unsafe m.pushCopy(right)
           unsafe sync(&m, &mut machine)
-          if !(unsafe operators.bigIntOperands(&machine) && run unsafe operators.bigOperands(&mut hooks, &mut machine, op.OP_add)) { if !run unsafe operators.addTextEntry(&mut machine) { drop run unsafe operators.step(&mut hooks, memory, &mut machine, op.OP_add) } }
+          if !(unsafe operators.bigIntOperands(&machine) && run unsafe operators.bigOperands(&mut hooks, &mut machine, op.OP_add)) { if !unsafe operators.addStoredShort(&mut machine) && !run unsafe operators.addTextEntry(&mut machine) { drop run unsafe operators.step(&mut hooks, memory, &mut machine, op.OP_add) } }
           unsafe sync(&machine, &mut m)
         }
       }
@@ -2143,15 +2143,15 @@ unsafe fn pushInline<H: HeapHooks>(hooks: &mut H, machine: &mut Machine) -> u8 {
   }
   let kind = unsafe nativeFunctions.objectMethod(unsafe machine.top(count + 1))
   if kind >= nativeFunctions.OBJECT_METHOD_LEAN { return PUSH_LEAN }
+  if kind == nativeFunctions.OBJECT_METHOD_PUSH { return if count == 1 { unsafe pushAnswer(&mut hooks, &mut machine) } else { 0 } }
+  if kind == nativeFunctions.OBJECT_METHOD_POP { return if count == 0 { unsafe popAnswer(&mut hooks, &mut machine) } else { 0 } }
   if kind == nativeFunctions.OBJECT_METHOD_COLLECTION {
     if count == 1 { return unsafe collectionRead(&mut hooks, &mut machine) }
     return if count != 0 { unsafe collectionWrite(&mut hooks, &mut machine, 2) } else { 0 }
   }
-  if kind == nativeFunctions.OBJECT_METHOD_POP { return if count == 0 { PUSH_COLLECTION } else { 0 } }
   if kind == nativeFunctions.OBJECT_METHOD_MATH { return unsafe mathAnswer(&mut hooks, &mut machine, count) }
   if kind == nativeFunctions.OBJECT_METHOD_CLOCK { return PUSH_CLOCK }
   if count != 1 { return 0 }
-  if kind == nativeFunctions.OBJECT_METHOD_PUSH { return unsafe pushAnswer(&mut hooks, &mut machine) }
   if kind == nativeFunctions.OBJECT_METHOD_FROM_CHAR_CODE { return unsafe fromCharCodeAnswer(&mut hooks, &mut machine) }
   return 0
 }
@@ -2219,11 +2219,35 @@ unsafe fn pushAnswer<H: HeapHooks>(hooks: &mut H, machine: &mut Machine) -> u8 {
   let length = unsafe arraySupport.pushTaken(receiver, unsafe machine.top(1))
   if length < 0 { return 0 }
   let function = unsafe machine.top(2)
-  unsafe machine.skip(2)
-  unsafe machine.discard(3)
-  unsafe machine.push(ValueBits.Int { value: i64.toI32(length) })
+  if unsafe machine.peekU8(2) == op.OP_drop {
+    unsafe machine.skip(3)
+    unsafe machine.discard(3)
+  } else {
+    unsafe machine.skip(2)
+    unsafe machine.set(3, ValueBits.Int { value: i64.toI32(length) })
+    unsafe machine.discard(2)
+  }
   // Array.prototype holds push and a variable usually holds the array: each
   // then loses one reference in line.
+  if unsafe keepsHolder(function) { unsafe dropShared(function) } else { unsafe gc.release(&mut hooks, machine.runtime, function) }
+  if unsafe keepsHolder(receiver) { unsafe dropShared(receiver) } else { unsafe gc.release(&mut hooks, machine.runtime, receiver) }
+  return PUSH_ANSWERED
+}
+/// receiver.pop() for pushInline: arraySupport.popOne on a fast Array.
+@inlineNever
+unsafe fn popAnswer<H: HeapHooks>(hooks: &mut H, machine: &mut Machine) -> u8 {
+  let receiver = unsafe machine.top(2)
+  let answer = match unsafe arraySupport.popOne(receiver) { Option<ValueBits>.Some { value } => value Option<ValueBits>.None => { return 0 } }
+  let function = unsafe machine.top(1)
+  if unsafe machine.peekU8(2) == op.OP_drop {
+    unsafe machine.skip(3)
+    unsafe machine.discard(2)
+    unsafe releaseOperand(&mut hooks, machine.runtime, answer)
+  } else {
+    unsafe machine.skip(2)
+    unsafe machine.set(2, answer)
+    unsafe machine.discard(1)
+  }
   if unsafe keepsHolder(function) { unsafe dropShared(function) } else { unsafe gc.release(&mut hooks, machine.runtime, function) }
   if unsafe keepsHolder(receiver) { unsafe dropShared(receiver) } else { unsafe gc.release(&mut hooks, machine.runtime, receiver) }
   return PUSH_ANSWERED
@@ -2441,18 +2465,17 @@ unsafe effect fn clockInline<H: HeapHooks + NativeFunctionHooks>(hooks: &mut H, 
   unsafe machine.push(ValueBits.number(i64.toF64(milliseconds)))
   return true
 }
-/// call_method on a function pushInline classified PUSH_COLLECTION: with no
-/// argument, pop on a fast Array; with one or two, a Map, Set, WeakMap or
-/// WeakSet set or add called on the receiver's hash state directly, without a
-/// native frame, when collectionWrite left it: the entry may allocate (get, has
-/// and delete are collectionRead's). The function is decoded once and
+/// call_method on a function pushInline classified PUSH_COLLECTION: a Map, Set,
+/// WeakMap or WeakSet set or add called on the receiver's hash state directly,
+/// without a native frame, when collectionWrite left it: the entry may allocate
+/// (get, has and delete are collectionRead's). The function is decoded once and
 /// the operands are released in place: the answer takes the receiver's slot.
 /// false leaves machine for the general call (another receiver or argument
 /// count, a primitive weak key).
 @inlineNever
 unsafe effect fn collectionInline<H: HeapHooks + CoercionHooks>(hooks: &mut H, machine: &mut Machine) -> bool ! JsException ? &mut Allocator {
   let count = unsafe callCount(&machine, op.OP_call_method)
-  if count == 0 { return unsafe popInline(&mut hooks, &mut machine) }
+  if count == 0 { return false }
   let function = unsafe machine.top(count + 1)
   let target = unsafe machine.top(count + 2)
   let call = unsafe nativeFunctions.collectionMethod(function)
@@ -2488,16 +2511,6 @@ unsafe effect fn collectionInline<H: HeapHooks + CoercionHooks>(hooks: &mut H, m
 unsafe fn releaseOperand<H: HeapHooks>(hooks: &mut H, runtime: *mut HeapHeader, value: ValueBits) -> () {
   if let ValueBits.Int { .. } = value { return () }
   unsafe gc.release(&mut hooks, runtime, value)
-}
-/// collectionInline with no argument: receiver.pop() on a fast Array.
-@inlineNever
-unsafe fn popInline<H: HeapHooks>(hooks: &mut H, machine: &mut Machine) -> bool {
-  let value = match unsafe nativeFunctions.quickPop(unsafe machine.top(2)) { Option<ValueBits>.Some { value } => value Option<ValueBits>.None => { return false } }
-  unsafe machine.skip(2)
-  let base = machine.sp() - 2
-  unsafe releaseOperands(&mut hooks, &mut machine, base)
-  unsafe machine.push(value)
-  return true
 }
 /// A call opcode on a native builtin with a frameless answer (nativeFunctions.quick
 /// and quickWrite: Math, String, Map and Set reads and writes, Date.now and the

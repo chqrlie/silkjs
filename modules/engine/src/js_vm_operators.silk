@@ -994,9 +994,13 @@ pub unsafe fn addStoredShort(machine: &mut Machine) -> bool {
   let mut slot = ValueBits.Undefined
   if next >= op.OP_put_loc0 && next <= op.OP_put_loc3 { slot = unsafe machine.local(u8.toUsize(next - op.OP_put_loc0)) }
   else if next == op.OP_put_loc8 { slot = unsafe machine.local(u8.toUsize(unsafe machine.peekU8(1))) width = 2 }
+  else if next == op.OP_put_arg { slot = unsafe machine.argument(u8.toUsize(unsafe machine.peekU8(1)) + 256 * u8.toUsize(unsafe machine.peekU8(2))) width = 3 }
   else if next == op.OP_put_scope0 { slot = unsafe scopedValue(&machine, 1) width = 3 }
   else { return false }
-  if !sameString(slot, left) { return false }
+  if !sameString(slot, left) {
+    if sameString(slot, right) { return unsafe prependStoredShort(&mut machine, width) }
+    return false
+  }
   // One unit first (a scanner's `text += String.fromCharCode(code)`), else tail-call
   // the multi-unit path so this fast path stays a leaf with no frame or spills.
   if !Strings.appendUnitLatin1(left, right) { return unsafe addStoredShortSlow(&mut machine, width) }
@@ -1021,6 +1025,19 @@ unsafe fn addStoredShortSlow(machine: &mut Machine, width: usize) -> bool {
   unsafe machine.skip(width)
   if Strings.heldOnce(right) { return unsafe releasedPiece(right) }
   Strings.dropHolder(right)
+  return true
+}
+/// addStoredShort's `s = piece + s` into s's front gap (Strings.prependIntoRoom).
+@inlineNever
+unsafe fn prependStoredShort(machine: &mut Machine, width: usize) -> bool {
+  let right = unsafe machine.top(1)
+  let left = unsafe machine.top(2)
+  if !Strings.prependIntoRoom(right, left, 2) { return false }
+  Strings.dropHolder(right)
+  unsafe machine.discard(2)
+  unsafe machine.skip(width)
+  if Strings.heldOnce(left) { return unsafe releasedPiece(left) }
+  Strings.dropHolder(left)
   return true
 }
 /// Frees addStoredShort's piece, whose last reference the operand stack held.

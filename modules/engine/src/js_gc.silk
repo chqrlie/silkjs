@@ -37,7 +37,7 @@ import js_compiler_types { PendingFunction, LazyStub }
 import js_compiler_state as compilerState
 import js_core_types { HostEdges, hostImportView, hostModuleView, hostScriptMetadataView }
 import js_core_types { USER_VALUE_COUNT, ClosureKind }
-import js_core_types { blankConstructEntry, constructCacheSlot, NO_SP, ScopeData, scopeSlot, LiteralCacheEntry, literalCacheIndex, FieldCacheEntry, fieldCacheIndex, fieldSpareIndex, ConstructPin, blankReceiverEntry, ForwardEntry, blankForwardEntry, EmptyShapeEntry,
+import js_core_types { blankConstructEntry, constructCacheSlot, NO_SP, ScopeData, scopeSlot, LiteralCacheEntry, literalCacheIndex, fieldCacheIndex, fieldSpareIndex, ConstructPin, blankReceiverEntry, ForwardEntry, blankForwardEntry, EmptyShapeEntry,
   RuntimeState, ContextState, GcPhase, HeapList, ObjectData, ObjectPayload,
   PropertySlot, ShapeData, ShapeProperty, JS_PROP_TMASK, JS_PROP_AUTOINIT, FunctionBytecode, VarRef, VarRefState, 
   StackFrame, AsyncFrame, ModuleDef, ExportBinding, NativeFunctionId, BuiltinFamily,
@@ -3705,12 +3705,9 @@ unsafe fn forgetFieldSite(runtime: *mut HeapHeader, site: usize) -> () {
   let mut anchor = ()
   let state = unsafe HeapCell.payloadMut<RuntimeState, ()>(&mut anchor, runtime)
   let slot = fieldCacheIndex(site)
-  if state.fieldCache[slot].site == site {
-    state.fieldCache[slot] = FieldCacheEntry { site: 0, key: 0, protoKey: 0, midKey: 0, farKey: 0, epoch: 0, holder: Pointer.null<HeapHeader>(), holderIndex: 0 }
-  }
-  if state.fieldCache[fieldSpareIndex(slot)].site == site {
-    state.fieldCache[fieldSpareIndex(slot)] = FieldCacheEntry { site: 0, key: 0, protoKey: 0, midKey: 0, farKey: 0, epoch: 0, holder: Pointer.null<HeapHeader>(), holderIndex: 0 }
-  }
+  if state.fieldCache[slot].site == site { state.fieldCache[slot].site = 0 }
+  let spare = fieldSpareIndex(slot)
+  if state.fieldCache[spare].site == site { state.fieldCache[spare].site = 0 }
 }
 /// What destroyBytecode needs of a final (short-form) opcode in one load: its
 /// size, including a field key, in the low six bits, FINAL_ATOM when it carries
@@ -3726,22 +3723,78 @@ pub fn finalShape(code: u8) -> u8 {
 unsafe fn destroyBytecode<H: HeapHooks>(hooks: &mut H, runtime: *mut HeapHeader, node: *mut HeapHeader) -> () {
   let mut anchor = ()
   let b = unsafe HeapCell.payloadMut<FunctionBytecode, ()>(&mut anchor, node)
-  let code = Intrinsic.replace(b.code, ByteStorage.empty())
-  let definitions = Intrinsic.replace(b.varDefs, BoxList<VarDef>.make())
-  let constants = Intrinsic.replace(b.constants, BoxList<ValueBits>.make())
-  let closures = Intrinsic.replace(b.closureVars, BoxList<ClosureVar>.make())
-  let knownRefs = Intrinsic.replace(b.known.refs, BoxList<?*mut HeapHeader>.make())
-  let debug = Intrinsic.replace(b.debug, Option<FunctionDebugInfo>.none())
-  let mut host = Intrinsic.replace(b.host, ThinBox<HostEdges>.none())
-  let mut pending = Intrinsic.replace(b.pending, ThinBox<PendingFunction>.none())
-  // A stub's placeholder code never ran, so no cache knows its address.
-  let placeholder = pending.isSome()
   let realm = b.realm
   let name = b.name
   b.name = 0
+  let filename = match &b.debug {
+    Option<FunctionDebugInfo>.Some { value } => value.filename
+    Option<FunctionDebugInfo>.None => 0
+  }
+  let mut hasTree = false
+  let placeholder = b.pending.isSome()
+  // Release every owned atom in one RuntimeState borrow before dropping b.
+  let mut stateAnchor = ()
+  let state = unsafe HeapCell.payloadMut<RuntimeState, ()>(&mut stateAnchor, runtime)
+  if name != 0 { state.atoms.release(name) }
+  if filename != 0 { state.atoms.release(filename) }
+  let defCount = b.varDefs.length()
+  if defCount != 0 {
+    let defs = unsafe Pointer.assumeMany<VarDef>(unsafe b.varDefs.first())
+    let mut i: usize = 0
+    while i < defCount {
+      state.atoms.release((unsafe Pointer.read<VarDef>(unsafe Pointer.at<VarDef>(defs, i))).name)
+      i = usize.wrappingAdd(i, 1)
+    }
+  }
+  let varCount = b.closureVars.length()
+  if varCount != 0 {
+    let vars = unsafe Pointer.assumeMany<ClosureVar>(unsafe b.closureVars.first())
+    let mut i: usize = 0
+    while i < varCount {
+      state.atoms.release((unsafe Pointer.read<ClosureVar>(unsafe Pointer.at<ClosureVar>(vars, i))).name)
+      i = usize.wrappingAdd(i, 1)
+    }
+  }
+  if placeholder {
+    let p = b.pending.getMut()
+    match &mut p.lazy {
+      Option<LazyStub>.Some { value: stub } => {
+        if stub.filename != 0 { state.atoms.release(stub.filename) stub.filename = 0 }
+        let names = stub.skips.second()
+        let mut j: usize = 0
+        while j < names.length {
+          state.atoms.release(names[j].name)
+          j = usize.wrappingAdd(j, 1)
+        }
+      }
+      Option<LazyStub>.None => { hasTree = p.deferred.isNone() }
+    }
+  }
+  drop state
+  // A stub's placeholder code never ran (shared 1-byte STUB_CODE with no atoms
+  // or caches), and a lazy/deferred stub with no constants, host edges or known
+  // refs finishes without moving any tail storage out before cell destruction.
+  if placeholder && !hasTree && b.known.refs.length() == 0 && b.host.isNone() && b.constants.length() == 0 {
+    drop b
+    unsafe releaseHeader(&mut hooks, runtime, realm)
+    if unsafe finishTyped(runtime, node) { unsafe HeapCell.destroy<FunctionBytecode>(node) }
+    return ()
+  }
+  let code = if placeholder { ByteStorage.empty() } else { Intrinsic.replace(b.code, ByteStorage.empty()) }
+  let constants = if b.constants.length() != 0 { Intrinsic.replace(b.constants, BoxList<ValueBits>.make()) } else { BoxList<ValueBits>.make() }
+  let knownRefs = if b.known.refs.length() != 0 { Intrinsic.replace(b.known.refs, BoxList<?*mut HeapHeader>.make()) } else { BoxList<?*mut HeapHeader>.make() }
+  let mut host = if b.host.isSome() { Intrinsic.replace(b.host, ThinBox<HostEdges>.none()) } else { ThinBox<HostEdges>.none() }
+  let mut pending = if hasTree { Intrinsic.replace(b.pending, ThinBox<PendingFunction>.none()) } else { ThinBox<PendingFunction>.none() }
   drop b
-  let mut knownIndex: usize = 0
-  while knownIndex < knownRefs.length() { unsafe releaseOptional(&mut hooks, runtime, knownRefs.get(knownIndex)) knownIndex = knownIndex + 1 }
+  let knownCount = knownRefs.length()
+  if knownCount != 0 {
+    let refs = unsafe Pointer.assumeMany<?*mut HeapHeader>(unsafe knownRefs.first())
+    let mut knownIndex: usize = 0
+    while knownIndex < knownCount {
+      unsafe releaseOptional(&mut hooks, runtime, unsafe Pointer.read<?*mut HeapHeader>(unsafe Pointer.at<?*mut HeapHeader>(refs, knownIndex)))
+      knownIndex = usize.wrappingAdd(knownIndex, 1)
+    }
+  }
   drop knownRefs
   if let Option<HostEdges>.Some { value } = host.take() {
     let mut edges = move value
@@ -3750,23 +3803,22 @@ unsafe fn destroyBytecode<H: HeapHooks>(hooks: &mut H, runtime: *mut HeapHeader,
     unsafe release(&mut hooks, runtime, edges.scriptMetadata.take().intoBits())
     drop edges
   }
-  // A stub that never ran still holds its definition's atoms and source.
-  match pending.take() {
-    Option<PendingFunction>.Some { value } => {
-      let mut kept = move value
-      match &mut kept.lazy {
-        Option<LazyStub>.Some { value: stub } => { unsafe stub.release(runtime) }
-        // A deferred body owns nothing: its bytes and atoms are the runtime's.
-        _ => { if kept.deferred.isNone() { let cell = kept.cell compilerState.destroyFunction(&mut hooks, &mut kept.tree.getMut(), cell) } }
+  // A deferred-parse tree stub still owns its unlinked FunctionDef.
+  if hasTree {
+    match pending.take() {
+      Option<PendingFunction>.Some { value } => {
+        let mut kept = move value
+        let cell = kept.cell
+        compilerState.destroyFunction(&mut hooks, &mut kept.tree.getMut(), cell)
       }
+      Option<PendingFunction>.None => ()
     }
-    Option<PendingFunction>.None => ()
   }
   drop host drop pending
   // One base pointer for the walk: code neither moves nor changes until it drops.
   let length = code.length()
-  let mut position: usize = 0
   if length != 0 {
+    let mut position: usize = 0
     let base = unsafe Pointer.assumeMany<u8>(unsafe code.start())
     while position < length {
       let shape = finalShape(unsafe Pointer.read<u8>(unsafe Pointer.at<u8>(base, position)))
@@ -3779,51 +3831,34 @@ unsafe fn destroyBytecode<H: HeapHooks>(hooks: &mut H, runtime: *mut HeapHeader,
           let mut stateAnchor = ()
           let state = unsafe HeapCell.payloadMut<RuntimeState, ()>(&mut stateAnchor, runtime)
           state.atoms.release(atom)
-          if !placeholder {
-            // The site's address may be reused by later bytecode with another atom,
-            // which the field cache's site and shape version checks would not tell apart.
-            let site = Pointer.address<u8>(at)
-            let slot = fieldCacheIndex(site)
-            if state.fieldCache[slot].site == site {
-              state.fieldCache[slot] = FieldCacheEntry { site: 0, key: 0, protoKey: 0, midKey: 0, farKey: 0, epoch: 0, holder: Pointer.null<HeapHeader>(), holderIndex: 0 }
-            }
-            let spare = fieldSpareIndex(slot)
-            if state.fieldCache[spare].site == site {
-              state.fieldCache[spare] = FieldCacheEntry { site: 0, key: 0, protoKey: 0, midKey: 0, farKey: 0, epoch: 0, holder: Pointer.null<HeapHeader>(), holderIndex: 0 }
-            }
-          }
+          // The site's address may be reused by later bytecode with another atom,
+          // which the field cache's site and shape version checks would not tell apart.
+          let site = Pointer.address<u8>(at)
+          let slot = fieldCacheIndex(site)
+          if state.fieldCache[slot].site == site { state.fieldCache[slot].site = 0 }
+          let spare = fieldSpareIndex(slot)
+          if state.fieldCache[spare].site == site { state.fieldCache[spare].site = 0 }
           drop state
         }
       }
-      if (shape & FINAL_OBJECT) != 0 && !placeholder {
+      if (shape & FINAL_OBJECT) != 0 {
         unsafe forgetLiteralSite(&mut hooks, runtime, usize.wrappingAdd(Pointer.address<u8>(unsafe Pointer.at<u8>(base, position)), 1))
       }
       require(size != 0)
       position = usize.wrappingAdd(position, size)
     }
+    unsafe forgetConstructCode(&mut hooks, runtime, Pointer.address<u8>(unsafe code.pointerAt(0)))
   }
-  if code.length() != 0 && !placeholder { unsafe forgetConstructCode(&mut hooks, runtime, Pointer.address<u8>(unsafe code.pointerAt(0))) }
-  let mut index: usize = 0
-  while index < definitions.length() {
-    unsafe releaseAtom(runtime, definitions.get(index).name)
-    index = index + 1
-  }
-  index = 0
-  while index < constants.length() {
-    unsafe release(&mut hooks, runtime, constants.get(index))
-    index = index + 1
-  }
-  index = 0
-  while index < closures.length() {
-    unsafe releaseAtom(runtime, closures.get(index).name)
-    index = index + 1
+  let constCount = constants.length()
+  if constCount != 0 {
+    let consts = unsafe Pointer.assumeMany<ValueBits>(unsafe constants.first())
+    let mut index: usize = 0
+    while index < constCount {
+      unsafe release(&mut hooks, runtime, unsafe Pointer.read<ValueBits>(unsafe Pointer.at<ValueBits>(consts, index)))
+      index = usize.wrappingAdd(index, 1)
+    }
   }
   unsafe releaseHeader(&mut hooks, runtime, realm)
-  unsafe releaseAtom(runtime, name)
-  match &debug {
-    Option<FunctionDebugInfo>.Some { value } => { unsafe releaseAtom(runtime, value.filename) }
-    Option<FunctionDebugInfo>.None => ()
-  }
   // These local native owners may outlive the header but contain no remaining JS
   // ownership. Borrowed ROM is never freed; embedded atom references still are.
   if unsafe finishTyped(runtime, node) { unsafe HeapCell.destroy<FunctionBytecode>(node) }
