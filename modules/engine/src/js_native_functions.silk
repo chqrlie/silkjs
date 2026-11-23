@@ -1013,7 +1013,8 @@ pub unsafe fn unitStringOf(runtime: *mut HeapHeader, value: ValueBits) -> ValueB
   let code = match value { ValueBits.Int { value: integer } => i32.toU32(i32.bitAnd(integer, 65535)) _ => { return ValueBits.Uninitialized } }
   if code > 255 { return ValueBits.Uninitialized }
   let anchor = () let registry = unsafe HeapCell.payload<RuntimeState, ()>(&anchor, runtime)
-  let entry = registry.unitStrings[u32.toUsize(code)]
+  let table = unsafe Pointer.assumeMany<ValueBits>(Pointer.fromRef<ValueBits>(&registry.unitStrings[0]))
+  let entry = unsafe Pointer.read<ValueBits>(unsafe Pointer.at<ValueBits>(table, u32.toUsize(code)))
   drop registry
   if entry.isString() { return Strings.duplicate(entry) }
   return ValueBits.Uninitialized
@@ -1111,13 +1112,24 @@ pub unsafe fn charCodeOf(receiver: ValueBits, value: ValueBits) -> i32 {
   let index = match value { ValueBits.Int { value: integer } => integer _ => { return -1 } }
   if index < 0 { return -1 }
   // A flat string reads its unit in place: one length check and one load for
-  // the common compact Latin-1 text (a scanner's charCodeAt loop).
+  // both compact and out-of-line Latin-1 text (a scanner's charCodeAt loop).
   if let ValueBits.String { reference } = receiver {
     let anchor = ()
     let data = unsafe HeapCell.shortPayload<FlatString, ()>(&anchor, reference)
     let at = i32.toUsize(index)
     if at >= data.length() { return -1 }
-    if data.compact && !data.wide { return u8.toI32(unsafe Pointer.read<u8>(unsafe Pointer.atMut<u8>(unsafe Pointer.assumeManyMut<u8>(data.textAddress()), at))) }
+    if !data.wide {
+      if data.compact {
+        return u8.toI32(unsafe Pointer.read<u8>(unsafe Pointer.atMut<u8>(unsafe Pointer.assumeManyMut<u8>(data.textAddress()), at)))
+      }
+      let bytes = data.latin1.asSlice()
+      let pos = usize.wrappingAdd(data.frontGap(), at)
+      if pos < bytes.length {
+        let ptr = unsafe Intrinsic.pointerRequalify<?[*]const u8, [*]const u8>(Pointer.fromSlice<u8>(bytes))
+        return u8.toI32(unsafe Pointer.read<u8>(unsafe Pointer.at<u8>(ptr, pos)))
+      }
+      return -1
+    }
     return u16.toI32(data.unit(at))
   }
   let text = Strings.flatView((unsafe lendBits(&receiver, receiver)).view())

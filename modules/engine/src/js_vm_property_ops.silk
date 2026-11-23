@@ -1607,7 +1607,10 @@ pub unsafe fn readStringMethodBorrowedAt(runtime: *mut HeapHeader, context: *mut
   if AtomTable.isInteger(atom) || atom == atoms.JS_ATOM_length { return false }
   let anchor = ()
   let ctx = unsafe HeapCell.payload<ContextState, ()>(&anchor, context)
-  let start = match ctx.classPrototypes.get(u32.toUsize(classes.JS_CLASS_STRING)) {
+  let protos = ctx.classPrototypes.asSlice()
+  if protos.length <= u32.toUsize(classes.JS_CLASS_STRING) { return false }
+  let protosPtr = unsafe Intrinsic.pointerRequalify<?[*]const ValueBits, [*]const ValueBits>(Pointer.fromSlice<ValueBits>(protos))
+  let start = match unsafe Pointer.read<ValueBits>(unsafe Pointer.at<ValueBits>(protosPtr, u32.toUsize(classes.JS_CLASS_STRING))) {
     ValueBits.Object { reference } => reference
     _ => { return false }
   }
@@ -1617,14 +1620,23 @@ pub unsafe fn readStringMethodBorrowedAt(runtime: *mut HeapHeader, context: *mut
   let state = unsafe HeapCell.payload<RuntimeState, ()>(&anchor, runtime)
   let site = Pointer.address<u8>(ip)
   let slot = fieldCacheIndex(site)
-  let mut entry = &state.fieldCache[slot]
-  if entry.site != site { entry = &state.fieldCache[fieldSpareIndex(slot)] }
-  if entry.site == site && u64.shiftRight(entry.key, 16) == shape.version {
-    let found = (unsafe data.slotUnchecked(u64.toUsize(entry.key & 0xffff))).valueBits()
+  let primary = &state.fieldCache[slot]
+  if primary.site == site && u64.shiftRight(primary.key, 16) == shape.version {
+    let found = (unsafe data.slotUnchecked(u64.toUsize(primary.key & 0xffff))).valueBits()
     unsafe Pointer.write<ValueBits>(target, found)
     return true
   }
-  drop state drop shape drop data
+  let spare = &state.fieldCache[fieldSpareIndex(slot)]
+  if spare.site == site && u64.shiftRight(spare.key, 16) == shape.version {
+    let found = (unsafe data.slotUnchecked(u64.toUsize(spare.key & 0xffff))).valueBits()
+    unsafe Pointer.write<ValueBits>(target, found)
+    return true
+  }
+  drop spare drop primary drop state drop shape drop data
+  return unsafe readStringMethodSlow(runtime, ip, start, target)
+}
+@inlineNever
+unsafe fn readStringMethodSlow(runtime: *mut HeapHeader, ip: *const u8, start: *mut HeapHeader, target: *mut ValueBits) -> bool {
   return unsafe readFieldCachedAt(runtime, ip, start, target, false)
 }
 /// Zero-call inline-only String.prototype.charCodeAt lookup for leaf charCode

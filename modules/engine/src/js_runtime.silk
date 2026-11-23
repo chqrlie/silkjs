@@ -200,7 +200,7 @@ pub effect fn allocateRuntimeStorage(stackTop: usize) -> *mut HeapHeader
   unsafe Pointer.put(Pointer.fromMutRef(&mut state.deferredSources), List<DeferredSource>.make())
   unsafe Pointer.put(Pointer.fromMutRef(&mut state.deferredAtoms), List<u32>.make())
   unsafe Pointer.put(Pointer.fromMutRef(&mut state.deferredTexts), List<ValueBits>.make())
-  state.unitStrings = [ValueBits.Undefined; 769]
+  state.unitStrings = [ValueBits.Undefined; 1537]
   state.spareVarRefCount = 0
   state.userOpaque = Pointer.null<u8>()
   unsafe Pointer.put(Pointer.fromMutRef(&mut state.callFrames), Option<Intrinsic.RawBuffer<ValueBits>>.some(move callFrames))

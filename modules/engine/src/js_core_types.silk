@@ -775,7 +775,7 @@ pub struct RuntimeState {
   /// spareCellCounts[b] of them live; other entries are stale. js_gc and
   /// js_object_allocate own this cache.
   pub spareCells: ThinList<?*mut HeapHeader>,
-  pub spareCellCounts: [usize; 4],
+  pub spareCellCounts: [usize; 5],
   /// Two-way memo of recent hashed-shape transitions; js_shapes owns it. An
   /// entry hits only while its base keeps the version it was recorded at, and
   /// unlinking a target clears the one slot that names it (ShapeData.memoSlot).
@@ -878,7 +878,7 @@ pub struct RuntimeState {
   /// One-code-unit Latin-1 strings, small decimals and recent short substrings,
   /// filled on use; the runtime owns one reference to each. Read through
   /// js_unit_strings.
-  pub unitStrings: [ValueBits; 769],
+  pub unitStrings: [ValueBits; 1537],
   /// Dead objects still in gcObjects that drainZero destroys next, newest last
   /// (see js_gc.enqueueZero).
   pub zeroStack: [?*mut HeapHeader; 256],

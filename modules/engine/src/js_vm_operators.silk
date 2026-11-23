@@ -997,8 +997,9 @@ pub unsafe fn addStoredShort(machine: &mut Machine) -> bool {
   else if next == op.OP_put_scope0 { slot = unsafe scopedValue(&machine, 1) width = 3 }
   else { return false }
   if !sameString(slot, left) { return false }
-  // One unit first (a scanner's `text += String.fromCharCode(code)`), then any short piece.
-  if !Strings.appendUnitLatin1(left, right) && !unsafe appendStoredPiece(left, right) { return false }
+  // One unit first (a scanner's `text += String.fromCharCode(code)`), else tail-call
+  // the multi-unit path so this fast path stays a leaf with no frame or spills.
+  if !Strings.appendUnitLatin1(left, right) { return unsafe addStoredShortSlow(&mut machine, width) }
   // The operand's reference goes with the store; the slot keeps its own.
   Strings.dropHolder(left)
   unsafe machine.discard(2)
@@ -1011,7 +1012,17 @@ pub unsafe fn addStoredShort(machine: &mut Machine) -> bool {
 }
 /// addStoredShort's piece of more than one unit (Strings.appendShortLatin1).
 @inlineNever
-unsafe fn appendStoredPiece(left: ValueBits, right: ValueBits) -> bool { return Strings.appendShortLatin1(left, right, 2) }
+unsafe fn addStoredShortSlow(machine: &mut Machine, width: usize) -> bool {
+  let right = unsafe machine.top(1)
+  let left = unsafe machine.top(2)
+  if !Strings.appendShortLatin1(left, right, 2) { return false }
+  Strings.dropHolder(left)
+  unsafe machine.discard(2)
+  unsafe machine.skip(width)
+  if Strings.heldOnce(right) { return unsafe releasedPiece(right) }
+  Strings.dropHolder(right)
+  return true
+}
 /// Frees addStoredShort's piece, whose last reference the operand stack held.
 @inlineNever
 unsafe fn releasedPiece(piece: ValueBits) -> bool { releaseString(piece) return true }

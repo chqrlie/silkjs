@@ -936,6 +936,8 @@ pub fn spareCapacity(capacity: usize) -> usize {
 /// chase; a list that outgrows them moves to its own storage. Eight keeps the
 /// AST-node-sized objects of compilers like TypeScript's in one cell.
 pub const INLINE_SLOTS: usize = 8
+/// Wide inline tail for ordinary array cells (5..12 capture exec results and 8..15 element literals).
+pub const WIDE_SLOTS: usize = 16
 /// Spare object cells js_gc keeps per tail size (RuntimeState.spareCells).
 pub const SPARE_OBJECT_CELLS: usize = 4096
 // Inline slots waste their tail when the object outgrows them. Each empty shape
@@ -1091,8 +1093,8 @@ pub unsafe fn flushSpareSlots(runtime: *mut HeapHeader) -> () {
     let cells = unsafe HeapCell.payloadMut<RuntimeState, ()>(&mut cellAnchor, runtime)
     let mut index: usize = 0
     let mut bin: usize = 0
-    while bin < 4 && cells.spareCellCounts[bin] == 0 { bin = bin + 1 }
-    if bin == 4 { return () }
+    while bin < 5 && cells.spareCellCounts[bin] == 0 { bin = bin + 1 }
+    if bin == 5 { return () }
     let count = cells.spareCellCounts[bin] - 1
     cells.spareCellCounts[bin] = count
     index = bin * SPARE_OBJECT_CELLS + count

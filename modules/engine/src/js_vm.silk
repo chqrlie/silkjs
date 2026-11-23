@@ -2813,16 +2813,16 @@ unsafe fn stringFieldSite<H: HeapHooks>(hooks: &mut H, machine: &mut Machine, fu
         if unit >= 0 {
           if kind == nativeFunctions.UNIT_METHOD_CHAR_CODE_AT {
             unsafe machine.set(1, ValueBits.Int { value: unit })
-            unsafe gc.release(&mut hooks, machine.runtime, receiver)
             unsafe machine.skip(4 + width + 3)
-            return FIELD_FUSED
+            if receiver.tag() == -7 && !Strings.heldOnce(receiver) { Strings.dropHolder(receiver) return FIELD_FUSED }
+            return unsafe releaseStringFusedSlow(&mut hooks, machine.runtime, receiver)
           }
           let ch = unsafe nativeFunctions.unitStringOf(machine.runtime, ValueBits.Int { value: unit })
           if ch.isString() {
             unsafe machine.set(1, ch)
-            unsafe gc.release(&mut hooks, machine.runtime, receiver)
             unsafe machine.skip(4 + width + 3)
-            return FIELD_FUSED
+            if receiver.tag() == -7 && !Strings.heldOnce(receiver) { Strings.dropHolder(receiver) return FIELD_FUSED }
+            return unsafe releaseStringFusedSlow(&mut hooks, machine.runtime, receiver)
           }
         }
       }
@@ -2830,6 +2830,11 @@ unsafe fn stringFieldSite<H: HeapHooks>(hooks: &mut H, machine: &mut Machine, fu
   }
   unsafe Pointer.write<ValueBits>(machine.stackTop, unsafe function.retained())
   return FIELD_PUSHED
+}
+@inlineNever
+unsafe fn releaseStringFusedSlow<H: HeapHooks>(hooks: &mut H, runtime: *mut HeapHeader, receiver: ValueBits) -> u8 {
+  unsafe gc.release(&mut hooks, runtime, receiver)
+  return FIELD_FUSED
 }
 /// get_field2 on a primitive receiver, past pushFieldOperand's objects:
 /// FIELD_ANSWERED when intToStringSite answered `n.toString()` whole,
@@ -3699,6 +3704,41 @@ unsafe fn storesPlanned(machine: &Machine) -> bool {
 /// constructInline's prologue and spills off the common construct.
 @inlineNever
 unsafe effect fn constructStores<H: HeapHooks>(hooks: &mut H, memory: &AllocationObserver, machine: &mut Machine) -> bool ? &mut Allocator {
+  let count = u16.toUsize(unsafe machine.peekU16())
+  let function = unsafe machine.top(usize.wrappingAdd(count, 2))
+  let node = core.reference(function)
+  let data = unsafe operandCell(machine.stackTop, count)
+  let argv = FrameSlots { data: data, count: count }
+  let first = unsafe operandCell(data, 2)
+  let planned = run unsafe constructors.plannedConstructFast(&mut hooks, memory, machine.runtime, node, &argv)
+  if !planned.isObject() {
+    return run unsafe constructStoresSlow(&mut hooks, memory, &mut machine)
+  }
+  unsafe machine.skip(2)
+  let mut fnAnchor = ()
+  let header = unsafe Pointer.borrowMut<(), HeapHeader>(&mut fnAnchor, node)
+  let fnCount = header.referenceCount
+  if fnCount > 2 {
+    header.referenceCount = i32.wrappingSubtract(fnCount, 2)
+    drop header
+    unsafe Pointer.write<ValueBits>(first, planned)
+    machine.stackTop = unsafe Pointer.atMut<ValueBits>(unsafe Pointer.assumeManyMut<ValueBits>(first), 1)
+    return true
+  }
+  drop header
+  return unsafe finishConstructStoresDropSlow(&mut hooks, &mut machine, function, planned, first)
+}
+@inlineNever
+unsafe fn finishConstructStoresDropSlow<H: HeapHooks>(hooks: &mut H, machine: &mut Machine, function: ValueBits, planned: ValueBits, first: *mut ValueBits) -> bool {
+  machine.stackTop = first
+  unsafe gc.release(&mut hooks, machine.runtime, function)
+  unsafe gc.release(&mut hooks, machine.runtime, function)
+  unsafe Pointer.write<ValueBits>(first, planned)
+  machine.stackTop = unsafe Pointer.atMut<ValueBits>(unsafe Pointer.assumeManyMut<ValueBits>(first), 1)
+  return true
+}
+@inlineNever
+unsafe effect fn constructStoresSlow<H: HeapHooks>(hooks: &mut H, memory: &AllocationObserver, machine: &mut Machine) -> bool ? &mut Allocator {
   let count = u16.toUsize(unsafe machine.peekU16())
   let function = unsafe machine.top(count + 2)
   let node = core.reference(function)
