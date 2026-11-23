@@ -333,7 +333,8 @@ pub unsafe fn readFieldCachedAt(runtime: *mut HeapHeader, ip: *const u8, object:
   let state = unsafe HeapCell.payload<RuntimeState, ()>(&anchor, runtime)
   let site = Pointer.address<u8>(ip)
   let slot = fieldCacheIndex(site)
-  let entry = &state.fieldCache[slot]
+  let mut entry = &state.fieldCache[slot]
+  if entry.site != site { entry = &state.fieldCache[fieldSpareIndex(slot)] }
   let key = entry.key
   if entry.site == site {
     let keyHi = u64.shiftRight(key, 16)
@@ -1616,7 +1617,8 @@ pub unsafe fn readStringMethodBorrowedAt(runtime: *mut HeapHeader, context: *mut
   let state = unsafe HeapCell.payload<RuntimeState, ()>(&anchor, runtime)
   let site = Pointer.address<u8>(ip)
   let slot = fieldCacheIndex(site)
-  let entry = &state.fieldCache[slot]
+  let mut entry = &state.fieldCache[slot]
+  if entry.site != site { entry = &state.fieldCache[fieldSpareIndex(slot)] }
   if entry.site == site && u64.shiftRight(entry.key, 16) == shape.version {
     let found = (unsafe data.slotUnchecked(u64.toUsize(entry.key & 0xffff))).valueBits()
     unsafe Pointer.write<ValueBits>(target, found)

@@ -651,6 +651,11 @@ pub const CALL_KIND_STRING: u8 = 10
 /// The runtime's async context getter or setter (runtimeIds.NATIVE_ASYNC_CONTEXT_GET
 /// and _SET): the VM reads or replaces RuntimeState.asyncContext itself.
 pub const CALL_KIND_ASYNC_CONTEXT: u8 = 11
+/// RegExp.prototype.exec / .test and String.prototype.replace: dispatched from
+/// leanInline straight to their small dedicated inline helpers, bypassing quickInline.
+pub const CALL_KIND_REGEXP_EXEC: u8 = 12
+pub const CALL_KIND_REGEXP_TEST: u8 = 13
+pub const CALL_KIND_STRING_REPLACE: u8 = 14
 /// The callKind of a native function made with id and protocol (each SLOW
 /// case below names the VM path that may answer it).
 pub fn callKindOf(id: NativeFunctionId, protocol: NativeCallProtocol) -> u8 {
@@ -683,15 +688,17 @@ pub fn callKindOf(id: NativeFunctionId, protocol: NativeCallProtocol) -> u8 {
       BuiltinFamily.Math => CALL_KIND_SLOW
       // numberInline, quickParseInt, quickWrite's toString
       BuiltinFamily.Number => CALL_KIND_SLOW
-      // unitInline, quickString, quickReplace, stringBasic.quick
-      BuiltinFamily.String => if method == stringIds.FROM_CHAR_CODE || method == STRING_REPLACE || method == stringIds.CHAR_CODE_AT || method == stringIds.CHAR_AT { CALL_KIND_SLOW }
+      // unitInline, quickString, stringReplaceInline, stringBasic.quick
+      BuiltinFamily.String => if method == stringIds.FROM_CHAR_CODE || method == stringIds.CHAR_CODE_AT || method == stringIds.CHAR_AT { CALL_KIND_SLOW }
+        else if method == STRING_REPLACE { CALL_KIND_STRING_REPLACE }
         else if stringBasic.hasPrimitiveEntry(method) { CALL_KIND_STRING } else { CALL_KIND_LEAN }
       // pushInline, popInline, quickSplice
       BuiltinFamily.Array => if method == ARRAY_PUSH || method == ARRAY_POP || method == ARRAY_SPLICE { CALL_KIND_SLOW } else { CALL_KIND_LEAN }
       // clockInline
       BuiltinFamily.Date => if method == DATE_NOW { CALL_KIND_SLOW } else { CALL_KIND_LEAN }
-      // nativeInline's quickExec
-      BuiltinFamily.RegExp => if method == REGEXP_EXEC || method == REGEXP_TEST { CALL_KIND_SLOW } else { CALL_KIND_LEAN }
+      // regexpExecInline / regexpTestInline
+      BuiltinFamily.RegExp => if method == REGEXP_EXEC { CALL_KIND_REGEXP_EXEC }
+        else if method == REGEXP_TEST { CALL_KIND_REGEXP_TEST } else { CALL_KIND_LEAN }
       // appliesInline and callInline (f.call, f.apply, Reflect.apply)
       BuiltinFamily.Function => CALL_KIND_SLOW
       BuiltinFamily.Reflect => CALL_KIND_SLOW
@@ -844,6 +851,24 @@ pub fn quick<'a, 'b, H: HeapHooks>(hooks: &mut H, realm: Realm<'a>, target: &Qui
 // RegExp.prototype.exec's and test's method ids in js_regexp_intrinsics.
 const REGEXP_EXEC: u32 = 7
 const REGEXP_TEST: u32 = 8
+/// The realm of a native function object whose kind is already known.
+@inlineAlways
+pub unsafe fn nativeRealm(function: ValueBits) -> ?*mut HeapHeader {
+  let anchor = () let object = unsafe HeapCell.payload<ObjectData, ()>(&anchor, reference(function))
+  return match &object.payload {
+    ObjectPayload.NativeFunction { function: native } => native.realm()
+    _ => Pointer.null<HeapHeader>()
+  }
+}
+/// Whether target is the intrinsic String constructor called as a function.
+@inlineAlways
+pub fn isStringConstructor(target: &QuickTarget) -> bool {
+  if target.protocol != NativeCallProtocol.ConstructorOrFunction { return false }
+  return match target.id {
+    NativeFunctionId.Builtin { family, method } => family == BuiltinFamily.String && method == stringIds.CONSTRUCTOR
+    _ => false
+  }
+}
 /// The realm of function when it is the intrinsic RegExp.prototype.exec or test
 /// (test.* says which), else null: the VM answers that call with
 /// js_regexp_intrinsics_exec.quickExec.
@@ -1013,7 +1038,8 @@ pub unsafe fn isCharCodeAt(function: ValueBits) -> bool {
 pub const UNIT_METHOD_NONE: u8 = 0
 pub const UNIT_METHOD_CHAR_CODE_AT: u8 = 1
 pub const UNIT_METHOD_FROM_CHAR_CODE: u8 = 2
-/// Which of the two per-character String intrinsics function is, in one pass
+pub const UNIT_METHOD_CHAR_AT: u8 = 3
+/// Which of the per-character String intrinsics function is, in one pass
 /// over its payload (isCharCodeAt and objectMethod each walk it again).
 @inlineAlways
 pub unsafe fn unitMethod(function: ValueBits) -> u8 {
@@ -1026,6 +1052,7 @@ pub unsafe fn unitMethod(function: ValueBits) -> u8 {
         if family != BuiltinFamily.String || native.protocol == NativeCallProtocol.Data { UNIT_METHOD_NONE }
         else if method == stringIds.CHAR_CODE_AT { UNIT_METHOD_CHAR_CODE_AT }
         else if method == stringIds.FROM_CHAR_CODE { UNIT_METHOD_FROM_CHAR_CODE }
+        else if method == stringIds.CHAR_AT { UNIT_METHOD_CHAR_AT }
         else { UNIT_METHOD_NONE }
       }
       _ => UNIT_METHOD_NONE

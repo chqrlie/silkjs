@@ -2323,6 +2323,12 @@ unsafe fn unitInline<H: HeapHooks>(hooks: &mut H, machine: &mut Machine) -> bool
     let unit = unsafe nativeFunctions.charCodeOf(receiver, unsafe machine.top(1))
     if unit < 0 { return false }
     answer = ValueBits.Int { value: unit }
+  } else if kind == nativeFunctions.UNIT_METHOD_CHAR_AT {
+    match receiver { ValueBits.String { .. } => {} _ => { return false } }
+    let unit = unsafe nativeFunctions.charCodeOf(receiver, unsafe machine.top(1))
+    if unit < 0 { return false }
+    answer = unsafe nativeFunctions.unitStringOf(machine.runtime, ValueBits.Int { value: unit })
+    if let ValueBits.Uninitialized = answer { return false }
   } else {
     answer = unsafe nativeFunctions.unitStringOf(machine.runtime, unsafe machine.top(1))
     if let ValueBits.Uninitialized = answer { return false }
@@ -2515,18 +2521,6 @@ unsafe effect fn nativeInline<H: HeapHooks + CoercionHooks + OwnPropertyHooks + 
   if opcode == op.OP_call || opcode == op.OP_call_method { unsafe machine.skip(2) }
   unsafe machine.publishPc()
   unsafe Pointer.write<i32>(counter, left - 1)
-  if count != 0 && opcode == op.OP_call_method {
-    let mut test = false
-    if let Option<*mut HeapHeader>.Some { value: home } = Pointer.nonNullMut<HeapHeader>(unsafe nativeFunctions.regexpExecRealm(function, &mut test)) {
-      if test { return run unsafe testInline(&mut hooks, memory, &mut machine, home, function, receiver, data, count, extra) }
-      let quick = run regexpExec.quickExec(&mut hooks, memory, unsafe lendRealm(&home, home), receiver, unsafe argv.get(0), false)
-      if let Option<ValueBits>.Some { value: answer } = move quick {
-        unsafe releaseOperandsFrom(&mut hooks, &mut machine, unsafe operandCell(data, extra))
-        unsafe machine.push(answer)
-        return true
-      }
-    }
-  }
   // native.call(thisArg, ...args), as in hasOwnProperty.call(object, key): the
   // target is called itself, without Function.prototype.call's frame around it.
   if count != 0 && opcode == op.OP_call_method && receiver.isObject() && unsafe classId(receiver) == classes.JS_CLASS_C_FUNCTION
@@ -2587,7 +2581,58 @@ unsafe effect fn leanInline<H: HeapHooks + CoercionHooks + OwnPropertyHooks + Pr
   if kind == nativeFunctions.CALL_KIND_ASYNC_CONTEXT && unsafe asyncContextCall(&mut hooks, &mut machine, opcode, count, function) { return true }
   if kind == nativeFunctions.CALL_KIND_ANSWER && unsafe answerInline(&mut hooks, &mut machine, opcode, count, function) { return true }
   if kind == nativeFunctions.CALL_KIND_STRING && opcode == op.OP_call_method && run unsafe stringInline(&mut hooks, &mut machine, count, function) { return true }
+  if kind == nativeFunctions.CALL_KIND_REGEXP_EXEC && opcode == op.OP_call_method && count != 0 && run unsafe regexpMethodInline(&mut hooks, memory, &mut machine, count, function, false) { return true }
+  if kind == nativeFunctions.CALL_KIND_REGEXP_TEST && opcode == op.OP_call_method && count != 0 && run unsafe regexpMethodInline(&mut hooks, memory, &mut machine, count, function, true) { return true }
+  if kind == nativeFunctions.CALL_KIND_STRING_REPLACE && opcode == op.OP_call_method && count == 2 && run unsafe stringReplaceInline(&mut hooks, memory, &mut machine, function) { return true }
   return run unsafe leanCall(&mut hooks, memory, &mut machine, opcode, count, function)
+}
+/// A CALL_KIND_REGEXP_EXEC / _TEST call (`re.exec(s)` / `re.test(s)`): runs
+/// quickExec directly with a small dedicated frame, bypassing quickInline.
+/// False leaves machine untouched.
+@inlineNever
+unsafe effect fn regexpMethodInline<H: HeapHooks + CoercionHooks + OwnPropertyHooks + PropertyWriteHooks + NativeFunctionHooks + InterruptHooks>(hooks: &mut H,
+  memory: &AllocationObserver, machine: &mut Machine, count: usize, function: ValueBits, test: bool) -> bool ! JsException ? &mut Allocator {
+  let counter = unsafe interrupts.counter(machine.context)
+  let left = unsafe Pointer.read<i32>(counter)
+  if left <= 1 { return false }
+  let home = match Pointer.nonNullMut<HeapHeader>(unsafe nativeFunctions.nativeRealm(function)) {
+    Option<*mut HeapHeader>.Some { value } => value
+    Option<*mut HeapHeader>.None => { return false }
+  }
+  let receiver = unsafe machine.top(count + 2)
+  if test && !unsafe regexpSymbols.standard(unsafe lendRealm(&home, home), receiver) { return false }
+  let data = unsafe operandCell(machine.stackTop, count)
+  unsafe machine.publishPc()
+  let quick = run regexpExec.quickExec(&mut hooks, memory, unsafe lendRealm(&home, home), receiver, unsafe Pointer.read<ValueBits>(data), test)
+  let answer = match move quick { Option<ValueBits>.Some { value } => value Option<ValueBits>.None => { return false } }
+  unsafe machine.skip(2)
+  unsafe Pointer.write<i32>(counter, left - 1)
+  unsafe releaseOperandsFrom(&mut hooks, &mut machine, unsafe operandCell(data, 2))
+  unsafe machine.push(answer)
+  return true
+}
+/// A CALL_KIND_STRING_REPLACE call (`s.replace(re, rep)`): runs quickReplace
+/// directly with a small dedicated frame. False leaves machine untouched.
+@inlineNever
+unsafe effect fn stringReplaceInline<H: HeapHooks + CoercionHooks + OwnPropertyHooks + PropertyWriteHooks + NativeFunctionHooks + InterruptHooks>(hooks: &mut H,
+  memory: &AllocationObserver, machine: &mut Machine, function: ValueBits) -> bool ! JsException ? &mut Allocator {
+  let counter = unsafe interrupts.counter(machine.context)
+  let left = unsafe Pointer.read<i32>(counter)
+  if left <= 1 { return false }
+  let home = match Pointer.nonNullMut<HeapHeader>(unsafe nativeFunctions.nativeRealm(function)) {
+    Option<*mut HeapHeader>.Some { value } => value
+    Option<*mut HeapHeader>.None => { return false }
+  }
+  let receiver = unsafe machine.top(4)
+  let data = unsafe operandCell(machine.stackTop, 2)
+  unsafe machine.publishPc()
+  let quick = run regexpSymbols.quickReplace(&mut hooks, memory, unsafe lendRealm(&home, home), receiver, unsafe Pointer.read<ValueBits>(data), unsafe Pointer.read<ValueBits>(unsafe Pointer.atMut<ValueBits>(unsafe Pointer.assumeManyMut<ValueBits>(data), 1)))
+  let answer = match move quick { Option<ValueBits>.Some { value } => value Option<ValueBits>.None => { return false } }
+  unsafe machine.skip(2)
+  unsafe Pointer.write<i32>(counter, left - 1)
+  unsafe releaseOperandsFrom(&mut hooks, &mut machine, unsafe operandCell(data, 2))
+  unsafe machine.push(answer)
+  return true
 }
 /// A CALL_KIND_STRING method called on a string: its primitive entry
 /// (nativeFunctions.stringCall) with no native frame. False, with machine
@@ -2727,54 +2772,59 @@ const FIELD_FUSED: u8 = 3
 unsafe fn stringFieldSite<H: HeapHooks>(hooks: &mut H, machine: &mut Machine, fuse: bool) -> u8 {
   let mut function = ValueBits.Undefined
   if !unsafe properties.readStringMethodBorrowed(&machine, Pointer.fromMutRef<ValueBits>(&mut function)) { return FIELD_MISSED }
-  if fuse && unsafe nativeFunctions.unitMethod(function) == nativeFunctions.UNIT_METHOD_CHAR_CODE_AT {
-    let nextOp = unsafe machine.peekU8(4)
-    let mut width: usize = 0
-    let mut index = ValueBits.Undefined
-    let mut haveIndex = false
-    if nextOp == op.OP_get_loc_field8 {
-      let fieldWidth = 1 + properties.FIELD_OPERAND_BYTES + 1
-      if unsafe machine.peekU8(4 + fieldWidth) == op.OP_call_method && unsafe machine.peekU16At(5 + fieldWidth) == 1 {
-        let holder = unsafe machine.local(u8.toUsize(unsafe machine.peekU8(5 + properties.FIELD_OPERAND_BYTES)))
-        match holder {
-          ValueBits.Object { reference } => {
-            let fieldIp = unsafe Pointer.at<u8>(unsafe Pointer.assumeMany<u8>(machine.ip), 5)
-            if unsafe properties.readFieldKeyedAt(machine.runtime, fieldIp, reference, Pointer.fromMutRef<ValueBits>(&mut index), false) {
-              let receiver = unsafe machine.top(1)
-              let unit = unsafe nativeFunctions.charCodeOf(receiver, index)
-              if unit >= 0 {
-                unsafe machine.set(1, ValueBits.Int { value: unit })
-                unsafe gc.release(&mut hooks, machine.runtime, receiver)
-                unsafe machine.skip(4 + fieldWidth + 3)
-                return FIELD_FUSED
+  if fuse {
+    let kind = unsafe nativeFunctions.unitMethod(function)
+    if kind == nativeFunctions.UNIT_METHOD_CHAR_CODE_AT || kind == nativeFunctions.UNIT_METHOD_CHAR_AT {
+      let nextOp = unsafe machine.peekU8(4)
+      let mut width: usize = 0
+      let mut index = ValueBits.Undefined
+      let mut haveIndex = false
+      if nextOp == op.OP_get_loc_field8 {
+        let fieldWidth = 1 + properties.FIELD_OPERAND_BYTES + 1
+        if unsafe machine.peekU8(4 + fieldWidth) == op.OP_call_method && unsafe machine.peekU16At(5 + fieldWidth) == 1 {
+          let holder = unsafe machine.local(u8.toUsize(unsafe machine.peekU8(5 + properties.FIELD_OPERAND_BYTES)))
+          match holder {
+            ValueBits.Object { reference } => {
+              let fieldIp = unsafe Pointer.at<u8>(unsafe Pointer.assumeMany<u8>(machine.ip), 5)
+              if unsafe properties.readFieldKeyedAt(machine.runtime, fieldIp, reference, Pointer.fromMutRef<ValueBits>(&mut index), false) {
+                width = fieldWidth haveIndex = true
               }
             }
+            _ => ()
           }
-          _ => ()
         }
+      } else if nextOp >= op.OP_get_loc0 && nextOp <= op.OP_get_loc3 {
+        index = unsafe machine.local(u8.toUsize(nextOp - op.OP_get_loc0)) width = 1 haveIndex = true
+      } else if nextOp == op.OP_get_loc8 {
+        index = unsafe machine.local(u8.toUsize(unsafe machine.peekU8(5))) width = 2 haveIndex = true
+      } else if nextOp >= op.OP_get_arg0 && nextOp <= op.OP_get_arg3 {
+        index = unsafe machine.argument(u8.toUsize(nextOp - op.OP_get_arg0)) width = 1 haveIndex = true
+      } else if nextOp == op.OP_get_arg {
+        index = unsafe machine.argument(u16.toUsize(unsafe machine.peekU16At(5))) width = 3 haveIndex = true
+      } else if nextOp >= op.OP_push_0 && nextOp <= op.OP_push_1 {
+        index = ValueBits.Int { value: u8.toI32(nextOp - op.OP_push_0) } width = 1 haveIndex = true
+      } else if nextOp == op.OP_push_i8 {
+        let b = unsafe machine.peekU8(5)
+        index = ValueBits.Int { value: if b >= 128 { u8.toI32(b) - 256 } else { u8.toI32(b) } } width = 2 haveIndex = true
       }
-    } else if nextOp >= op.OP_get_loc0 && nextOp <= op.OP_get_loc3 {
-      index = unsafe machine.local(u8.toUsize(nextOp - op.OP_get_loc0)) width = 1 haveIndex = true
-    } else if nextOp == op.OP_get_loc8 {
-      index = unsafe machine.local(u8.toUsize(unsafe machine.peekU8(5))) width = 2 haveIndex = true
-    } else if nextOp >= op.OP_get_arg0 && nextOp <= op.OP_get_arg3 {
-      index = unsafe machine.argument(u8.toUsize(nextOp - op.OP_get_arg0)) width = 1 haveIndex = true
-    } else if nextOp == op.OP_get_arg {
-      index = unsafe machine.argument(u16.toUsize(unsafe machine.peekU16At(5))) width = 3 haveIndex = true
-    } else if nextOp >= op.OP_push_0 && nextOp <= op.OP_push_1 {
-      index = ValueBits.Int { value: u8.toI32(nextOp - op.OP_push_0) } width = 1 haveIndex = true
-    } else if nextOp == op.OP_push_i8 {
-      let b = unsafe machine.peekU8(5)
-      index = ValueBits.Int { value: if b >= 128 { u8.toI32(b) - 256 } else { u8.toI32(b) } } width = 2 haveIndex = true
-    }
-    if haveIndex && unsafe machine.peekU8(4 + width) == op.OP_call_method && unsafe machine.peekU16At(5 + width) == 1 {
-      let receiver = unsafe machine.top(1)
-      let unit = unsafe nativeFunctions.charCodeOf(receiver, index)
-      if unit >= 0 {
-        unsafe machine.set(1, ValueBits.Int { value: unit })
-        unsafe gc.release(&mut hooks, machine.runtime, receiver)
-        unsafe machine.skip(4 + width + 3)
-        return FIELD_FUSED
+      if haveIndex && unsafe machine.peekU8(4 + width) == op.OP_call_method && unsafe machine.peekU16At(5 + width) == 1 {
+        let receiver = unsafe machine.top(1)
+        let unit = unsafe nativeFunctions.charCodeOf(receiver, index)
+        if unit >= 0 {
+          if kind == nativeFunctions.UNIT_METHOD_CHAR_CODE_AT {
+            unsafe machine.set(1, ValueBits.Int { value: unit })
+            unsafe gc.release(&mut hooks, machine.runtime, receiver)
+            unsafe machine.skip(4 + width + 3)
+            return FIELD_FUSED
+          }
+          let ch = unsafe nativeFunctions.unitStringOf(machine.runtime, ValueBits.Int { value: unit })
+          if ch.isString() {
+            unsafe machine.set(1, ch)
+            unsafe gc.release(&mut hooks, machine.runtime, receiver)
+            unsafe machine.skip(4 + width + 3)
+            return FIELD_FUSED
+          }
+        }
       }
     }
   }
@@ -2996,7 +3046,7 @@ unsafe effect fn quickInline<H: HeapHooks + CoercionHooks + OwnPropertyHooks + P
   let argv = FrameSlots { data: data, count: count }
   let context = machine.context
   // String(n) on an Int, as in key building: the text without the dispatch.
-  if count == 1 {
+  if count == 1 && nativeFunctions.isStringConstructor(&target) {
     // The text may allocate, which may collect.
     unsafe machine.publishPc()
     if let Option<ValueBits>.Some { value: text } = run nativeFunctions.stringOfInteger(&target, &argv) {
@@ -3004,23 +3054,6 @@ unsafe effect fn quickInline<H: HeapHooks + CoercionHooks + OwnPropertyHooks + P
       unsafe Pointer.write<i32>(counter, left - 1)
       unsafe releaseOperandsFrom(&mut hooks, &mut machine, unsafe operandCell(data, extra))
       unsafe machine.push(text)
-      return true
-    }
-  }
-  // String.prototype.replace with a RegExp search: neither quick nor quickWrite
-  // answers it, so try the regexp path first, else the full native call.
-  if count == 2 && opcode == op.OP_call_method {
-    if let Option<*mut HeapHeader>.Some { value: home } = Pointer.nonNullMut<HeapHeader>(nativeFunctions.stringReplaceRealm(&target)) {
-      unsafe machine.skip(2)
-      unsafe machine.publishPc()
-      unsafe Pointer.write<i32>(counter, left - 1)
-      let quick = run regexpSymbols.quickReplace(&mut hooks, memory, unsafe lendRealm(&home, home), receiver, unsafe argv.get(0), unsafe argv.get(1))
-      let answer = match move quick {
-        Option<ValueBits>.Some { value } => value
-        Option<ValueBits>.None => run unsafe callNativePlain(&mut hooks, memory, context, function, receiver, &argv)
-      }
-      unsafe releaseOperandsFrom(&mut hooks, &mut machine, unsafe operandCell(data, extra))
-      unsafe machine.push(answer)
       return true
     }
   }

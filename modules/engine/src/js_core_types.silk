@@ -1004,10 +1004,21 @@ pub struct RegExpStandardCache {
   pub unicode: u32,
   /// The prototype's Symbol.replace slot, or u32.MAX when the proven layout has
   /// none (or the receiver has its own).
-  pub replace: u32
+  pub replace: u32,
+  /// Proven builtin function cells for the five prototype slots above; cleared
+  /// (via receiverVersion = 0) if any NativeFunction object is finalized so
+  /// pointer identity checks cannot suffer address reuse.
+  pub execFn: usize,
+  pub flagsFn: usize,
+  pub globalFn: usize,
+  pub unicodeFn: usize,
+  pub replaceFn: usize
 }
 impl Copy for RegExpStandardCache {}
-pub const EMPTY_REGEXP_STANDARD: RegExpStandardCache = RegExpStandardCache { receiverVersion: 0, protoVersion: 0, lastIndex: 0, exec: 0, flags: 0, global: 0, unicode: 0, replace: 0xffffffff }
+pub const EMPTY_REGEXP_STANDARD: RegExpStandardCache = RegExpStandardCache {
+  receiverVersion: 0, protoVersion: 0, lastIndex: 0, exec: 0, flags: 0, global: 0, unicode: 0, replace: 0xffffffff,
+  execFn: 0, flagsFn: 0, globalFn: 0, unicodeFn: 0, replaceFn: 0
+}
 /// The slot index of a FieldCacheEntry key whose prototype has no record for the atom.
 pub const FIELD_PASS_THROUGH: u64 = 0xffff
 /// Set in the key of a prototype entry, so the own-entry test (key's version

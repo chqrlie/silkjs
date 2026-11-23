@@ -2546,6 +2546,10 @@ pub unsafe fn finalizeCorePayload<H: HeapHooks>(hooks: &mut H, runtime: *mut Hea
       unsafe releaseObjectHeader(&mut hooks, runtime, function.bytecode)
     }
     ObjectPayload.NativeFunction { function } => {
+      let mut cacheAnchor = ()
+      let rtState = unsafe HeapCell.payloadMut<RuntimeState, ()>(&mut cacheAnchor, runtime)
+      rtState.regexpStandard.receiverVersion = 0
+      drop rtState
       unsafe releaseOptional(&mut hooks, runtime, function.realm())
       let count = unsafe function.capturedCount()
       let mut index: usize = 0
