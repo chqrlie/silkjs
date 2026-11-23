@@ -2539,6 +2539,17 @@ unsafe effect fn nativeInline<H: HeapHooks + CoercionHooks + OwnPropertyHooks + 
   if count != 0 && opcode == op.OP_call_method && receiver.isObject() && unsafe classId(receiver) == classes.JS_CLASS_C_FUNCTION
     && unsafe invoke.functionMethod(function) == invoke.CALL_METHOD {
     let rest = FrameSlots { data: unsafe Pointer.atMut<ValueBits>(unsafe Pointer.assumeManyMut<ValueBits>(data), 1), count: count - 1 }
+    if unsafe nativeFunctions.callKind(receiver) == nativeFunctions.CALL_KIND_ANSWER {
+      let quick = unsafe nativeFunctions.leanAnswer(machine.runtime, receiver, unsafe argv.get(0), &rest)
+      match quick {
+        ValueBits.Uninitialized => ()
+        _ => {
+          unsafe releaseOperandsFrom(&mut hooks, &mut machine, unsafe operandCell(data, extra))
+          unsafe machine.push(quick)
+          return true
+        }
+      }
+    }
     let answer = run unsafe callNativePlain(&mut hooks, memory, context, receiver, unsafe argv.get(0), &rest)
     unsafe releaseOperandsFrom(&mut hooks, &mut machine, unsafe operandCell(data, extra))
     unsafe machine.push(answer)
@@ -2701,11 +2712,12 @@ unsafe fn answerInline<H: HeapHooks>(hooks: &mut H, machine: &mut Machine, opcod
   let counter = unsafe interrupts.counter(machine.context)
   let left = unsafe Pointer.read<i32>(counter)
   if left <= 1 { return false }
-  let data = unsafe operandCell(machine.stackTop, count)
-  let answer = unsafe nativeFunctions.leanAnswer(function, &FrameSlots { data: data, count: count })
-  if let ValueBits.Uninitialized = answer { return false }
+  let mut receiver = ValueBits.Undefined
   let mut extra: usize = 1
-  if opcode == op.OP_call_method { extra = 2 }
+  if opcode == op.OP_call_method { receiver = unsafe machine.top(count + 2) extra = 2 }
+  let data = unsafe operandCell(machine.stackTop, count)
+  let answer = unsafe nativeFunctions.leanAnswer(machine.runtime, function, receiver, &FrameSlots { data: data, count: count })
+  if let ValueBits.Uninitialized = answer { return false }
   if opcode == op.OP_call || opcode == op.OP_call_method { unsafe machine.skip(2) }
   unsafe Pointer.write<i32>(counter, left - 1)
   unsafe releaseOperandsFrom(&mut hooks, &mut machine, unsafe operandCell(data, extra))

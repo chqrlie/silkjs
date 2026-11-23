@@ -2074,6 +2074,10 @@ const OBJECT_ROLE_PROTOTYPE: u8 = 1
 /// ObjectData.roles: RuntimeState.allocationRealms holds this object's
 /// allocation realm (js_allocation_realms), with one counted reference to it.
 const OBJECT_ROLE_RECORDED_REALM: u8 = 2
+/// ObjectData.roles: the cell was allocated with no tail bytes (separateNode or
+/// a small PAIR_SLOTS cell), so destroyObject may recycle it into spare Bin 3
+/// even when its property storage is owned separately.
+const OBJECT_ROLE_NO_TAIL: u8 = 4
 @inlineAlways
 fn objectFlag(flags: u8, bit: u8, value: bool) -> u8 {
   if value { return u8.bitOr(flags, bit) }
@@ -2119,6 +2123,11 @@ impl ObjectData {
   pub fn hasRecordedRealm(self: &Self) -> bool { return u8.bitAnd(self.roles, OBJECT_ROLE_RECORDED_REALM) != 0 }
   @inlineAlways
   pub fn setHasRecordedRealm(self: &mut Self, value: bool) -> () { self.roles = objectFlag(self.roles, OBJECT_ROLE_RECORDED_REALM, value) }
+  /// Whether the cell was allocated with zero tail bytes and may park in spare Bin 3.
+  @inlineAlways
+  pub fn hasNoTail(self: &Self) -> bool { return u8.bitAnd(self.roles, OBJECT_ROLE_NO_TAIL) != 0 }
+  @inlineAlways
+  pub fn setHasNoTail(self: &mut Self, value: bool) -> () { self.roles = objectFlag(self.roles, OBJECT_ROLE_NO_TAIL, value) }
   @inlineAlways
   pub fn setClassId(self: &mut Self, classId: u32) -> () { self.classBits = classBits(classId) }
   @inlineAlways
@@ -2132,7 +2141,7 @@ impl ObjectData {
   pub fn pristineFunction(self: &Self, constructor: bool) -> bool {
     let mut expected = OBJECT_EXTENSIBLE
     if constructor { expected = u8.bitOr(expected, OBJECT_CONSTRUCTOR) }
-    return self.flags == expected && self.roles == 0 && self.weakRefCount == 0
+    return self.flags == expected && u8.bitAnd(self.roles, u8.bitOr(OBJECT_ROLE_PROTOTYPE, OBJECT_ROLE_RECORDED_REALM)) == 0 && self.weakRefCount == 0
   }
   @inlineAlways
   pub fn extensible(self: &Self) -> bool { return u8.bitAnd(self.flags, OBJECT_EXTENSIBLE) != 0 }

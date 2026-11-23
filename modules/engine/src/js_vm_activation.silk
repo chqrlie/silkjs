@@ -7,6 +7,7 @@ import silk.mem.layout { Layout }
 import silk.mem.raw_buffer { RawBuffer }
 import silk.core.option { Option }
 import silk.mem.pointer { Pointer }
+import silk.simd.u8x16
 import silk.num.u16
 import silk.num.u32
 import silk.num.usize
@@ -472,6 +473,28 @@ unsafe fn enterFrameObserved(runtime: *mut HeapHeader, machine: *mut Machine, ta
   drop debugTail
   unsafe debugger.publish(runtime, active)
 }
+/// Initializes locals[FILL_CELLS..localCount] to Undefined using 16-byte SIMD
+/// stores unrolled by 4, out of line so enterFrame callers (including
+/// executeLoop) pay neither loop bloat nor XMM register pressure.
+@inlineNever
+unsafe fn fillExtraLocals(locals: *mut ValueBits, localCount: usize) -> () {
+  let undefined = ValueBits.Undefined
+  let undefLanes = unsafe u8x16.loadUnchecked(unsafe Pointer.assumeMany<u8>(unsafe Intrinsic.pointerReinterpret<*const ValueBits, *const u8>(Pointer.fromRef<ValueBits>(&undefined))))
+  let localsBytes = unsafe Pointer.assumeManyMut<u8>(unsafe Intrinsic.pointerReinterpret<*mut ValueBits, *mut u8>(locals))
+  let mut index: usize = FILL_CELLS
+  while usize.wrappingAdd(index, 4) <= localCount {
+    let off = usize.shiftLeft(index, 4)
+    unsafe u8x16.storeUnchecked(unsafe Pointer.assumeManyMut<u8>(unsafe Pointer.atMut<u8>(localsBytes, off)), undefLanes)
+    unsafe u8x16.storeUnchecked(unsafe Pointer.assumeManyMut<u8>(unsafe Pointer.atMut<u8>(localsBytes, usize.wrappingAdd(off, 16))), undefLanes)
+    unsafe u8x16.storeUnchecked(unsafe Pointer.assumeManyMut<u8>(unsafe Pointer.atMut<u8>(localsBytes, usize.wrappingAdd(off, 32))), undefLanes)
+    unsafe u8x16.storeUnchecked(unsafe Pointer.assumeManyMut<u8>(unsafe Pointer.atMut<u8>(localsBytes, usize.wrappingAdd(off, 48))), undefLanes)
+    index = usize.wrappingAdd(index, 4)
+  }
+  while index < localCount {
+    unsafe u8x16.storeUnchecked(unsafe Pointer.assumeManyMut<u8>(unsafe Pointer.atMut<u8>(localsBytes, usize.shiftLeft(index, 4))), undefLanes)
+    index = usize.wrappingAdd(index, 1)
+  }
+}
 /// enterDecoded once the closure's references and scope are read.
 @inlineAlways
 unsafe fn enterFrame(runtime: *mut HeapHeader, function: ValueBits, bytecode: *mut HeapHeader, closureReferences: *const ?*mut HeapHeader,
@@ -554,9 +577,8 @@ unsafe fn enterFrame(runtime: *mut HeapHeader, function: ValueBits, bytecode: *m
   unsafe Pointer.write<ValueBits>(unsafe slotAt(locals, 1), undefined)
   unsafe Pointer.write<ValueBits>(unsafe slotAt(locals, 2), undefined)
   unsafe Pointer.write<ValueBits>(unsafe slotAt(locals, 3), undefined)
-  let mut index: usize = FILL_CELLS
-  while index < localCount { unsafe Pointer.write<ValueBits>(unsafe slotAt(locals, index), undefined) index = index + 1 }
-  index = 0
+  if localCount > FILL_CELLS { unsafe fillExtraLocals(locals, localCount) }
+  let mut index: usize = 0
   while index < referenceCount {
     unsafe Pointer.write<?*mut HeapHeader>(unsafe Pointer.atMut<?*mut HeapHeader>(unsafe Pointer.assumeManyMut<?*mut HeapHeader>(references), index), Pointer.null<HeapHeader>())
     index = index + 1

@@ -47,6 +47,7 @@ import js_string_types { FlatString, StringLengthError }
 import js_bigint { BigIntError }
 import js_exceptions { JsException }
 import js_atom_data as atoms
+import js_atoms { UNKNOWN_STRING_ATOM }
 import js_class_data as classes
 import js_collection_intrinsics as collections
 import js_number_intrinsics as numberIntrinsics
@@ -712,24 +713,27 @@ const ARRAY_BUFFER_IS_VIEW: u32 = 1
 const NUMBER_IS_NAN: u32 = 1
 const NUMBER_IS_SAFE_INTEGER: u32 = 4
 const OBJECT_IS: u32 = 16
+const OBJECT_HAS_OWN: u32 = 23
+const OBJECT_HAS_OWN_PROPERTY: u32 = 27
 fn answers(id: NativeFunctionId) -> bool {
   return match id {
     NativeFunctionId.Builtin { family, method } => match family {
       BuiltinFamily.Array => method == ARRAY_IS_ARRAY
       BuiltinFamily.ArrayBuffer => method == ARRAY_BUFFER_IS_VIEW
       BuiltinFamily.Number => method >= NUMBER_IS_NAN && method <= NUMBER_IS_SAFE_INTEGER
-      BuiltinFamily.Object => method == OBJECT_IS
+      BuiltinFamily.Object => method == OBJECT_IS || method == OBJECT_HAS_OWN || method == OBJECT_HAS_OWN_PROPERTY
       _ => false
     }
     _ => false
   }
 }
 /// The answer of a CALL_KIND_ANSWER builtin when it needs no native frame: the
-/// predicates below read their arguments' tags and classes only, so nothing
-/// throws, allocates or runs JavaScript. Uninitialized declines (a Proxy for
-/// Array.isArray), leaving the full call.
+/// predicates below read their arguments' tags, classes and shapes only, so
+/// nothing throws, allocates or runs JavaScript. Uninitialized declines (a Proxy
+/// for Array.isArray, or non-ordinary object / non-flat-string key for hasOwn),
+/// leaving the full call.
 @inlineAlways
-pub unsafe fn leanAnswer(function: ValueBits, argv: &FrameSlots) -> ValueBits {
+pub unsafe fn leanAnswer(runtime: *mut HeapHeader, function: ValueBits, receiver: ValueBits, argv: &FrameSlots) -> ValueBits {
   let anchor = () let object = unsafe HeapCell.payload<ObjectData, ()>(&anchor, reference(function))
   let id = match &object.payload { ObjectPayload.NativeFunction { function: native } => native.function _ => { return ValueBits.Uninitialized } }
   drop object
@@ -749,9 +753,29 @@ pub unsafe fn leanAnswer(function: ValueBits, argv: &FrameSlots) -> ValueBits {
     return ValueBits.Bool { value: primitives.numberIsSafeInteger(number) }
   }
   if family == BuiltinFamily.Object {
-    let mut second = ValueBits.Undefined
-    if argv.length() > 1 { second = unsafe argv.get(1) }
-    return ValueBits.Bool { value: unsafe primitives.equal(first, second, EqualityMode.SameValue) }
+    if method == OBJECT_IS {
+      let mut second = ValueBits.Undefined
+      if argv.length() > 1 { second = unsafe argv.get(1) }
+      return ValueBits.Bool { value: unsafe primitives.equal(first, second, EqualityMode.SameValue) }
+    }
+    let mut target = receiver
+    let mut key = first
+    if method == OBJECT_HAS_OWN {
+      target = first
+      key = if argv.length() > 1 { unsafe argv.get(1) } else { ValueBits.Undefined }
+    }
+    let node = match target { ValueBits.Object { reference } => reference _ => { return ValueBits.Uninitialized } }
+    match key { ValueBits.String { .. } => () _ => { return ValueBits.Uninitialized } }
+    let data = unsafe HeapCell.payload<ObjectData, ()>(&anchor, node)
+    if data.classId() != classes.JS_CLASS_OBJECT || data.isExotic() || data.fastArray() { return ValueBits.Uninitialized }
+    let shape = data.shape
+    drop data
+    let state = unsafe HeapCell.payload<RuntimeState, ()>(&anchor, runtime)
+    let atom = state.atoms.findString(key)
+    drop state
+    if atom == UNKNOWN_STRING_ATOM { return ValueBits.Uninitialized }
+    if atom == 0 { return ValueBits.Bool { value: false } }
+    return ValueBits.Bool { value: (unsafe shapes.lookup(shape, atom)).isSome() }
   }
   let node = match first { ValueBits.Object { reference } => reference _ => { return ValueBits.Bool { value: false } } }
   let data = unsafe HeapCell.payload<ObjectData, ()>(&anchor, node)

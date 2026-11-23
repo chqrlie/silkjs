@@ -3166,6 +3166,12 @@ unsafe fn destroyObject<H: HeapHooks>(hooks: &mut H, runtime: *mut HeapHeader, n
   if small { unsafe Pointer.put<ObjectPayload>(Pointer.fromMutRef<ObjectPayload>(&mut finalizedObject.payload), ObjectPayload.Empty) }
   else { match &finalizedObject.payload { ObjectPayload.Empty => () _ => { finalizedObject.payload = ObjectPayload.Empty } } }
   let weak = finalizedObject.weakRefCount
+  // A tailless cell (separateNode or an outgrown small PAIR_SLOTS cell) shares
+  // spare Bin 3 once its payload is reset to Empty. Read here so no live flag
+  // crosses the slot releases above.
+  let mut parkTail = tail
+  let mut parkSmall = small
+  if tail == 0 && finalizedObject.hasNoTail() { parkTail = js_shapes.PAIR_SLOTS parkSmall = true }
   drop finalizedObject
   // The properties were moved out and the payload reset to Empty above.
   // A parked cell has mark 0, as reviveUninit keeps it.
@@ -3176,13 +3182,13 @@ unsafe fn destroyObject<H: HeapHooks>(hooks: &mut H, runtime: *mut HeapHeader, n
     if unsafe count(node) != 0 || weak != 0 { unsafe mark(node, MARK_ZOMBIE) return () }
     unsafe leave(runtime, node)
     unsafe mark(node, 0)
-    unsafe recycleObjectCell(runtime, node, tail, small)
+    unsafe recycleObjectCell(runtime, node, parkTail, parkSmall)
     return ()
   }
   unsafe leave(runtime, node)
   unsafe mark(node, 0)
   // A zombie kept for its weak references is detached with mark 0 (see releaseWeak).
-  if weak == 0 { unsafe recycleObjectCell(runtime, node, tail, small) } else { unsafe noteWeakTargetDied(runtime) }
+  if weak == 0 { unsafe recycleObjectCell(runtime, node, parkTail, parkSmall) } else { unsafe noteWeakTargetDied(runtime) }
 }
 unsafe fn noteWeakTargetDied(runtime: *mut HeapHeader) -> () {
   let mut anchor = () let state = unsafe HeapCell.payloadMut<RuntimeState, ()>(&mut anchor, runtime) state.weakTargetsDied = true

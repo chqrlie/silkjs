@@ -17,6 +17,7 @@ import js_vm_state { Machine }
 import js_vm_property_ops as shared
 import js_heap { HeapCell, HeapHeader }
 import js_atom_data as atomIds
+import js_atoms { AtomTable }
 import js_value { ValueBits }
 import js_core_types { FieldCacheEntry, fieldCacheIndex, storeFieldEntry, ContextState, FunctionBytecode, ShapeProperty, InstanceCacheEntry, INSTANCE_CACHE_EMPTY, JS_PROP_TMASK, RuntimeState, ObjectData, ObjectPayload, SlotBits, NativeErrorKind, ShapeData,
   JS_PROP_CONFIGURABLE, JS_PROP_WRITABLE, JS_PROP_ENUMERABLE, JS_PROP_C_W_E,
@@ -546,7 +547,41 @@ unsafe effect fn defineFieldFast<H: HeapHooks>(hooks: &mut H, runtime: *mut Heap
   object: ValueBits, atom: u32, value: ValueBits, site: usize) -> bool ? &mut Allocator {
   let node = match object { ValueBits.Object { reference } => reference _ => { return false } }
   let mut anchor = () let data = unsafe HeapCell.payloadMut<ObjectData, ()>(&mut anchor, node)
-  if data.classId() != classes.JS_CLASS_OBJECT || data.isExotic() || !data.extensible() || data.isStandardArrayPrototype() { return false }
+  if data.classId() != classes.JS_CLASS_OBJECT {
+    // Large array literals emit OP_define_field with sequential integer atoms.
+    if data.classId() == classes.JS_CLASS_ARRAY && data.fastArray() && data.extensible() && AtomTable.isInteger(atom) {
+      let raw = AtomTable.integer(atom)
+      if raw < 2147483647 {
+        let index = u32.toI32(raw)
+        let lenMatch = match data.slot(0).valueBits() { ValueBits.Int { value: length } => length == index _ => false }
+        if lenMatch {
+          let shapeAnchor = () let shape = unsafe HeapCell.payload<ShapeData, ()>(&shapeAnchor, data.shape)
+          let writable = (u8.toU32(shape.properties.get(0).flags) & JS_PROP_WRITABLE) != 0
+          drop shape
+          if writable {
+            let appended = match &mut data.payload {
+              ObjectPayload.FastArray { array } => {
+                if array.values().length() != u32.toUsize(raw) { false }
+                else {
+                  match run Effect.result(array.valuesMut().append(value)) {
+                    Result<(), OutOfMemoryError>.Success { .. } => true
+                    Result<(), OutOfMemoryError>.Failure { error } => { drop error false }
+                  }
+                }
+              }
+              _ => false
+            }
+            if appended {
+              data.setSlot(0, SlotBits.value(ValueBits.Int { value: i32.wrappingAdd(index, 1) }))
+              return true
+            }
+          }
+        }
+      }
+    }
+    return false
+  }
+  if data.isExotic() || !data.extensible() || data.isStandardArrayPrototype() { return false }
   // A define adds an own property whatever the prototypes hold, so a memoized
   // transition between live shapes is just a swap. A memo entry exists only for
   // an atom its base shape lacks, so a hit needs no lookup.
